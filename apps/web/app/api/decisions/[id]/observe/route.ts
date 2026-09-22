@@ -8,10 +8,16 @@
  *   - a one-line diagnosis grounded in supporting evidence
  *
  * Idempotent: same input → same output.
+ *
+ * With QUICKSILVER_PROCESS_ENGINE=on, the result is also recorded on the
+ * decision as `observedDeviation`, which is the fact the Decision Lifecycle's
+ * `propose-rollback` guard checks -- so a rollback can only be proposed for
+ * a decision whose metric was actually observed moving the wrong way.
  */
 
 import { NextResponse } from 'next/server'
 import { createClient } from '@sanity/client'
+import { loadDecisionLifecycle } from '@/lib/process-engine'
 
 function getSanityClient() {
   return createClient({
@@ -95,6 +101,11 @@ export async function POST(
         : improved
           ? 'Change moved the metric in the expected direction.'
           : 'No change detected.'
+
+    const lifecycle = await loadDecisionLifecycle(client)
+    if (lifecycle.kind === 'ready') {
+      await client.patch(id).set({ observedDeviation: worse }).commit()
+    }
 
     return NextResponse.json({
       decisionId: id,

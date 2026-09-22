@@ -10,6 +10,7 @@
 
 import { createClient, type SanityClient } from '@sanity/client'
 import { seedOrder, seed } from './index'
+import { processToSanityFields } from '../../../packages/kernel/src/process-document.ts'
 import type {
   CapabilitySeed,
   DecisionSeed,
@@ -31,26 +32,27 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
-function findEnvFile(startDir: string, maxDepth = 6): string | null {
+// Load EVERY `.env` from this directory up to the repo root, nearest first.
+// (Stopping at the first one found picked up apps/studio/.env -- which only
+// holds the Studio's SANITY_STUDIO_* vars -- and never reached the root .env
+// with SANITY_AUTH_TOKEN.) Earlier files and real env vars win.
+function findEnvFiles(startDir: string, maxDepth = 6): string[] {
+  const found: string[] = []
   let dir = startDir
   for (let i = 0; i < maxDepth; i++) {
     const candidate = join(dir, '.env')
-    if (existsSync(candidate)) return candidate
+    if (existsSync(candidate)) found.push(candidate)
     const parent = dirname(dir)
     if (parent === dir) break
     dir = parent
   }
-  return null
+  return found
 }
 
-const envPath = findEnvFile(__dirname)
-if (envPath) {
-  const content = readFileSync(envPath, 'utf8')
-  for (const line of content.split('\n')) {
+for (const envPath of findEnvFiles(__dirname)) {
+  for (const line of readFileSync(envPath, 'utf8').split(/\r?\n/)) {
     const match = line.match(/^\s*([^#\s][^=\s]*)\s*=\s*(.+?)\s*$/)
-    if (match && !process.env[match[1]]) {
-      process.env[match[1]] = match[2]
-    }
+    if (match && !process.env[match[1]]) process.env[match[1]] = match[2]
   }
 }
 
@@ -160,13 +162,20 @@ function objectiveToSanity(s: ObjectiveSeed) {
 }
 
 function workflowToSanity(s: WorkflowSeed) {
+  // Structured states/transitions/guards go through the kernel's own mapper,
+  // so what lands in Content Lake is exactly what processFromSanity() reads.
   return {
     _id: s._id,
     _type: 'workflow',
-    name: s.name,
     trigger: s.trigger,
-    states: s.states,
-    transitions: s.transitions,
+    ...processToSanityFields({
+      id: s._id,
+      name: s.name,
+      version: s.version,
+      initialState: s.initialState,
+      states: s.states,
+      transitions: s.transitions,
+    }),
     requiredCapabilities: refArray(s.requiredCapabilityIds),
     approvalRequirements: refArray(s.approvalRequirementIds),
     failureHandlers: s.failureHandlers,

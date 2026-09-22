@@ -218,6 +218,59 @@ Reversibility: ✗ (requires controlled rollback)
 
 That single interaction demonstrates: structured content, relationships, provenance, policy, authority, reasoning, workflow, human-in-the-loop, agent execution.
 
+## 8b. Process engine: workflows the kernel executes
+
+The `workflow` document type (Studio label: "Process definition") is
+executable. `packages/kernel/src/process.ts` runs it:
+
+```
+ProcessDefinition { id, name, version, revision (_rev), initialState,
+                    states[{ id, label, terminal }],
+                    transitions[{ id, from, to, automatic, requiresHumanApproval,
+                                  guard: { all[], any[] } of { fact, op, value } }] }
+
+validateProcessDefinition(def)      // ids, dangling refs, reachability, dead ends, guard shape
+evaluateGuard(guard, facts)         // closed operator set; missing fact → false; no eval
+authorizeTransition({ definition, currentState, transitionId | to, facts, actor })
+nextAutomaticTransition(def, state, facts)   // first automatic transition whose guard holds
+historyEntry(def, decision, actor, at)       // audit row incl. version + revision
+```
+
+Principles:
+
+- **Guards are data, never code.** No string is ever evaluated, so a
+  definition, even one an agent proposes later, can't inject logic
+  into the kernel.
+- **Fail closed.** Missing facts fail their conditions. An invalid
+  definition authorizes nothing. `requiresHumanApproval` transitions
+  refuse non-human actors.
+- **Auditable.** Every allowed transition appends `processHistory` on the
+  decision with the definition version and `_rev`. Writes use
+  `ifRevisionId`, so a stale click can't apply a transition from an old
+  state.
+- **Single source of truth.** `apps/studio/seed/workflows.ts` is both the
+  Sanity seed and the kernel test fixture. `process-document.ts`
+  round-trips it to Sanity's typed fields, and that round trip is tested.
+
+The **Decision Lifecycle** definition governs every `decision`:
+
+```
+proposed ─kernel-reject (auto)──────────────▶ rejected ■
+proposed ─auto-approve (auto, risk ≤ 2)─────▶ approved
+proposed ─route-to-human (auto)─────────────▶ awaiting-approval
+awaiting-approval ─approve / reject (human)─▶ approved / rejected ■
+approved ─execute (execution.success)───────▶ executed | failed
+executed ─propose-rollback (human, deviation observed)─▶ rollback-proposed
+failed   ─propose-rollback (human)──────────▶ rollback-proposed
+rollback-proposed ─complete-rollback (rollback executed)─▶ rolled-back ■
+```
+
+Wiring: `apps/web/lib/process-engine.ts`, used by `/api/plan` and
+`/api/decisions/[id]/{action,execute,observe,rollback}`. It's behind
+`QUICKSILVER_PROCESS_ENGINE=on`. If the definition isn't in the
+dataset, the routes fall back to their built-in checks. If it's present
+but invalid, they return 409 and move nothing.
+
 ## 9. Things we are NOT building
 
 - Real robotic control

@@ -20,7 +20,25 @@ type ReviewResult = {
   suggestions: string[]
 }
 
+/**
+ * Where a decision stands in its process definition (QUICKSILVER_PROCESS_ENGINE=on).
+ * engine 'off' / 'missing' = legacy lifecycle; 'invalid' = the definition in
+ * Sanity failed validation, so the kernel is holding every decision in place.
+ */
+type ProcessInfo = {
+  engine: 'on' | 'off' | 'missing' | 'invalid'
+  definitionName?: string
+  version?: number
+  state?: string
+  stateLabel?: string
+  transitionId?: string | null
+  next?: Array<{ id: string; label: string; to: string; requiresHuman: boolean; automatic: boolean; guardPassed: boolean }>
+  errors?: string[]
+}
+
 type DecisionResponse = {
+  status?: string | null
+  process?: ProcessInfo | null
   action: {
     description: string
     actorId: string
@@ -57,12 +75,15 @@ type PlanResponse = {
 
 type DecisionStatus =
   | 'pending'
+  | 'proposed'
   | 'awaiting-approval'
   | 'approved'
   | 'executed'
   | 'failed'
   | 'rejected'
   | 'rollback-suggested'
+  | 'rollback-proposed'
+  | 'rolled-back'
 
 type Observation = {
   status: string
@@ -89,6 +110,7 @@ export default function HomePage() {
   const [actingId, setActingId] = useState<string | null>(null)
   const [statuses, setStatuses] = useState<Record<string, DecisionStatus>>({})
   const [observations, setObservations] = useState<Record<string, Observation | undefined>>({})
+  const [processes, setProcesses] = useState<Record<string, ProcessInfo | undefined>>({})
   const [error, setError] = useState<string | null>(null)
   const [, startTransition] = useTransition()
 
@@ -98,6 +120,7 @@ export default function HomePage() {
     setPlan(null)
     setStatuses({})
     setObservations({})
+    setProcesses({})
     try {
       const res = await fetch('/api/plan', {
         method: 'POST',
@@ -108,12 +131,21 @@ export default function HomePage() {
       if (!res.ok) throw new Error(data.error ?? data.detail ?? 'Plan failed')
       setPlan(data)
       const next: Record<string, DecisionStatus> = {}
-      for (const d of data.decisions) {
+      const procs: Record<string, ProcessInfo | undefined> = {}
+      for (const d of data.decisions as DecisionResponse[]) {
         if (d.decisionDocId) {
-          next[d.decisionDocId] = d.decision?.recommendation === 'reject' ? 'rejected' : 'awaiting-approval'
+          // With the process engine on, the server's process definition picked
+          // the first state (it may have auto-approved). Otherwise legacy mapping.
+          const engineRan = d.process?.engine === 'on' || d.process?.engine === 'invalid'
+          next[d.decisionDocId] =
+            engineRan && d.status
+              ? (d.status as DecisionStatus)
+              : d.decision?.recommendation === 'reject' ? 'rejected' : 'awaiting-approval'
+          procs[d.decisionDocId] = d.process ?? undefined
         }
       }
       setStatuses(next)
+      setProcesses(procs)
     } catch (err) {
       setError((err as Error).message)
     } finally {
@@ -139,13 +171,15 @@ export default function HomePage() {
   ) {
     setActingId(decisionDocId)
     try {
-      await postJSON(`/api/decisions/${decisionDocId}/action`, { action })
+      const data = await postJSON<{ status?: string; process?: ProcessInfo }>(`/api/decisions/${decisionDocId}/action`, { action })
       startTransition(() => {
         setStatuses((s) => ({
           ...s,
-          [decisionDocId]:
-            action === 'approve' ? 'approved' : action === 'reject' ? 'rejected' : s[decisionDocId],
+          [decisionDocId]: data.process
+            ? (data.status as DecisionStatus)
+            : action === 'approve' ? 'approved' : action === 'reject' ? 'rejected' : s[decisionDocId],
         }))
+        if (data.process) setProcesses((p) => ({ ...p, [decisionDocId]: data.process }))
       })
     } catch (err) {
       setError((err as Error).message)
@@ -157,9 +191,19 @@ export default function HomePage() {
   async function handleExecute(decisionDocId: string) {
     setActingId(decisionDocId)
     try {
-      const data = await postJSON<{ status: 'executed' | 'failed' }>(`/api/decisions/${decisionDocId}/execute`, {})
+      const data = await postJSON<{
+        status: 'executed' | 'failed'
+        process?: ProcessInfo
+        rolledBackParent?: { id: string; status?: string; error?: string } | null
+      }>(`/api/decisions/${decisionDocId}/execute`, {})
       startTransition(() => {
-        setStatuses((s) => ({ ...s, [decisionDocId]: data.status }))
+        setStatuses((s) => {
+          const next = { ...s, [decisionDocId]: data.status }
+          const parent = data.rolledBackParent
+          if (parent?.status) next[parent.id] = parent.status as DecisionStatus
+          return next
+        })
+        if (data.process) setProcesses((p) => ({ ...p, [decisionDocId]: data.process }))
       })
     } catch (err) {
       setError((err as Error).message)
@@ -188,12 +232,19 @@ export default function HomePage() {
   async function handleRollback(decisionDocId: string) {
     setActingId(decisionDocId)
     try {
-      const data = await postJSON<{ rollbackDecisionId: string }>(
+      const data = await postJSON<{ rollbackDecisionId: string; parentStatus?: string; process?: ProcessInfo }>(
         `/api/decisions/${decisionDocId}/rollback`,
         {},
       )
       const obs = observations[decisionDocId]
       startTransition(() => {
+        // The rollback is its own decision: it waits for a human, like any other.
+        setStatuses((s) => ({
+          ...s,
+          [data.rollbackDecisionId]: (data.process?.state as DecisionStatus | undefined) ?? 'awaiting-approval',
+          ...(data.parentStatus ? { [decisionDocId]: data.parentStatus as DecisionStatus } : {}),
+        }))
+        if (data.process) setProcesses((p) => ({ ...p, [data.rollbackDecisionId]: data.process }))
         setObservations((o) => ({
           ...o,
           [decisionDocId]: obs ? { ...obs, rollbackDecisionId: data.rollbackDecisionId } : obs,
@@ -209,9 +260,17 @@ export default function HomePage() {
   return (
     <main className="mx-auto max-w-6xl px-6 py-12">
       <header className="mb-12">
-        <h1 className="qs-glow font-mono text-3xl tracking-[0.3em] text-quicksilver-quicksilver">
-          QUICKSILVER
-        </h1>
+        <div className="flex items-start justify-between gap-4">
+          <h1 className="qs-glow font-mono text-3xl tracking-[0.3em] text-quicksilver-quicksilver">
+            QUICKSILVER
+          </h1>
+          <a
+            href="/decisions"
+            className="mt-2 shrink-0 font-mono text-xs uppercase tracking-widest text-quicksilver-accent transition hover:text-quicksilver-signal"
+          >
+            Decision log →
+          </a>
+        </div>
         <p className="mt-2 text-sm uppercase tracking-widest text-quicksilver-accent">
           Autonomous Company Operating System
         </p>
@@ -248,6 +307,7 @@ export default function HomePage() {
           plan={plan}
           statuses={statuses}
           observations={observations}
+          processes={processes}
           actingId={actingId}
           onPlan={handlePlan}
           onAct={handleAct}
@@ -264,10 +324,39 @@ export default function HomePage() {
   )
 }
 
+// Best-course-of-action ordering for the decision cards: autonomous-safe
+// actions first, then things that need a human call, then anything the
+// kernel would reject outright -- and within a tier, lower risk first. This
+// is purely a render-order concern (local, derived, no API/schema change);
+// the underlying plan.decisions array and its indices are untouched.
+const RECOMMENDATION_ORDER: Record<DecisionDecision['recommendation'], number> = {
+  'execute-autonomously': 0,
+  'request-approval': 1,
+  reject: 2,
+}
+
+function sortDecisions(decisions: DecisionResponse[]): DecisionResponse[] {
+  return [...decisions].sort((a, b) => {
+    // A decision the kernel couldn't evaluate at all (no resolved capability
+    // or actor) sorts last -- it needs attention, but it isn't "best next
+    // action" material since there's nothing to authorize yet.
+    if (!a.decision && !b.decision) return 0
+    if (!a.decision) return 1
+    if (!b.decision) return -1
+
+    const tierDiff =
+      RECOMMENDATION_ORDER[a.decision.recommendation] - RECOMMENDATION_ORDER[b.decision.recommendation]
+    if (tierDiff !== 0) return tierDiff
+
+    return a.decision.riskLevel - b.decision.riskLevel
+  })
+}
+
 function PlanAndDecisions({
   plan,
   statuses,
   observations,
+  processes,
   actingId,
   onPlan,
   onAct,
@@ -278,6 +367,7 @@ function PlanAndDecisions({
   plan: PlanResponse
   statuses: Record<string, DecisionStatus>
   observations: Record<string, Observation | undefined>
+  processes: Record<string, ProcessInfo | undefined>
   actingId: string | null
   onPlan: () => Promise<void>
   onAct: (id: string, a: 'approve' | 'reject' | 'request-evidence') => Promise<void>
@@ -285,6 +375,20 @@ function PlanAndDecisions({
   onObserve: (id: string) => Promise<void>
   onRollback: (id: string) => Promise<void>
 }) {
+  // Page-level nudge: how many of the current decisions still need a human
+  // call. Purely derived from local state — no new data, just a count so a
+  // first-time viewer knows at a glance whether there's something to do
+  // before they scroll into the cards themselves.
+  const awaitingCount = plan.decisions.filter(
+    (d) => d.decisionDocId && statuses[d.decisionDocId] === 'awaiting-approval',
+  ).length
+
+  // Best-course-of-action first: see sortDecisions() above. Sorted once per
+  // render from the same plan.decisions the API returned -- nothing is
+  // mutated, and re-sorting on every render is fine since a click only
+  // changes `statuses`/`observations`, never `plan` itself.
+  const sortedDecisions = sortDecisions(plan.decisions)
+
   return (
     <>
       <section className="mb-6 rounded border border-quicksilver-border bg-quicksilver-panel p-6">
@@ -321,9 +425,16 @@ function PlanAndDecisions({
       </section>
 
       <section className="mb-4 flex items-baseline justify-between">
-        <h2 className="font-mono text-xs uppercase tracking-widest text-quicksilver-accent">
-          Decisions
-        </h2>
+        <div className="flex items-baseline gap-3">
+          <h2 className="font-mono text-xs uppercase tracking-widest text-quicksilver-accent">
+            Decisions
+          </h2>
+          {awaitingCount > 0 && (
+            <span className="rounded-full border border-yellow-300/50 px-2 py-0.5 font-mono text-[11px] uppercase tracking-widest text-yellow-300">
+              {awaitingCount} awaiting your approval
+            </span>
+          )}
+        </div>
         <button
           onClick={onPlan}
           className="font-mono text-xs uppercase tracking-widest text-quicksilver-accent transition hover:text-quicksilver-signal"
@@ -333,12 +444,17 @@ function PlanAndDecisions({
       </section>
 
       <section className="grid grid-cols-1 gap-6">
-        {plan.decisions.map((d, i) => (
+        {sortedDecisions.map((d, i) => (
           <DecisionCard
-            key={i}
+            key={d.decisionDocId ?? `idx-${i}`}
             d={d}
             status={d.decisionDocId ? statuses[d.decisionDocId] ?? 'pending' : 'pending'}
             observation={d.decisionDocId ? observations[d.decisionDocId] : undefined}
+            process={d.decisionDocId ? processes[d.decisionDocId] : undefined}
+            rollbackStatus={(() => {
+              const rb = d.decisionDocId ? observations[d.decisionDocId]?.rollbackDecisionId : undefined
+              return rb ? statuses[rb] ?? 'awaiting-approval' : undefined
+            })()}
             actingId={actingId}
             onAct={onAct}
             onExecute={onExecute}
@@ -355,6 +471,8 @@ function DecisionCard({
   d,
   status,
   observation,
+  process,
+  rollbackStatus,
   actingId,
   onAct,
   onExecute,
@@ -364,6 +482,8 @@ function DecisionCard({
   d: DecisionResponse
   status: DecisionStatus
   observation: Observation | undefined
+  process: ProcessInfo | undefined
+  rollbackStatus: DecisionStatus | undefined
   actingId: string | null
   onAct: (id: string, a: 'approve' | 'reject' | 'request-evidence') => Promise<void>
   onExecute: (id: string) => Promise<void>
@@ -373,30 +493,55 @@ function DecisionCard({
   const decision = d.decision
   const docId = d.decisionDocId
 
+  // Reasoning and evidence (policies, evidence, the kernel's own
+  // conflict/concern/blocking lists, and the independent reviewer's notes)
+  // are collapsed by default. The summary above the fold — description,
+  // status, the reference grid, and the action buttons — carries everything
+  // needed to act on a decision; the "why" is one click away rather than
+  // several screens of scroll.
+  const [expanded, setExpanded] = useState(false)
+
   const statusTone: Record<DecisionStatus, string> = {
-    'pending': 'text-quicksilver-accent',
-    'awaiting-approval': 'text-yellow-300',
-    'approved': 'text-quicksilver-signal',
-    'executed': 'text-green-400',
-    'failed': 'text-red-400',
-    'rejected': 'text-red-400',
-    'rollback-suggested': 'text-yellow-300',
+    'pending': 'border-quicksilver-border text-quicksilver-accent',
+    'proposed': 'border-quicksilver-border text-quicksilver-accent',
+    'awaiting-approval': 'border-yellow-300/60 text-yellow-300',
+    'approved': 'border-quicksilver-quicksilver/60 text-quicksilver-signal',
+    'executed': 'border-green-400/60 text-green-400',
+    'failed': 'border-red-400/60 text-red-400',
+    'rejected': 'border-red-400/60 text-red-400',
+    'rollback-suggested': 'border-yellow-300/60 text-yellow-300',
+    'rollback-proposed': 'border-yellow-300/60 text-yellow-300',
+    'rolled-back': 'border-orange-400/60 text-orange-400',
   }
   const statusLabel: Record<DecisionStatus, string> = {
     'pending': 'pending',
+    'proposed': 'proposed',
     'awaiting-approval': 'awaiting approval',
     'approved': 'approved',
     'executed': 'executed',
     'failed': 'failed',
     'rejected': 'rejected',
     'rollback-suggested': 'rollback suggested',
+    'rollback-proposed': 'rollback proposed',
+    'rolled-back': 'rolled back',
   }
+
+  const kernelFlagCount =
+    (decision?.policyConflicts?.length ?? 0) +
+    (decision?.concerns?.length ?? 0) +
+    (decision?.blockingReasons?.length ?? 0)
+  const reviewFlagCount = d.review
+    ? d.review.policyConflicts.length + d.review.missingEvidence.length + d.review.riskConcerns.length
+    : 0
+  const totalFlags = kernelFlagCount + reviewFlagCount
 
   return (
     <article className="rounded border border-quicksilver-border bg-quicksilver-panel p-6">
-      <header className="mb-4 flex items-baseline justify-between">
+      <header className="mb-4 flex items-baseline justify-between gap-4">
         <h3 className="text-base text-quicksilver-signal">{d.action.description}</h3>
-        <span className={`font-mono text-xs ${statusTone[status]}`}>
+        <span
+          className={`shrink-0 rounded-full border px-2 py-0.5 font-mono text-xs whitespace-nowrap ${statusTone[status]}`}
+        >
           risk {decision?.riskLevel ?? '?'}/5 · {statusLabel[status]}
         </span>
       </header>
@@ -410,118 +555,12 @@ function DecisionCard({
         <Reference label="Kernel" value={decision?.recommendation ?? 'pending'} />
       </dl>
 
-      {d.resolvedReferences.policies.length > 0 && (
-        <div className="mb-3">
-          <h4 className="font-mono text-xs uppercase tracking-widest text-quicksilver-accent">
-            Applicable policies
-          </h4>
-          <ul className="mt-1 space-y-1">
-            {d.resolvedReferences.policies.map((p) => (
-              <li key={p.id} className="font-mono text-xs text-quicksilver-signal">
-                {p.name}{' '}
-                <span className="text-quicksilver-accent">
-                  scope={p.scope} priority={p.priority}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
+      {process && <ProcessStrip process={process} />}
 
-      {d.resolvedReferences.evidence.length > 0 && (
-        <div className="mb-3">
-          <h4 className="font-mono text-xs uppercase tracking-widest text-quicksilver-accent">
-            Supporting evidence
-          </h4>
-          <ul className="mt-1 space-y-1">
-            {d.resolvedReferences.evidence.map((e) => (
-              <li key={e.id} className="font-mono text-xs text-quicksilver-signal">
-                {e.title}{' '}
-                <span className="text-quicksilver-accent">
-                  confidence {(e.confidence * 100).toFixed(0)}%
-                </span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      {decision?.policyConflicts && decision.policyConflicts.length > 0 && (
-        <pre className="mb-3 overflow-x-auto whitespace-pre-wrap rounded border border-quicksilver-border bg-quicksilver-bg p-3 font-mono text-xs leading-relaxed text-quicksilver-accent">
-{`Policy conflict detected:\n${decision.policyConflicts.map((c) => `  ${c}`).join('\n')}`}
-        </pre>
-      )}
-
-      {decision?.concerns && decision.concerns.length > 0 && (
-        <ul className="mb-3 space-y-1">
-          {decision.concerns.map((c, i) => (
-            <li key={i} className="font-mono text-xs text-yellow-300">
-              ! {c}
-            </li>
-          ))}
-        </ul>
-      )}
-
-      {decision?.blockingReasons && decision.blockingReasons.length > 0 && (
-        <ul className="mb-3 space-y-1">
-          {decision.blockingReasons.map((c, i) => (
-            <li key={i} className="font-mono text-xs text-red-400">
-              ✗ {c}
-            </li>
-          ))}
-        </ul>
-      )}
-
-      {/* Independent reviewer panel — advisory only. The kernel above is what
-          actually authorizes or blocks; this is a second opinion for the
-          human approver to weigh, never a gate. */}
-      {d.review && (
-        <div className="mb-3 rounded border border-dashed border-quicksilver-accent/60 bg-quicksilver-bg p-3">
-          <h4 className="mb-2 font-mono text-xs uppercase tracking-widest text-quicksilver-accent">
-            Independent review <span className="normal-case tracking-normal">(advisory, not a gate)</span>
-          </h4>
-          {d.review.policyConflicts.length === 0 &&
-          d.review.missingEvidence.length === 0 &&
-          d.review.riskConcerns.length === 0 &&
-          d.review.suggestions.length === 0 ? (
-            <p className="font-mono text-xs text-quicksilver-signal">No concerns raised.</p>
-          ) : (
-            <div className="space-y-2">
-              {d.review.policyConflicts.length > 0 && (
-                <ul className="space-y-1">
-                  {d.review.policyConflicts.map((c, i) => (
-                    <li key={i} className="font-mono text-xs text-red-400">⚠ policy: {c}</li>
-                  ))}
-                </ul>
-              )}
-              {d.review.missingEvidence.length > 0 && (
-                <ul className="space-y-1">
-                  {d.review.missingEvidence.map((c, i) => (
-                    <li key={i} className="font-mono text-xs text-yellow-300">? evidence: {c}</li>
-                  ))}
-                </ul>
-              )}
-              {d.review.riskConcerns.length > 0 && (
-                <ul className="space-y-1">
-                  {d.review.riskConcerns.map((c, i) => (
-                    <li key={i} className="font-mono text-xs text-yellow-300">! risk: {c}</li>
-                  ))}
-                </ul>
-              )}
-              {d.review.suggestions.length > 0 && (
-                <ul className="space-y-1">
-                  {d.review.suggestions.map((c, i) => (
-                    <li key={i} className="font-mono text-xs text-quicksilver-accent">→ {c}</li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Lifecycle buttons */}
-      <div className="mt-4 flex flex-wrap gap-2">
+      {/* Lifecycle buttons — always visible, never behind the expand toggle,
+          so the thing a judge needs to click is never more than the
+          reference grid away. */}
+      <div className="mb-4 flex flex-wrap gap-2">
         {!docId && <span className="font-mono text-xs text-quicksilver-accent">Not persisted — the actor or capability was not found in the company model.</span>}
 
         {docId && status === 'awaiting-approval' && (
@@ -545,7 +584,134 @@ function DecisionCard({
         )}
       </div>
 
-      {/* Observation panel */}
+      <button
+        onClick={() => setExpanded((e) => !e)}
+        className="font-mono text-xs uppercase tracking-widest text-quicksilver-accent transition hover:text-quicksilver-signal"
+      >
+        {expanded ? 'Hide reasoning & evidence ▴' : 'Show reasoning & evidence ▾'}
+        {!expanded && totalFlags > 0 && (
+          <span className="ml-2 normal-case tracking-normal text-yellow-300">
+            ({totalFlags} flag{totalFlags === 1 ? '' : 's'})
+          </span>
+        )}
+      </button>
+
+      {expanded && (
+        <div className="mt-4 space-y-3 border-t border-quicksilver-border pt-4">
+          {d.resolvedReferences.policies.length > 0 && (
+            <div>
+              <h4 className="font-mono text-xs uppercase tracking-widest text-quicksilver-accent">
+                Applicable policies
+              </h4>
+              <ul className="mt-1 space-y-1">
+                {d.resolvedReferences.policies.map((p) => (
+                  <li key={p.id} className="font-mono text-xs text-quicksilver-signal">
+                    {p.name}{' '}
+                    <span className="text-quicksilver-accent">
+                      scope={p.scope} priority={p.priority}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {d.resolvedReferences.evidence.length > 0 && (
+            <div>
+              <h4 className="font-mono text-xs uppercase tracking-widest text-quicksilver-accent">
+                Supporting evidence
+              </h4>
+              <ul className="mt-1 space-y-1">
+                {d.resolvedReferences.evidence.map((e) => (
+                  <li key={e.id} className="font-mono text-xs text-quicksilver-signal">
+                    {e.title}{' '}
+                    <span className="text-quicksilver-accent">
+                      confidence {(e.confidence * 100).toFixed(0)}%
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {decision?.policyConflicts && decision.policyConflicts.length > 0 && (
+            <pre className="overflow-x-auto whitespace-pre-wrap rounded border border-quicksilver-border bg-quicksilver-bg p-3 font-mono text-xs leading-relaxed text-quicksilver-accent">
+{`Policy conflict detected:\n${decision.policyConflicts.map((c) => `  ${c}`).join('\n')}`}
+            </pre>
+          )}
+
+          {decision?.concerns && decision.concerns.length > 0 && (
+            <ul className="space-y-1">
+              {decision.concerns.map((c, i) => (
+                <li key={i} className="font-mono text-xs text-yellow-300">
+                  ! {c}
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {decision?.blockingReasons && decision.blockingReasons.length > 0 && (
+            <ul className="space-y-1">
+              {decision.blockingReasons.map((c, i) => (
+                <li key={i} className="font-mono text-xs text-red-400">
+                  ✗ {c}
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {/* Independent reviewer panel — advisory only. The kernel above is what
+              actually authorizes or blocks; this is a second opinion for the
+              human approver to weigh, never a gate. */}
+          {d.review && (
+            <div className="rounded border border-dashed border-quicksilver-accent/60 bg-quicksilver-bg p-3">
+              <h4 className="mb-2 font-mono text-xs uppercase tracking-widest text-quicksilver-accent">
+                Independent review <span className="normal-case tracking-normal">(advisory, not a gate)</span>
+              </h4>
+              {d.review.policyConflicts.length === 0 &&
+              d.review.missingEvidence.length === 0 &&
+              d.review.riskConcerns.length === 0 &&
+              d.review.suggestions.length === 0 ? (
+                <p className="font-mono text-xs text-quicksilver-signal">No concerns raised.</p>
+              ) : (
+                <div className="space-y-2">
+                  {d.review.policyConflicts.length > 0 && (
+                    <ul className="space-y-1">
+                      {d.review.policyConflicts.map((c, i) => (
+                        <li key={i} className="font-mono text-xs text-red-400">⚠ policy: {c}</li>
+                      ))}
+                    </ul>
+                  )}
+                  {d.review.missingEvidence.length > 0 && (
+                    <ul className="space-y-1">
+                      {d.review.missingEvidence.map((c, i) => (
+                        <li key={i} className="font-mono text-xs text-yellow-300">? evidence: {c}</li>
+                      ))}
+                    </ul>
+                  )}
+                  {d.review.riskConcerns.length > 0 && (
+                    <ul className="space-y-1">
+                      {d.review.riskConcerns.map((c, i) => (
+                        <li key={i} className="font-mono text-xs text-yellow-300">! risk: {c}</li>
+                      ))}
+                    </ul>
+                  )}
+                  {d.review.suggestions.length > 0 && (
+                    <ul className="space-y-1">
+                      {d.review.suggestions.map((c, i) => (
+                        <li key={i} className="font-mono text-xs text-quicksilver-accent">→ {c}</li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Observation panel — the result of an action already taken, so it
+          stays outside the reasoning toggle and always visible once present. */}
       {observation && observation.observed && (
         <div className="mt-4 rounded border border-quicksilver-border bg-quicksilver-bg p-4">
           <h4 className="font-mono text-xs uppercase tracking-widest text-quicksilver-accent">
@@ -562,15 +728,84 @@ function DecisionCard({
             <div className="mt-3 rounded border border-yellow-700/40 bg-yellow-950/20 p-3">
               <p className="font-mono text-xs text-yellow-300">{observation.recommendedRollback.rationale}</p>
               {observation.rollbackDecisionId && (
-                <p className="mt-2 font-mono text-xs text-quicksilver-signal">
-                  rollback decision created: <code className="text-quicksilver-accent">{observation.rollbackDecisionId}</code>
-                </p>
+                <>
+                  <p className="mt-2 font-mono text-xs text-quicksilver-signal">
+                    rollback decision created: <code className="text-quicksilver-accent">{observation.rollbackDecisionId}</code>
+                    {rollbackStatus && <span className="text-quicksilver-accent"> · {rollbackStatus}</span>}
+                  </p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {rollbackStatus === 'awaiting-approval' && (
+                      <ActionButton
+                        label="Approve rollback"
+                        onClick={() => onAct(observation.rollbackDecisionId!, 'approve')}
+                        busy={actingId === observation.rollbackDecisionId}
+                        tone="primary"
+                      />
+                    )}
+                    {rollbackStatus === 'approved' && (
+                      <ActionButton
+                        label="Execute rollback (simulated)"
+                        onClick={() => onExecute(observation.rollbackDecisionId!)}
+                        busy={actingId === observation.rollbackDecisionId}
+                        tone="primary"
+                      />
+                    )}
+                  </div>
+                </>
               )}
             </div>
           )}
         </div>
       )}
     </article>
+  )
+}
+
+/**
+ * One line under the reference grid: which process definition governs this
+ * decision, where it is now, how it got there, and what can happen next.
+ * Only rendered when the server ran the process engine.
+ */
+function ProcessStrip({ process }: { process: ProcessInfo }) {
+  if (process.engine === 'off' || process.engine === 'missing') return null
+  if (process.engine === 'invalid') {
+    return (
+      <div className="mb-4 rounded border border-red-400/60 p-3 font-mono text-xs text-red-400">
+        Process definition {process.definitionName ?? ''} v{process.version ?? '?'} is invalid — the kernel is holding
+        this decision until it is fixed in Studio.
+        {process.errors?.slice(0, 3).map((e, i) => (
+          <div key={i} className="mt-1 text-red-300">✗ {e}</div>
+        ))}
+      </div>
+    )
+  }
+  const automatic = process.transitionId === 'auto-approve'
+  const next = process.next ?? []
+  return (
+    <div className="mb-4 rounded border border-quicksilver-border p-3 font-mono text-xs">
+      <div className="text-quicksilver-accent">
+        Process · <span className="text-quicksilver-signal">{process.definitionName} v{process.version}</span> ·{' '}
+        <span className="text-quicksilver-signal">{process.stateLabel}</span>
+        {process.transitionId && <span> (via {process.transitionId})</span>}
+      </div>
+      {automatic && (
+        <div className="mt-1 text-green-400">
+          ✓ Auto-approved by the kernel: within this process&apos;s autonomy ceiling, no human needed.
+        </div>
+      )}
+      {next.length > 0 && (
+        <div className="mt-1 text-quicksilver-accent">
+          Next:{' '}
+          {next.map((n, i) => (
+            <span key={n.id}>
+              {i > 0 && ' · '}
+              <span className={n.guardPassed ? 'text-quicksilver-signal' : ''}>{n.label}</span>
+              {n.requiresHuman && ' (human)'}
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
   )
 }
 

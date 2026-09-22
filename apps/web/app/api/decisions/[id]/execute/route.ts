@@ -8,11 +8,29 @@
  *
  * Determinism: seeded by the decision id, so running the same decision
  * twice returns the same outcome — important for demo reproducibility.
+ *
+ * With QUICKSILVER_PROCESS_ENGINE=on, the kernel authorizes the move to
+ * `executed` or `failed` against the Decision Lifecycle process definition,
+ * using the simulated outcome as the `execution.success` fact, before
+ * anything is written. When a rollback decision executes successfully, the
+ * decision it undoes is moved to `rolled-back` the same way.
  */
 
 import { NextResponse } from 'next/server'
 import { createClient } from '@sanity/client'
 import { z } from 'zod'
+import { authorizeTransition } from '@quicksilver/kernel'
+import {
+  EXECUTOR_ACTOR,
+  KERNEL_ACTOR,
+  commitTransition,
+  factsFromDecision,
+  invalidDefinitionBody,
+  isRevisionConflict,
+  loadDecisionLifecycle,
+  processView,
+  refusal,
+} from '@/lib/process-engine'
 
 function getSanityClient() {
   return createClient({
@@ -112,16 +130,71 @@ export async function POST(
 
     const decision = await client.fetch<{
       _id: string
+      _rev: string
       status: string
       selectedAction: string
-      executionContextId?: string
+      kind?: string | null
+      riskLevel?: number | null
+      requiredApproval?: boolean | null
+      rollbackOfId?: string | null
     } | null>(
-      `*[_type == "decision" && _id == $id][0]{ _id, status, selectedAction }`,
+      `*[_type == "decision" && _id == $id][0]{ _id, _rev, status, selectedAction, kind, riskLevel, requiredApproval, "rollbackOfId": rollbackOf._ref }`,
       { id },
     )
     if (!decision) {
       return NextResponse.json({ error: 'Decision not found' }, { status: 404 })
     }
+
+    // ── Process engine path ────────────────────────────────────────────────
+    const lifecycle = await loadDecisionLifecycle(client)
+    if (lifecycle.kind === 'invalid') {
+      return NextResponse.json(invalidDefinitionBody(lifecycle), { status: 409 })
+    }
+    if (lifecycle.kind === 'ready') {
+      const { definition } = lifecycle
+      const outcome = simulateExecution(decision._id, decision.selectedAction)
+      const facts = { ...factsFromDecision(decision), 'execution.success': outcome.success }
+      const target = outcome.success ? 'executed' : 'failed'
+      const step = authorizeTransition({ definition, currentState: decision.status, to: target, facts, actor: EXECUTOR_ACTOR })
+      if (!step.allowed) return NextResponse.json(refusal(step, definition), { status: 409 })
+
+      const now = new Date().toISOString()
+      try {
+        await commitTransition(client, decision._id, decision._rev, definition, step, EXECUTOR_ACTOR, now, { executedAt: now })
+      } catch (err) {
+        if (isRevisionConflict(err)) {
+          return NextResponse.json({ error: 'This decision changed while it was being executed. Reload and try again.' }, { status: 409 })
+        }
+        throw err
+      }
+      await client.create({
+        _type: 'metric',
+        _id: `metric-${outcome.metricName.replace(/\W+/g, '-')}-${Date.now()}`,
+        name: outcome.metricName,
+        unit: outcome.unit,
+        value: Math.round(outcome.newValue * 100) / 100,
+        baseline: outcome.previousValue,
+        direction: outcome.metricName.includes('downtime') ? 'lower-better' : 'higher-better',
+        updatedAt: now,
+      })
+
+      // A successful rollback closes out the decision it undid.
+      let parent: { id: string; status: string } | { id: string; error: string } | null = null
+      if (outcome.success && decision.kind === 'rollback' && decision.rollbackOfId) {
+        parent = await completeParentRollback(client, decision.rollbackOfId, definition, now)
+      }
+
+      return NextResponse.json({
+        decisionId: decision._id,
+        status: step.to,
+        outcome,
+        at: now,
+        process: processView(definition, step.to!, facts, step.transition?.id),
+        rolledBackParent: parent,
+      })
+    }
+
+    // ── Legacy path (engine off, or definition not seeded yet) ─────────────
     if (decision.status !== 'approved') {
       return NextResponse.json(
         { error: `Decision is in status "${decision.status}"; must be approved to execute` },
@@ -163,4 +236,34 @@ export async function POST(
       { status: 500 },
     )
   }
+}
+
+async function completeParentRollback(
+  client: ReturnType<typeof getSanityClient>,
+  parentId: string,
+  definition: Parameters<typeof authorizeTransition>[0]['definition'],
+  now: string,
+): Promise<{ id: string; status: string } | { id: string; error: string }> {
+  const parent = await client.fetch<{
+    _id: string
+    _rev: string
+    status: string
+    kind?: string | null
+    riskLevel?: number | null
+    requiredApproval?: boolean | null
+    observedDeviation?: boolean | null
+  } | null>(
+    `*[_type == "decision" && _id == $id][0]{ _id, _rev, status, kind, riskLevel, requiredApproval, observedDeviation }`,
+    { id: parentId },
+  )
+  if (!parent) return { id: parentId, error: 'Original decision not found.' }
+  const facts = { ...factsFromDecision(parent), 'rollback.executed': true }
+  const step = authorizeTransition({ definition, currentState: parent.status, to: 'rolled-back', facts, actor: KERNEL_ACTOR })
+  if (!step.allowed) return { id: parentId, error: step.reasons.join(' ') }
+  try {
+    await commitTransition(client, parent._id, parent._rev, definition, step, KERNEL_ACTOR, now)
+  } catch (err) {
+    return { id: parentId, error: (err as Error).message }
+  }
+  return { id: parentId, status: step.to! }
 }

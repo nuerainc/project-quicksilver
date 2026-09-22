@@ -12,7 +12,9 @@
     "./authority": "./src/authority.ts",
     "./risk": "./src/risk.ts",
     "./approval": "./src/approval.ts",
-    "./types": "./src/types.ts"
+    "./types": "./src/types.ts",
+    "./process": "./src/process.ts",
+    "./process-document": "./src/process-document.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"

@@ -13,7 +13,12 @@
  *      ONLY, never changes the kernel's outcome (see packages/agent/src/reviewer.ts)
  *   6. Persist one `decision` document per authorized/rejected candidate
  *      (status `awaiting-approval`, or `rejected` on a kernel hard block),
- *      including the reviewer's notes
+ *      including the reviewer's notes.
+ *      With QUICKSILVER_PROCESS_ENGINE=on, the initial status instead comes
+ *      from the Decision Lifecycle process definition in Sanity: the kernel
+ *      takes the first automatic transition out of `proposed` whose guard
+ *      holds against the kernel's own result (kernel-reject, auto-approve,
+ *      or route-to-human) and records it in processHistory.
  *   7. Return plan + kernel decisions + reviewer notes, each with its `decisionDocId`
  *
  * Response shape:
@@ -44,7 +49,9 @@ import { z } from 'zod'
 import { isLlmConfigured, planObjective, reviewProposedAction, type ReviewResult } from '@quicksilver/agent'
 import {
   authorize,
+  nextAutomaticTransition,
   type AuthorizeResult,
+  type Facts,
   type CapabilityRef,
   type EntityRef,
   type EntityType,
@@ -53,6 +60,13 @@ import {
   type ProposedAction,
   type RiskLevel,
 } from '@quicksilver/kernel'
+import {
+  KERNEL_ACTOR,
+  loadDecisionLifecycle,
+  processStatus,
+  processView,
+  transitionFields,
+} from '@/lib/process-engine'
 
 function getSanityClient() {
   return createClient({
@@ -332,6 +346,45 @@ export async function POST(req: Request) {
       }),
     )
 
+    // Process engine (feature-flagged): let the Decision Lifecycle process
+    // definition pick each decision's first state, instead of the hard-coded
+    // "rejected or awaiting-approval" above. Low-risk actions the kernel marks
+    // execute-autonomously are auto-approved here, with no human click.
+    const lifecycle = await loadDecisionLifecycle(client)
+    const processByDoc = new Map<string, unknown>()
+    for (const r of results) {
+      if (!r.doc || !r.decision) continue
+      const facts: Facts = {
+        'decision.kind': 'plan',
+        'kernel.recommendation': r.decision.recommendation,
+        'kernel.authorized': r.decision.authorized,
+        'kernel.riskLevel': r.decision.riskLevel,
+        'kernel.requiresApproval': r.decision.requiresApproval,
+      }
+      const doc = r.doc as Record<string, unknown>
+      doc.kind = 'plan'
+      if (lifecycle.kind === 'ready') {
+        const step = nextAutomaticTransition(lifecycle.definition, lifecycle.definition.initialState, facts)
+        if (step) {
+          const f = transitionFields(lifecycle.definition, step, KERNEL_ACTOR, now)
+          doc.status = f.status
+          doc.process = f.process
+          doc.processHistory = [f.historyEntry]
+          processByDoc.set(r.doc._id, processView(lifecycle.definition, f.status, facts, step.transition?.id))
+        } else {
+          // No automatic route matched: the decision waits in the initial state.
+          doc.status = lifecycle.definition.initialState
+          processByDoc.set(r.doc._id, processView(lifecycle.definition, lifecycle.definition.initialState, facts))
+        }
+      } else if (lifecycle.kind === 'invalid') {
+        // Fail closed: an invalid process definition moves nothing.
+        doc.status = 'proposed'
+        processByDoc.set(r.doc._id, processStatus(lifecycle))
+      } else {
+        processByDoc.set(r.doc._id, processStatus(lifecycle))
+      }
+    }
+
     // Persist every decision atomically. Failure here is loud on purpose: without
     // a decision document the Approve → Execute → Observe loop cannot proceed.
     const docs = results.flatMap((r) => (r.doc ? [r.doc] : []))
@@ -346,6 +399,8 @@ export async function POST(req: Request) {
       decision: r.decision,
       review: r.review,
       decisionDocId: r.doc?._id ?? null,
+      status: (r.doc as { status?: string } | null)?.status ?? null,
+      process: r.doc ? processByDoc.get(r.doc._id) ?? null : null,
       resolvedReferences: {
         actor: r.refs.actor && {
           id: r.refs.actor.id,

@@ -1,8 +1,7 @@
 <!--
 DEV.to submission post -- Path Two ("Vibe-Code Something Strange").
 Paste this into DEV's Path Two submission template (dev.to/new, using the
-challenge's prefilled Path Two template) and fill in the two [TODO] spots
-before publishing. Required tag: #sanitychallenge.
+challenge's prefilled Path Two template). Required tag: #sanitychallenge.
 -->
 
 # Quicksilver: The Company That Operates Itself
@@ -60,13 +59,16 @@ needed. All without leaving the page.
 
 **Live, deployed, click-through: https://quicksilver-seven.vercel.app**
 
-No login required — type an objective into the CEO intent box and watch
-the whole loop run against real Azure + Sanity infrastructure: plan,
-kernel authorization, independent review, approve, simulated execute,
-observe.
-
-[TODO: embed the demo video here once recorded — see the repo's
-`docs/DEMO-SCRIPT.md` for the walkthrough this follows.]
+No login required — the CEO intent box comes pre-filled. Click **SEND TO
+QUICKSILVER** and scroll past the Plan narrative to **DECISIONS**: four
+candidate actions, each with its own dashed **INDEPENDENT REVIEW** block
+sitting below the kernel's risk/authority fields. Short on time? Skip
+straight to the **fourth card** ("Plan a staged firmware update…") — its
+review throws a live ⚠️ policy flag in red, catching that the proposal
+never confirms alignment with Operations Policy 17. Nothing about that
+flag is scripted; it's the reviewer model actually finding the gap
+against structured data. Then: approve, execute (simulated), watch the
+metric move.
 
 ## Code
 
@@ -129,13 +131,30 @@ that pins the correct behavior down. "Vibe-coded" doesn't mean untested.
 **Bonus: Sanity Workflows.** The `decision` document's real-world status
 lifecycle (awaiting approval → approved/rejected → executed) is a natural
 fit for Sanity's own Workflows plugin, so it's wired in as a lightweight,
-purely additive curation layer: a four-state kanban board
-(`sanity-plugin-workflow`) that a human reviewer can use in Studio to
-triage every awaiting-approval decision visually, independent of the
-app's own approve/reject buttons. It tracks its own metadata document per
-decision and never touches the kernel-driven `status` field the app
-actually reads — it's a second, editorial view onto the same data, which
-is exactly what the plugin is designed for.
+purely additive curation layer: `sanity-plugin-workflow`, configured with
+a four-state board (Awaiting Approval → Approved / Rejected → Executed)
+scoped to the `decision` type, deployed live to the project's Studio at
+[qkslvr.sanity.studio](https://qkslvr.sanity.studio/) where the board
+renders cleanly as its own tool tab. It tracks its own metadata document
+per decision and never touches the kernel-driven `status` field the app
+actually reads — a second, editorial view a human reviewer opts individual
+decisions into, sitting entirely alongside the app's own approve/reject
+buttons rather than replacing them.
+
+**The strangest part: the company's playbook is content, and the kernel
+runs it.** Late in the build, the `workflow` document type stopped being
+a description and became executable. A process definition in Sanity
+declares states, transitions, and structured guards (`{ fact, op, value }`,
+never a string the kernel evaluates). The kernel validates it (no
+unreachable states, no dead ends, no malformed guards), then authorizes
+every decision's status change against it. That covers auto-approval for
+low-risk actions, human-only approve/reject/rollback, and plain-English
+refusals for illegal jumps. Each step is stamped with the definition's
+version and revision. The autonomy ceiling ("never auto-approve above
+risk 2") is a number an editor can change in Studio. If someone breaks
+the definition, the kernel stops moving decisions rather than bypassing
+it. The same file is the Sanity seed and the test fixture, so the 19
+process-engine tests exercise exactly what's in Content Lake.
 
 ## Sanity Project Details (Required)
 
@@ -168,12 +187,6 @@ secret had to be typed by a human. **Claude Code** (via Cowork) picked
 the repo up from there for the hardening pass covered in "My Build
 Process" above — plus a live Vercel deployment, a second real bug caught
 in production, the Sanity Workflows bonus, and this write-up itself.
-
-[TODO: after uploading via dev.to/agent_sessions/new, embed the Claude
-Code session transcript here, covering exactly the kind of real, slightly
-messy debugging described above. MiniMax Agent's phase and VS Code's
-manual edits aren't one of DEV's natively supported session formats, so
-they're documented in `BUILD-LOG.md` instead.]
 
 ---
 

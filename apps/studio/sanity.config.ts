@@ -50,8 +50,13 @@ export default defineConfig({
   name: 'quicksilver',
   title: 'Quicksilver — Autonomous Company OS',
 
-  projectId: process.env.NEXT_PUBLIC_SANITY_PROJECT_ID || process.env.SANITY_STUDIO_PROJECT_ID || '',
-  dataset: process.env.NEXT_PUBLIC_SANITY_DATASET || 'production',
+  // Vite only exposes SANITY_STUDIO_-prefixed env vars to this file (unlike
+  // sanity.cli.ts, which runs in Node and can read anything) -- NEXT_PUBLIC_*
+  // vars are a Next.js convention meaningful in apps/web, not here, so they
+  // resolve to undefined in the Studio bundle. Falls back to the same
+  // non-secret, effectively-fixed project identity hardcoded in sanity.cli.ts.
+  projectId: process.env.SANITY_STUDIO_PROJECT_ID || 'd280bqjc',
+  dataset: process.env.SANITY_STUDIO_DATASET || 'production',
 
   plugins: [structureTool(), decisionWorkflow],
 

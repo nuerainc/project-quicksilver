@@ -89,9 +89,75 @@ export default defineType({
       name: 'status',
       type: 'string',
       options: {
-        list: ['proposed', 'awaiting-approval', 'approved', 'rejected', 'executed', 'failed', 'rolled-back'],
+        list: [
+          'proposed',
+          'awaiting-approval',
+          'approved',
+          'rejected',
+          'executed',
+          'failed',
+          'rollback-proposed',
+          'rolled-back',
+        ],
         layout: 'dropdown',
       },
+      description:
+        'With the process engine on, this is the current state in the Decision Lifecycle process definition, ' +
+        'and only the kernel moves it (see Process history).',
+    }),
+    defineField({
+      name: 'kind',
+      type: 'string',
+      options: { list: ['plan', 'rollback'] },
+      description: 'plan = proposed by the planner; rollback = proposed to undo another decision',
+    }),
+    defineField({
+      name: 'rollbackOf',
+      type: 'reference',
+      to: [{ type: 'decision' }],
+      description: 'For a rollback decision: the decision it undoes',
+    }),
+    defineField({
+      name: 'observedDeviation',
+      type: 'boolean',
+      description: 'Set by /observe: the metric moved the wrong way after execution',
+    }),
+    defineField({
+      name: 'process',
+      title: 'Process',
+      type: 'object',
+      description: 'The process definition governing this decision, as of its last transition',
+      fields: [
+        { name: 'definition', type: 'reference', to: [{ type: 'workflow' }] },
+        { name: 'version', type: 'number' },
+        { name: 'revision', type: 'string', description: 'Content revision (_rev) of the definition' },
+      ],
+    }),
+    defineField({
+      name: 'processHistory',
+      title: 'Process history',
+      type: 'array',
+      description: 'Every state change the kernel authorized, oldest first',
+      of: [
+        {
+          type: 'object',
+          name: 'processHistoryEntry',
+          fields: [
+            { name: 'transitionId', type: 'string' },
+            { name: 'from', type: 'string' },
+            { name: 'to', type: 'string' },
+            { name: 'actorId', type: 'string' },
+            { name: 'actorType', type: 'string' },
+            { name: 'at', type: 'datetime' },
+            { name: 'processVersion', type: 'number' },
+            { name: 'processRevision', type: 'string' },
+          ],
+          preview: {
+            select: { from: 'from', to: 'to', t: 'transitionId', actor: 'actorId', at: 'at' },
+            prepare: ({ from, to, t, actor, at }) => ({ title: `${from} → ${to} (${t})`, subtitle: `${actor} · ${at}` }),
+          },
+        },
+      ],
     }),
     defineField({ name: 'createdAt', type: 'datetime' }),
     defineField({

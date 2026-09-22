@@ -1,8 +1,7 @@
 <!--
 DEV.to submission post -- Path One ("Ship an Agent That Queries Real Content").
 Paste this into DEV's Path One submission template (dev.to/new, using the
-challenge's prefilled Path One template) and fill in the two [TODO] spots
-before publishing. Required tag: #sanitychallenge.
+challenge's prefilled Path One template). Required tag: #sanitychallenge.
 -->
 
 # Quicksilver: An Autonomous Company Operating System
@@ -46,6 +45,20 @@ routes to **human approval**. Approve, execute (simulated), observe a
 metric move, and close the loop — the full decision record is persisted
 as an auditable `decision` doc in Sanity.
 
+**Processes are content too.** The `workflow` type isn't documentation.
+It holds executable *process definitions*: states, transitions, and
+structured guards like `kernel.riskLevel lte 2`, never code strings. The
+kernel runs them. Every decision moves through a **Decision Lifecycle**
+process stored in Sanity. The kernel takes the first automatic transition
+whose guard holds (hard block → rejected, low risk → auto-approved,
+everything else → a human), refuses illegal jumps with a plain-English
+reason, requires a human for approve/reject/rollback, and stamps the
+definition's version and `_rev` on every step in the decision's process
+history. The company's autonomy ceiling is a number in a Sanity document:
+edit it in Studio and the app's behavior follows. An invalid definition
+(unreachable state, dead end, malformed guard) stops the kernel moving
+anything, rather than being bypassed.
+
 The judging question here is: *could this just have been keyword search?*
 No. A keyword search finds "Engineering approval is required for
 parameter changes." It doesn't find whether the policy applies vs. is
@@ -59,19 +72,27 @@ data is structured.
 
 **Live, deployed, click-through: https://quicksilver-seven.vercel.app**
 
-No login required. Submit the seed objective ("Reduce production downtime
-by 20% over the next 30 days without increasing OPEX") and watch the plan
-come back grounded in real Sanity doc IDs, the kernel surface the
-Operations Policy 17 / Emergency Policy 4 conflict, and the independent
-reviewer's notes render alongside it — then approve, execute (simulated),
-and observe the metric move.
+No login required — the CEO Intent box comes pre-filled with the seed
+objective. Click **SEND TO QUICKSILVER**, then scroll past the Plan
+paragraph and the Required Capabilities / Constraints sections to the
+four cards under **DECISIONS**. Each one carries a dashed **INDEPENDENT
+REVIEW** block, kept visually separate from the kernel's own
+risk/authority computation above it. Go straight to the **fourth card**
+("Plan a staged firmware update…") if you're short on time — its
+independent review throws a real ⚠️ flag in red: the proposal doesn't
+specify alignment with Operations Policy 17. That's not scripted for the
+demo; it's the reviewer model catching a real policy gap against
+structured data, live. From there: approve, execute (simulated), and
+observe the metric move.
 
-[TODO: embed the demo video here once recorded — see the repo's
-`docs/DEMO-SCRIPT.md` for the walkthrough this follows: submit the seed
-objective, watch the plan come back grounded in real Sanity doc IDs,
-watch the kernel surface the policy conflict and the independent
-reviewer's notes, approve, execute, observe the metric move, and — if
-the metric drifts wrong — propose a rollback.]
+Each card also carries a **Process** line: *Decision Lifecycle v1 ·
+Awaiting human approval (via route-to-human) · Next: Approve (human) ·
+Reject (human)*. That is the kernel running a process definition read
+from Sanity. A card the kernel rates low-risk (risk ≤ 2) arrives already
+approved, marked *"Auto-approved by the kernel."* If a metric moves the
+wrong way after execution, you can propose, approve, and execute a
+rollback, and the original decision moves to *rolled back*. The
+**Decision log** page shows every decision's full process history.
 
 ## Code
 
@@ -110,6 +131,13 @@ aliasing the `initial_context` tool name collision between them to
 `kb_initial_context`), and `npm run verify:mcp` exercises both live,
 including a real `knowledge_base_read` call.
 
+Sanity also holds the company's **processes**. The two `workflow`
+documents (Decision Lifecycle, Production Parameter Change) are process
+definitions with structured guards, edited in Studio like any other
+content and read by the kernel on every state change. Round-tripping
+them to and from Sanity's typed fields is covered by the kernel's tests,
+so what's in Content Lake is exactly what the kernel runs.
+
 Writes go through `@sanity/client` mutations against the HTTP API
 (Context MCP is read-only) — every plan run persists a `decision`
 document with the question, the evidence and policies considered, the
@@ -143,14 +171,8 @@ seed data with the deliberate policy conflict, first submission drafts);
 Knowledge Base Context MCP integration, the independent reviewer wired
 into the live `/api/plan` route, three real bugs found and fixed (a
 kernel risk-tier edge case, and the same strict-JSON-schema mistake made
-twice), the live Vercel deployment, and the Sanity Workflows bonus.
-
-[TODO: after uploading via dev.to/agent_sessions/new, embed the Claude
-Code session transcript here — it covers the Knowledge Base integration,
-reviewer wiring, and live-deploy debugging described above. DEV's
-uploader natively supports Claude Code sessions; the MiniMax Agent and
-VS Code phases aren't one of DEV's supported native session formats, so
-they're documented in `BUILD-LOG.md` above instead.]
+twice), the live Vercel deployment, the Sanity Workflows bonus, and
+the kernel's process engine that runs Sanity-stored process definitions.
 
 ---
 

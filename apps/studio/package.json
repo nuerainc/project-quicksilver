@@ -11,6 +11,7 @@
     "schema:deploy": "tsx scripts/deploy-schema.ts",
     "smoke": "tsx scripts/smoke-test.ts",
     "seed": "tsx seed/loader.ts",
+    "seed:processes": "tsx seed/processes.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

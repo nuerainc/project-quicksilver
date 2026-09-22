@@ -5,11 +5,28 @@
  *
  * Updates the decision document in Sanity with the new status, approver,
  * and (for execute) the executedAt timestamp. Returns the updated decision.
+ *
+ * With QUICKSILVER_PROCESS_ENGINE=on, the action is the transition of the
+ * same name in the Decision Lifecycle process definition (approve / reject /
+ * request-evidence), and the kernel's authorizeTransition() decides whether
+ * it is legal from the decision's current state and whether this actor may
+ * take it (all three require a human).
  */
 
 import { NextResponse } from 'next/server'
 import { createClient } from '@sanity/client'
 import { z } from 'zod'
+import { authorizeTransition } from '@quicksilver/kernel'
+import {
+  commitTransition,
+  factsFromDecision,
+  invalidDefinitionBody,
+  isRevisionConflict,
+  loadDecisionLifecycle,
+  processView,
+  refusal,
+  uiOperator,
+} from '@/lib/process-engine'
 
 function getSanityClient() {
   return createClient({
@@ -56,13 +73,59 @@ export async function POST(
     const client = getSanityClient()
 
     // Fetch existing decision to confirm it exists.
-    const existing = await client.fetch<{ _id: string; status: string; reasoningSummary?: string } | null>(
-      `*[_type == "decision" && _id == $id][0]{ _id, status, reasoningSummary }`,
+    const existing = await client.fetch<{
+      _id: string
+      _rev: string
+      status: string
+      reasoningSummary?: string
+      kind?: string | null
+      riskLevel?: number | null
+      requiredApproval?: boolean | null
+    } | null>(
+      `*[_type == "decision" && _id == $id][0]{ _id, _rev, status, reasoningSummary, kind, riskLevel, requiredApproval }`,
       { id },
     )
     if (!existing) {
       return NextResponse.json({ error: 'Decision not found' }, { status: 404 })
     }
+
+    // ── Process engine path ────────────────────────────────────────────────
+    const lifecycle = await loadDecisionLifecycle(client)
+    if (lifecycle.kind === 'invalid') {
+      return NextResponse.json(invalidDefinitionBody(lifecycle), { status: 409 })
+    }
+    if (lifecycle.kind === 'ready') {
+      const { definition } = lifecycle
+      const actor = uiOperator(approverId)
+      const facts = factsFromDecision(existing)
+      const step = authorizeTransition({ definition, currentState: existing.status, transitionId: action, facts, actor })
+      if (!step.allowed) return NextResponse.json(refusal(step, definition), { status: 409 })
+
+      const now = new Date().toISOString()
+      const extra: Record<string, unknown> = {}
+      if (action === 'approve' && approverId) extra.approvedBy = { _type: 'reference', _ref: approverId }
+      if (action === 'request-evidence' && comment) {
+        extra.reasoningSummary = `[REQUEST EVIDENCE] ${comment}\n\n-- existing reasoning --\n${existing.reasoningSummary ?? ''}`
+      }
+      try {
+        await commitTransition(client, id, existing._rev, definition, step, actor, now, extra)
+      } catch (err) {
+        if (isRevisionConflict(err)) {
+          return NextResponse.json({ error: 'This decision changed while you were acting on it. Reload and try again.' }, { status: 409 })
+        }
+        throw err
+      }
+      return NextResponse.json({
+        id,
+        status: step.to,
+        approverId,
+        comment,
+        at: now,
+        process: processView(definition, step.to!, facts, step.transition?.id),
+      })
+    }
+
+    // ── Legacy path (engine off, or definition not seeded yet) ─────────────
 
     // Only a decision still waiting on a human can be approved / rejected / queried.
     // This is what makes a kernel `reject` (persisted as status "rejected") final:

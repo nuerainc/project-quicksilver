@@ -111,6 +111,13 @@ npm run schema:deploy
 # Push the demo dataset
 npm run seed
 
+# (Or push only the process definitions the kernel runs)
+npm run seed:processes
+
+# Turn on the process engine (decision status changes authorized by the
+# kernel against the Decision Lifecycle process definition in Sanity):
+#   QUICKSILVER_PROCESS_ENGINE=on   in .env
+
 # Smoke test the dataset integrity
 npm run smoke
 
@@ -120,7 +127,7 @@ npm run verify:mcp
 # Verify the LLM (each role responds; planner/reviewer do tools + structured output)
 npm run verify:llm
 
-# Run the kernel tests (the deterministic authorization layer)
+# Run the kernel tests (authorization + process engine: 34 tests)
 npm run kernel:test
 
 # Start the Studio (localhost:3333)
@@ -152,7 +159,7 @@ Ten document types make up the company model:
 - `capability` — what can be done, by whom, at what risk
 - `policy` — rules with priority, supersedes, approval requirements
 - `objective` — goal with constraints and budget
-- `workflow` — state machine: states, transitions, rollback
+- `workflow` — an executable process definition (shown in Studio as "Process definition"): states, transitions, structured guards, run by the kernel
 - `evidence` — claim with confidence and explicit `contradicts[]`
 - `decision` — auditable artifact: question, evidence, policy checks, risk, status
 - `metric` — measurable state with baseline + direction (closed-loop support)
@@ -163,8 +170,15 @@ The **Quicksilver Kernel** is a deterministic TypeScript library that:
 - checks authority (which policies apply, which are superseded, which conflict)
 - computes risk (deterministic formula clamped 0–5)
 - routes to approval gate (autonomous / request-approval / reject)
+- runs process definitions stored in Sanity (`packages/kernel/src/process.ts`):
+  validates them (reachability, dead ends, guard shape), evaluates
+  structured guards with no string evaluation and fail-closed on missing
+  facts, authorizes every decision status change, requires a human where
+  the definition says so, and stamps the definition's version and `_rev`
+  in the decision's process history. Behind `QUICKSILVER_PROCESS_ENGINE=on`.
 
 The **LLM proposes, the kernel authorizes**. Never the other way around.
+And the kernel's own processes are content, not code.
 
 The **AI SDK 6 agent harness** uses `@ai-sdk/mcp` with role-based model
 configuration:

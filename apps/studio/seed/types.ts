@@ -90,12 +90,29 @@ export interface EvidenceSeed {
   contradictsEvidenceIds: string[]
 }
 
+export interface WorkflowGuardCondition {
+  fact: string
+  op: 'eq' | 'neq' | 'gt' | 'gte' | 'lt' | 'lte' | 'in' | 'notIn' | 'exists'
+  value?: string | number | boolean | string[]
+}
+
+/** Mirrors ProcessDefinition in packages/kernel/src/process.ts, plus seed-only fields. */
 export interface WorkflowSeed {
   _id: string
   name: string
+  version: number
   trigger: string
-  states: Array<{ id: string; label: string }>
-  transitions: Array<{ from: string; to: string; guard: string }>
+  initialState: string
+  states: Array<{ id: string; label: string; terminal?: boolean }>
+  transitions: Array<{
+    id: string
+    from: string
+    to: string
+    label?: string
+    automatic?: boolean
+    requiresHumanApproval?: boolean
+    guard?: { all?: WorkflowGuardCondition[]; any?: WorkflowGuardCondition[] }
+  }>
   requiredCapabilityIds: string[]
   approvalRequirementIds: string[]
   failureHandlers: string[]
@@ -116,7 +133,7 @@ export interface DecisionSeed {
   policyChecks: Array<{ policyId: string; result: string; reason: string }>
   riskLevel: RiskLevel
   requiredApproval: boolean
-  status: 'proposed' | 'awaiting-approval' | 'approved' | 'rejected' | 'executed' | 'failed' | 'rolled-back'
+  status: 'proposed' | 'awaiting-approval' | 'approved' | 'rejected' | 'executed' | 'failed' | 'rollback-proposed' | 'rolled-back'
   createdAt: string
   approvedById: string | null
   executedAt: string | null
