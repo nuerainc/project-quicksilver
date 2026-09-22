@@ -57,6 +57,15 @@ data is structured.
 
 ## Demo
 
+**Live, deployed, click-through: https://quicksilver-seven.vercel.app**
+
+No login required. Submit the seed objective ("Reduce production downtime
+by 20% over the next 30 days without increasing OPEX") and watch the plan
+come back grounded in real Sanity doc IDs, the kernel surface the
+Operations Policy 17 / Emergency Policy 4 conflict, and the independent
+reviewer's notes render alongside it — then approve, execute (simulated),
+and observe the metric move.
+
 [TODO: embed the demo video here once recorded — see the repo's
 `docs/DEMO-SCRIPT.md` for the walkthrough this follows: submit the seed
 objective, watch the plan come back grounded in real Sanity doc IDs,

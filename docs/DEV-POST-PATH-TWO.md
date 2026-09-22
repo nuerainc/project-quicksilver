@@ -58,6 +58,13 @@ needed. All without leaving the page.
 
 ## Demo
 
+**Live, deployed, click-through: https://quicksilver-seven.vercel.app**
+
+No login required — type an objective into the CEO intent box and watch
+the whole loop run against real Azure + Sanity infrastructure: plan,
+kernel authorization, independent review, approve, simulated execute,
+observe.
+
 [TODO: embed the demo video here once recorded — see the repo's
 `docs/DEMO-SCRIPT.md` for the walkthrough this follows.]
 

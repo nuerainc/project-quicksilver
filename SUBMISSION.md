@@ -21,6 +21,13 @@ Same codebase, two distinct narratives. Two separate DEV posts required.
 
 https://github.com/nuerainc/quicksilver-sanity-challenge (public, MIT licensed)
 
+## Live deployment
+
+**https://quicksilver-seven.vercel.app** — deployed on Vercel, no login
+required, running against real Azure LLM + Sanity infrastructure
+end-to-end (verified: plan → kernel authorization → independent review →
+approve → simulated execute → observe).
+
 ## Required Sanity Information
 
 | Field | Value |
@@ -120,8 +127,11 @@ npm run dev:web
 
 ## Demo video
 
-See [`docs/DEMO-SCRIPT.md`](./docs/DEMO-SCRIPT.md) for the 3-minute script.
-Recording to do before Oct 4.
+The live deployment above (https://quicksilver-seven.vercel.app) already
+satisfies the "working demo or deployed project" requirement — judges can
+click through it directly with no setup. A recorded walkthrough is
+optional polish: see [`docs/DEMO-SCRIPT.md`](./docs/DEMO-SCRIPT.md) for
+the 3-minute script if recorded before Oct 4.
 
 ---
 
