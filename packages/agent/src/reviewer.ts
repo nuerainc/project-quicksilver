@@ -20,12 +20,18 @@ import { REVIEWER_SYSTEM_PROMPT } from './prompts.ts'
 import { modelForRole } from './models.ts'
 import type { ProposedAction } from '@quicksilver/kernel'
 
+// NOTE: no `.default([])` on these array fields. A Zod default marks the field
+// optional in the generated JSON Schema, which fails Azure/OpenAI's strict
+// response_format validation ("'required' ... must include every key in
+// properties") -- the same bug class as the financialExposure fix in
+// planner.ts. Every field must be required; the model just returns an empty
+// array when it has nothing to report.
 export const ReviewResultSchema = z.object({
   valid: z.boolean(),
-  policyConflicts: z.array(z.string()).default([]),
-  missingEvidence: z.array(z.string()).default([]),
-  riskConcerns: z.array(z.string()).default([]),
-  suggestions: z.array(z.string()).default([]),
+  policyConflicts: z.array(z.string()),
+  missingEvidence: z.array(z.string()),
+  riskConcerns: z.array(z.string()),
+  suggestions: z.array(z.string()),
 })
 
 export type ReviewResult = z.infer<typeof ReviewResultSchema>
