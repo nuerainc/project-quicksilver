@@ -15,6 +15,13 @@
 
 Same codebase, two distinct narratives. Two separate DEV posts required.
 
+See [`BUILD-LOG.md`](./BUILD-LOG.md) for the full day-by-day build history —
+one unified log covering all three environments that touched this repo
+(MiniMax Agent's initial architecture-through-hardening pass, Claude
+Code via Cowork's integration/deploy pass covered in this document, and
+the user's own manual work in VS Code), with explicit handoff notes
+between them.
+
 ---
 
 ## Repository

@@ -132,13 +132,25 @@ raw LLM scratch space.
 
 ## Agent Session (optional but encouraged)
 
-[TODO: after uploading via dev.to/agent_sessions/new, embed it here. It's
-this session's own Claude Code transcript — a real record of building the
-Knowledge Base integration, hitting and fixing a wrong-argument-shape bug
-in `knowledge_base_read`, wiring the independent reviewer into the live
-`/api/plan` route, and finding/fixing a real kernel bug (a risk-tier edge
-case where the recommendation and the approval requirement could
-disagree) along the way.]
+The full day-by-day build history — every environment, every real error
+hit and how it was fixed, the final file inventory, and the exact handoff
+points between them — lives in one unified log:
+[`BUILD-LOG.md`](https://github.com/nuerainc/quicksilver-sanity-challenge/blob/main/BUILD-LOG.md).
+Short version: **MiniMax Agent** built the architecture-through-hardening
+pass end to end (schema lock, kernel, agent harness, the full Next.js app,
+seed data with the deliberate policy conflict, first submission drafts);
+**Claude Code** (via Cowork) then took it the rest of the way — the real
+Knowledge Base Context MCP integration, the independent reviewer wired
+into the live `/api/plan` route, three real bugs found and fixed (a
+kernel risk-tier edge case, and the same strict-JSON-schema mistake made
+twice), the live Vercel deployment, and the Sanity Workflows bonus.
+
+[TODO: after uploading via dev.to/agent_sessions/new, embed the Claude
+Code session transcript here — it covers the Knowledge Base integration,
+reviewer wiring, and live-deploy debugging described above. DEV's
+uploader natively supports Claude Code sessions; the MiniMax Agent and
+VS Code phases aren't one of DEV's supported native session formats, so
+they're documented in `BUILD-LOG.md` above instead.]
 
 ---
 

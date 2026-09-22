@@ -126,6 +126,17 @@ could show "execute autonomously" and "requires human approval" at the
 same time, caught during a cleanup pass and fixed with a regression test
 that pins the correct behavior down. "Vibe-coded" doesn't mean untested.
 
+**Bonus: Sanity Workflows.** The `decision` document's real-world status
+lifecycle (awaiting approval → approved/rejected → executed) is a natural
+fit for Sanity's own Workflows plugin, so it's wired in as a lightweight,
+purely additive curation layer: a four-state kanban board
+(`sanity-plugin-workflow`) that a human reviewer can use in Studio to
+triage every awaiting-approval decision visually, independent of the
+app's own approve/reject buttons. It tracks its own metadata document per
+decision and never touches the kernel-driven `status` field the app
+actually reads — it's a second, editorial view onto the same data, which
+is exactly what the plugin is designed for.
+
 ## Sanity Project Details (Required)
 
 | Field | Value |
@@ -139,9 +150,30 @@ that pins the correct behavior down. "Vibe-coded" doesn't mean untested.
 
 ## Agent Session (optional but encouraged)
 
-[TODO: after uploading via dev.to/agent_sessions/new, embed it here. It's
-this session's own Claude Code transcript, covering exactly the kind of
-real, slightly messy debugging described above.]
+Three environments touched this build, back to back, and the full
+day-by-day account — every real error, the rationale behind every
+recurring decision, and exactly where each one handed off to the next —
+is in one unified log:
+[`BUILD-LOG.md`](https://github.com/nuerainc/quicksilver-sanity-challenge/blob/main/BUILD-LOG.md).
+Short version: **MiniMax Agent** built the whole thing from scratch across
+a 16-day plan compressed into its first ~14 days — schema lock, seed data
+with the deliberate policy conflict baked in, kernel, agent harness, the
+full approval UI, submission drafts — real errors and all (an ERESOLVE
+peer-dependency fight over Sanity 5.x needing React 19 not 18,
+`generateObject` not accepting `tools` so the code moved to
+`generateText` with `experimental_output`, a free-inference pivot when
+the OpenAI budget didn't exist). **VS Code**, manual only, no AI agent,
+ran underneath both phases wherever a real terminal command or a real
+secret had to be typed by a human. **Claude Code** (via Cowork) picked
+the repo up from there for the hardening pass covered in "My Build
+Process" above — plus a live Vercel deployment, a second real bug caught
+in production, the Sanity Workflows bonus, and this write-up itself.
+
+[TODO: after uploading via dev.to/agent_sessions/new, embed the Claude
+Code session transcript here, covering exactly the kind of real, slightly
+messy debugging described above. MiniMax Agent's phase and VS Code's
+manual edits aren't one of DEV's natively supported session formats, so
+they're documented in `BUILD-LOG.md` instead.]
 
 ---
 
