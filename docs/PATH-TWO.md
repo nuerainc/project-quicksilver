@@ -6,7 +6,7 @@
 
 ## Headline
 
-**I built a company that runs itself. One weekend. Three judges.**
+**I built a company that runs itself. A scope-disciplined solo build. Three judges.**
 
 ## The line
 
@@ -38,20 +38,28 @@ that knows its place: the kernel authorizes; the agent proposes.
 The company model — organizations, departments, humans, agents, robots,
 capabilities, policies, evidence, objectives, decisions, metrics — is
 all structured content in Sanity. Ten document types, a Studio schema
-that ships in the repo, ~70 seed docs covering a manufacturing scenario
+that ships in the repo, 52 seed docs covering a manufacturing scenario
 deliberately engineered with a policy conflict and contradicting
-evidence so the agent has *real* things to reason over.
+evidence so the agent has *real* things to reason over. (`metric` docs
+aren't part of the seed — they're created at runtime by the closed-loop
+execute/observe flow.) A second layer sits on top of the same 12
+evidence/policy docs: a Sanity Knowledge Base, built and served through
+its own Context MCP endpoint, whose own contradiction-detection pass
+flags the parameter-drift-vs-mechanical-failure conflict for review —
+not something Quicksilver had to build itself.
 
 The kernel is plain TypeScript. Capability check, authority check,
 risk computation, approval gate. Hard blocks reject. Soft concerns
 escalate. The LLM never gets to authorize; the kernel is authoritative.
 
-The UI is operating-console, not chatbot-landing. It opens on Company
-State: active objectives, pending decisions, blocked actions. You click
-an objective, see the proposed plan, see the kernel's reasoning on
-each decision, see policies and evidence cited, click Approve or
-Reject. After approval, you can simulate execution, observe the metric,
-and propose a rollback if needed. All without leaving the page.
+The UI is operating-console, not chatbot-landing. It opens on a single
+CEO-intent box, not a multi-objective dashboard — that's a deliberate
+scope cut, not an oversight (see "What we deliberately didn't build"
+below). You type an objective, see the proposed plan, see the kernel's
+reasoning on each candidate action, see policies and evidence cited,
+click Approve or Reject. After approval, you can simulate execution,
+observe the metric, and propose a rollback if needed. All without
+leaving the page.
 
 ## Vibe-coding moment
 
@@ -63,6 +71,9 @@ approval UI as one component, then close the loop with simulated
 execution and rollback.
 
 What I deliberately **didn't** build, and why:
+- A multi-objective dashboard. One CEO-intent box, one plan, one
+  decision at a time. A grid of "active objectives" is a bigger UI
+  than a three-judge demo needs.
 - Real production control. The demo is safe; a real CNC would not be.
 - Multi-tenant architecture. Single user, one demo path.
 - Auth complexity. Single-user demo, no signup.
@@ -78,10 +89,10 @@ What I deliberately **didn't** build, and why:
 
 Path Two is judged on quality of build process, finish, schema
 thoughtfulness, and originality — *not* on which AI features you
-wrapped. So I treated it as a single-author, single-weekend, scope-
-disciplined build. Lock the schema on Day 1. Ship something runnable
-every day. Defer the polish to the last two days. Don't add anything
-the judging criteria didn't ask for.
+wrapped. So I treated it as a single-author, scope-disciplined build:
+lock the schema on Day 1, ship something runnable every day, defer the
+polish to the last two days, don't add anything the judging criteria
+didn't ask for.
 
 The thing I'm proudest of: the policy conflict (Operations Policy 17
 vs. Emergency Policy 4, both in scope `production.parameter_changes`)
@@ -99,8 +110,13 @@ demo; it encounters a real conflict the kernel has to adjudicate.
 | Agent | AI SDK 6 + `@ai-sdk/mcp` + multi-model ensemble (`gpt-5.6-sol`, `claude-sonnet-5`, `gpt-5.6-luna`, `gemini-3.8-flash`) |
 | Authority | Quicksilver Kernel (deterministic TypeScript, no LLM) |
 
+## Testing access
+
+No login required. Quicksilver has no auth layer — the app, the Sanity
+Studio, and the dataset itself are all open for inspection.
+
 ## Repo & project
 
 - Project: https://www.sanity.io/organizations/ou5ydq271/project/d280bqjc
-- Repo: (filled in at submission)
+- Repo: https://github.com/nuerainc/quicksilver-sanity-challenge
 - Demo video: (filled in at submission)

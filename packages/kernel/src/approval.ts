@@ -100,8 +100,14 @@ export function authorize(args: AuthorizeArgs): AuthorizeResult {
     // Hard block — actor doesn't have the capability/authority to attempt this.
     recommendation = 'reject'
     authorized = false
-  } else if (riskExceedsReview || concerns.length > 0) {
+  } else if (riskExceedsReview || riskExceedsAuto || concerns.length > 0) {
     // Within the actor's authority, but humans must review before execution.
+    // NOTE: `riskExceedsAuto` (not just `riskExceedsReview`) belongs in this
+    // condition. Risk strictly between autoMax and review used to fall through
+    // to the 'execute-autonomously' branch below while `requiresApproval` was
+    // independently computed as true from `riskExceedsAuto` -- a real tier
+    // quirk where the UI (which keys off `recommendation`) could label an
+    // action "execute autonomously" even though it required approval.
     recommendation = 'request-approval'
     authorized = true
   } else {
@@ -109,8 +115,7 @@ export function authorize(args: AuthorizeArgs): AuthorizeResult {
     authorized = true
   }
 
-  const requiresApproval =
-    recommendation !== 'execute-autonomously' || riskExceedsAuto
+  const requiresApproval = recommendation !== 'execute-autonomously'
 
   return {
     authorized,

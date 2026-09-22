@@ -14,7 +14,12 @@ import { z } from 'zod'
 
 import { PLANNER_SYSTEM_PROMPT } from './prompts.ts'
 import { isLlmConfigured, modelForRole } from './models.ts'
-import { createSanityContextClient, readEnvMcpConfig } from './mcp.ts'
+import {
+  closeAll,
+  createSanityContextClients,
+  mergeClientTools,
+  readEnvMcpConfigs,
+} from './mcp.ts'
 import type { ProposedAction } from '@quicksilver/kernel'
 
 export interface PlannerInput {
@@ -67,11 +72,11 @@ export async function planObjective(input: PlannerInput): Promise<PlannerOutput>
     )
   }
 
-  const mcpConfig = readEnvMcpConfig()
-  const client = await createSanityContextClient(mcpConfig)
+  const mcpConfigs = readEnvMcpConfigs()
+  const clients = await createSanityContextClients(mcpConfigs)
 
   try {
-    const tools = (await client.tools()) as Record<string, unknown>
+    const tools = await mergeClientTools(clients)
 
     // Day 8: agentic loop with structured output. The model uses MCP tools
     // to discover entities/capabilities/policies/evidence, then emits a plan
@@ -89,6 +94,10 @@ Step 1: Use the available tools (groq_query, schema_explorer, knowledge_base_rea
   - Which policies apply to the actions you're considering
   - Which evidence (reports, analyses, vendor bulletins) is relevant
 
+  Before calling knowledge_base_read, call initial_context / kb_initial_context first —
+  it requires { knowledgeBase, paths }, and both the knowledge base id and the valid
+  entry paths are only listed in that outline.
+
 Step 2: Emit a structured plan. The candidateActions array MUST contain at least one action. Each action must reference entities and capabilities by their Sanity document IDs (e.g., "entity-engineering-agent", "cap-process-param"). Do NOT invent IDs — only use IDs you actually retrieved.
 
 The kernel will compute risk and authorization from your candidate actions. Be specific about which policies apply.`,
@@ -104,6 +113,6 @@ The kernel will compute risk and authorization from your candidate actions. Be s
     }
     return parsed
   } finally {
-    await client.close()
+    await closeAll(clients)
   }
 }

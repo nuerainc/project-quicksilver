@@ -133,9 +133,11 @@ export async function POST(
     const now = new Date().toISOString()
 
     // Persist the simulated outcome as a metric document.
+    // Hyphens, not dots, as separators -- see the matching note in
+    // apps/web/app/api/decisions/[id]/rollback/route.ts.
     await client.create({
       _type: 'metric',
-      _id: `metric.${outcome.metricName.replace(/\W+/g, '-')}.${Date.now()}`,
+      _id: `metric-${outcome.metricName.replace(/\W+/g, '-')}-${Date.now()}`,
       name: outcome.metricName,
       unit: outcome.unit,
       value: Math.round(outcome.newValue * 100) / 100,

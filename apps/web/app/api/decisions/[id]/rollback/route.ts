@@ -55,7 +55,11 @@ export async function POST(
       return NextResponse.json({ error: 'Decision not found' }, { status: 404 })
     }
 
-    const rollbackId = `decision.rollback.${id}.${Date.now()}`
+    // Hyphens, not dots -- Sanity treats a leading "drafts." as a special
+    // document-id prefix, and mixing dots into an ordinary runtime id invites
+    // confusion (or worse) with that convention. Every other generated id in
+    // this codebase (decision-plan-<run>-<i>, etc.) already uses hyphens.
+    const rollbackId = `decision-rollback-${id}-${Date.now()}`
     await client.create({
       _id: rollbackId,
       _type: 'decision',

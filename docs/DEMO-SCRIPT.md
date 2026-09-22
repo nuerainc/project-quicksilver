@@ -12,7 +12,7 @@
 - Show `localhost:3000` with the default state.
 - Pan across the homepage header.
 
-## 0:20–0:50 — Company State
+## 0:20–0:50 — The objective
 
 > "I give Quicksilver one objective."
 

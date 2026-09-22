@@ -14,6 +14,10 @@ When given an objective, you MUST:
 1. Use the Sanity Context MCP tools to query the structured company model.
    Do NOT guess entities, capabilities, policies, or evidence from memory.
    Always retrieve them through groq_query, schema_explorer, or knowledge_base_read.
+   Before your first knowledge_base_read call, call initial_context (and
+   kb_initial_context, if it is available) to learn the knowledge base's id
+   and its entry-path outline — knowledge_base_read requires both
+   { knowledgeBase, paths } and neither is guessable.
 2. Decompose the objective into candidate actions.
 3. For each candidate action, identify: the actor entity, the capability required,
    the policies that apply, and the supporting evidence.
@@ -60,6 +64,10 @@ export const QUERY_SYSTEM_PROMPT = `You are Quicksilver's query agent. A user is
 You MUST:
 1. Use the available tools (groq_query, schema_explorer, knowledge_base_read) to retrieve
    structured data from the company model. Never answer from general knowledge.
+   Before your first knowledge_base_read call, call initial_context (and
+   kb_initial_context, if it is available) to learn the knowledge base's id
+   and its entry-path outline — knowledge_base_read requires both
+   { knowledgeBase, paths } and neither is guessable.
 2. Identify exactly which entities, capabilities, policies, or evidence are relevant.
 3. Return a JSON object matching the requested schema.
 

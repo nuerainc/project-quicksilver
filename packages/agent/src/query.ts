@@ -20,7 +20,12 @@ import { z } from 'zod'
 
 import { QUERY_SYSTEM_PROMPT } from './prompts.ts'
 import { isLlmConfigured, modelForRole } from './models.ts'
-import { createSanityContextClient, readEnvMcpConfig } from './mcp.ts'
+import {
+  closeAll,
+  createSanityContextClients,
+  mergeClientTools,
+  readEnvMcpConfigs,
+} from './mcp.ts'
 
 export const QueryResultSchema = z.object({
   question: z.string(),
@@ -64,11 +69,11 @@ export async function queryCompany(question: string): Promise<QueryResult> {
     )
   }
 
-  const mcpConfig = readEnvMcpConfig()
-  const client = await createSanityContextClient(mcpConfig)
+  const mcpConfigs = readEnvMcpConfigs()
+  const clients = await createSanityContextClients(mcpConfigs)
 
   try {
-    const tools = (await client.tools()) as Record<string, unknown>
+    const tools = await mergeClientTools(clients)
 
     // Structured output via `experimental_output` (still supported in AI SDK 6).
     // The tool-call loop runs first — `stopWhen` is required, because the default
@@ -92,6 +97,6 @@ export async function queryCompany(question: string): Promise<QueryResult> {
     }
     return parsed
   } finally {
-    await client.close()
+    await closeAll(clients)
   }
 }

@@ -315,6 +315,34 @@ test('Thresholds: explicit thresholds argument overrides env', () => {
   })
 })
 
+test('Authorize: mid-tier risk (above autoMax, at or below review) still requires approval -- tier quirk regression', () => {
+  // Default thresholds: autoMax=2, review=3. This action computes to risk
+  // exactly 3 (base 2 + operational 1), which is > autoMax but not > review.
+  // Before the fix, that combination could produce recommendation:
+  // 'execute-autonomously' with requiresApproval: true simultaneously -- an
+  // inconsistent result, since the UI labels the decision from `recommendation`.
+  const actor = entities.find((e) => e.id === 'entity-tom-bradley')!
+  const action: ProposedAction = {
+    description: 'Reschedule the maintenance window to reduce planned downtime',
+    actorId: actor.id,
+    capabilityId: 'cap-maintenance-scheduling',
+    applicablePolicyIds: [],
+    evidenceIds: ['evidence-maint-847'],
+    financialExposure: 0,
+    reversible: true,
+    operationalImpact: 1,
+    uncertainty: 0,
+  }
+  const result = authorize({ action, actor, capabilities, policies, evidence })
+  assert.equal(result.riskLevel, 3, 'expected risk to land strictly between autoMax(2) and review(3)')
+  assert.equal(result.requiresApproval, true, 'risk above autoMax must require approval')
+  assert.equal(
+    result.recommendation,
+    'request-approval',
+    'recommendation must agree with requiresApproval',
+  )
+})
+
 test('Authorize: result carries per-policy audit rows for the decision record', () => {
   const actor = entities.find((e) => e.id === 'entity-engineering-agent')!
   const action: ProposedAction = {

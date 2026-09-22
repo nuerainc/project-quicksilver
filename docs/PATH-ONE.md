@@ -29,13 +29,20 @@ agents, robots, systems, and contractors — same shape, same reasoning),
 `capability`, `policy`, `objective`, `workflow`, `evidence`, `decision`,
 `metric`. The schema is in the repo at `apps/studio/schemas/`.
 
-The agent reads through Sanity Context MCP. Context MCP is the
-schema-aware, read-only hosted MCP server Sanity ships — and yes, judges,
-it accepts `applications/sanity.io` tool calls like `groq_query`,
-`schema_explorer`, `array_field_reader`, and (in Knowledge Base mode)
-`knowledge_base_read` over an authenticated HTTPS transport. No keyword
-search. No fabricated IDs. Every fact the agent cites is a real Sanity
-document.
+The agent reads through Sanity Context MCP — two separate endpoints,
+since one endpoint serves one mode. The GROQ-mode endpoint exposes
+`groq_query`, `schema_explorer`, and `array_field_reader` over the live
+dataset. A second, KB-mode endpoint serves a real Sanity Knowledge Base
+built from the `evidence` and `policy` documents (with `contradicts[]`
+unfolded so the target claim's text and confidence are inlined, not
+just linked) via `knowledge_base_read`. Sanity's own build pipeline
+grouped that content into cited entries and flagged the central
+parameter-drift-vs-mechanical-failure conflict as a pending contradiction
+for review — that detection is a platform feature, not something
+Quicksilver had to build. The agent's tool set merges both endpoints
+(`packages/agent/src/mcp.ts`), and `npm run verify:mcp` exercises both
+live. No keyword search. No fabricated IDs. Every fact the agent cites
+is a real Sanity document.
 
 The kernel is plain TypeScript. No LLM inside it. The LLM proposes a
 candidate action; the kernel decides whether the actor has the
@@ -102,14 +109,19 @@ operating system.
 | Authority | Quicksilver Kernel (deterministic TypeScript, no LLM) |
 | Write path | `@sanity/client` against the Sanity HTTP API |
 
+## Testing access
+
+No login required. Quicksilver has no auth layer — the app, the Sanity
+Studio, and the dataset itself are all open for inspection.
+
 ## Repo
 
-Source, schema, kernel tests, smoke test, and README at the submission
-repo. See `SUBMISSION.md` for the project ID and how to make the
-dataset public for inspection.
+https://github.com/nuerainc/quicksilver-sanity-challenge — source,
+schema, kernel tests, smoke test, and README. See `SUBMISSION.md` for
+the project ID and the public dataset details.
 
 ## Links
 
 - Project URL: https://www.sanity.io/organizations/ou5ydq271/project/d280bqjc
-- Repo: (filled in at submission)
+- Repo: https://github.com/nuerainc/quicksilver-sanity-challenge
 - Demo video: (filled in at submission)

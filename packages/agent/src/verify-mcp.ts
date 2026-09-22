@@ -1,15 +1,18 @@
 /**
- * MCP verification — Day 6 milestone check.
+ * MCP verification — Day 6 milestone check, extended to cover KB-mode.
  *
  * Run after Context is enabled in the Sanity dashboard and you've created
- * a GROQ-mode Context MCP endpoint. Confirms the agent harness can:
- *   1. Connect to the Context MCP server
- *   2. Discover the available tools
+ * a GROQ-mode Context MCP endpoint (and, optionally, a KB-mode one).
+ * Confirms the agent harness can:
+ *   1. Connect to every configured Context MCP endpoint
+ *   2. Discover the available (merged) tools
  *   3. Call initial_context to get the schema overview
  *   4. Run a GROQ query that pulls real structured content
+ *   5. Run a knowledge_base_read that pulls real cited KB entries
  *
  * Run with:   npm run verify:mcp
- *             (requires SANITY_CONTEXT_MCP_URL + SANITY_CONTEXT_TOKEN in .env)
+ *             (requires SANITY_CONTEXT_MCP_URL + SANITY_CONTEXT_TOKEN in .env;
+ *              SANITY_CONTEXT_KB_MCP_URL is optional and adds the KB-mode check)
  */
 
 import { readFileSync, existsSync } from 'node:fs'
@@ -40,20 +43,24 @@ if (envPath) {
   }
 }
 
-const { createSanityContextClient, readEnvMcpConfig } = await import('./mcp.ts')
+const { createSanityContextClients, readEnvMcpConfigs, mergeClientTools, closeAll } =
+  await import('./mcp.ts')
 
 async function main() {
-  const config = readEnvMcpConfig()
-  console.log(`Connecting to: ${config.endpointUrl}\n`)
+  const configs = readEnvMcpConfigs()
+  for (const config of configs) {
+    console.log(`Connecting (${config.label}-mode): ${config.endpointUrl}`)
+  }
+  console.log()
 
-  const client = await createSanityContextClient(config)
+  const clients = await createSanityContextClients(configs)
 
   try {
     // 1. Discover tools
     console.log('─'.repeat(60))
-    console.log('STEP 1: Discover available tools')
+    console.log('STEP 1: Discover available tools (merged across endpoints)')
     console.log('─'.repeat(60))
-    const tools = await client.tools()
+    const tools = await mergeClientTools(clients)
     const toolNames = Object.keys(tools)
     console.log(`Tools (${toolNames.length}): ${toolNames.join(', ')}\n`)
 
@@ -67,6 +74,30 @@ async function main() {
           '  • Schema not deployed (GROQ mode refuses connections until schema is deployed)\n',
       )
       process.exit(1)
+    }
+
+    // 1b. Print knowledge_base_read's actual input schema. The tool name is
+    // stable across Context MCP servers but the argument shape isn't
+    // documented publicly, so introspect it rather than guessing.
+    if (tools.knowledge_base_read) {
+      console.log('─'.repeat(60))
+      console.log('STEP 1b: knowledge_base_read input schema')
+      console.log('─'.repeat(60))
+      const kbTool = tools.knowledge_base_read as {
+        description?: string
+        inputSchema?: unknown
+        parameters?: unknown
+      }
+      console.log(`description: ${kbTool.description ?? '(none)'}`)
+      try {
+        console.log(
+          'schema:',
+          JSON.stringify(kbTool.inputSchema ?? kbTool.parameters, null, 2),
+        )
+      } catch {
+        console.log('schema: (not serializable)', kbTool.inputSchema ?? kbTool.parameters)
+      }
+      console.log()
     }
 
     // 2. Get initial context (schema overview)
@@ -84,6 +115,33 @@ async function main() {
         console.log(text.slice(0, 400) + (text.length > 400 ? '…' : ''))
       } catch (err) {
         console.log(`✗ initial_context failed: ${(err as Error).message}`)
+      }
+      console.log()
+    }
+
+    // 2b. KB-mode's own initial_context, if a KB endpoint is configured too.
+    // (mergeClientTools aliases the second endpoint's initial_context to
+    // kb_initial_context since the bare name is already taken by GROQ-mode.)
+    // Its outline is where the `kb…` id for knowledge_base_read's
+    // `knowledgeBase` argument lives — captured here and reused in STEP 4
+    // rather than re-fetched.
+    let kbOutlineText: string | undefined
+    if (tools.kb_initial_context) {
+      console.log('─'.repeat(60))
+      console.log('STEP 2b: Fetch kb_initial_context (KB-mode schema overview)')
+      console.log('─'.repeat(60))
+      try {
+        const result = await (
+          tools.kb_initial_context as { execute: (args: object, ctx: object) => Promise<unknown> }
+        ).execute({}, { toolCallId: 'verify-kb-init', messages: [] })
+        kbOutlineText = JSON.stringify(result)
+        console.log(`Returned ${kbOutlineText.length} bytes`)
+        // Printed in full (not truncated like the other steps): this text is
+        // where the KB's own identifier/slug for knowledge_base_read's
+        // `knowledgeBase` argument is documented.
+        console.log(kbOutlineText)
+      } catch (err) {
+        console.log(`✗ kb_initial_context failed: ${(err as Error).message}`)
       }
       console.log()
     }
@@ -121,19 +179,41 @@ async function main() {
       }
     }
 
-    // 4. Try a KB read (if KB mode)
+    // 4. Try a KB read (if KB mode).
+    //
+    // knowledge_base_read takes { knowledgeBase, paths } — NOT { entry_paths }.
+    // The `knowledgeBase` value is the `kb…` id printed in kb_initial_context's
+    // own outline (STEP 2b), never a fixed/predictable string, so it's parsed
+    // out of that outline rather than hardcoded — this keeps working if the
+    // endpoint is ever recreated and gets a new id. An explicit
+    // SANITY_KNOWLEDGE_BASE_ID env var overrides the parsed value if set.
     if (tools.knowledge_base_read) {
       console.log('─'.repeat(60))
-      console.log('STEP 4: knowledge_base_read — read first entry')
+      console.log('STEP 4: knowledge_base_read — read the central contradiction pair')
       console.log('─'.repeat(60))
       try {
-        const result = await tools.knowledge_base_read.execute(
-          { entry_paths: ['/'] },
-          { toolCallId: 'verify-kb', messages: [] },
-        )
-        const text = JSON.stringify(result)
-        console.log(`Returned ${text.length} bytes`)
-        console.log(text.slice(0, 400) + (text.length > 400 ? '…' : ''))
+        const knowledgeBaseId =
+          process.env.SANITY_KNOWLEDGE_BASE_ID ||
+          kbOutlineText?.match(/Knowledge base id:\s*`?(kb[a-zA-Z0-9]+)`?/)?.[1]
+
+        if (!knowledgeBaseId) {
+          console.log(
+            '✗ Could not determine the knowledge base id (expected it in kb_initial_context\'s ' +
+              'outline, or set SANITY_KNOWLEDGE_BASE_ID).',
+          )
+        } else {
+          // engineering_analysis + incidents: the two entries the platform's
+          // own contradiction detection flags against each other (parameter
+          // drift vs. mechanical failure) — the central conflict this
+          // submission's demo narrative is built around.
+          const result = await tools.knowledge_base_read.execute(
+            { knowledgeBase: knowledgeBaseId, paths: ['engineering_analysis', 'incidents'] },
+            { toolCallId: 'verify-kb', messages: [] },
+          )
+          const text = JSON.stringify(result)
+          console.log(`Returned ${text.length} bytes`)
+          console.log(text.slice(0, 1200) + (text.length > 1200 ? '…' : ''))
+        }
       } catch (err) {
         console.log(`✗ knowledge_base_read failed: ${(err as Error).message}`)
       }
@@ -144,7 +224,7 @@ async function main() {
     console.log('✓ MCP integration verified')
     console.log('─'.repeat(60))
   } finally {
-    await client.close()
+    await closeAll(clients)
   }
 }
 

@@ -12,7 +12,7 @@ Quicksilver's job is to make that graph **machine-queryable**, **reason-over-abl
 
 ## 2. The schema (locked Day 1, refined Days 2–5)
 
-Nine document types. Enough to express the company; few enough to keep authoring manageable.
+Ten document types. Enough to express the company; few enough to keep authoring manageable.
 
 | Type | Purpose | Status |
 |---|---|---|
@@ -25,6 +25,7 @@ Nine document types. Enough to express the company; few enough to keep authoring
 | `workflow` | State machine: states, transitions, requiredCapabilities, rollback | stub |
 | `evidence` | Source of truth with type, claim, confidence, supports/contradicts | stub |
 | `decision` | Auditable record: question, evidence, candidateActions, selectedAction, policyChecks, riskLevel, status | stub |
+| `metric` | Measurable state with baseline + direction; not seeded — created at runtime by the closed-loop execute/observe flow | stub |
 
 Schema lives in `apps/studio/schemas/`. Deployed via `sanity schema deploy` (required for Context MCP GROQ mode).
 

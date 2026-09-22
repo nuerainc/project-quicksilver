@@ -123,4 +123,4 @@ One codebase. Two narratives. Two posts.
 
 ## License
 
-See [LICENSE](./LICENSE) (TBD before submission).
+MIT — see [LICENSE](./LICENSE).

@@ -7,10 +7,14 @@
  *   1. Plan via @quicksilver/agent → candidateActions (ProposedAction-shaped)
  *   2. Resolve each referenced entity/capability/policy/evidence via Sanity
  *   3. Convert to kernel types
- *   4. Run kernel.authorize() on each candidate
- *   5. Persist one `decision` document per authorized/rejected candidate
- *      (status `awaiting-approval`, or `rejected` on a kernel hard block)
- *   6. Return plan + kernel decisions, each with its `decisionDocId`
+ *   4. Run kernel.authorize() on each candidate — this is what actually
+ *      authorizes or blocks; it is the only authoritative step
+ *   5. Run reviewProposedAction() as an independent second opinion — ADVISORY
+ *      ONLY, never changes the kernel's outcome (see packages/agent/src/reviewer.ts)
+ *   6. Persist one `decision` document per authorized/rejected candidate
+ *      (status `awaiting-approval`, or `rejected` on a kernel hard block),
+ *      including the reviewer's notes
+ *   7. Return plan + kernel decisions + reviewer notes, each with its `decisionDocId`
  *
  * Response shape:
  *   {
@@ -20,6 +24,7 @@
  *       {
  *         action: ProposedAction,
  *         decision: AuthorizeResult | null,   // kernel output; null if actor/capability didn't resolve
+ *         review: ReviewResult | null,        // independent reviewer's notes; advisory only, null if not resolved
  *         decisionDocId: string | null,       // Sanity _id of the persisted decision; null if not persisted
  *         resolvedReferences: {
  *           actor: { id, name, entityType },
@@ -36,7 +41,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@sanity/client'
 import { z } from 'zod'
-import { isLlmConfigured, planObjective } from '@quicksilver/agent'
+import { isLlmConfigured, planObjective, reviewProposedAction, type ReviewResult } from '@quicksilver/agent'
 import {
   authorize,
   type AuthorizeResult,
@@ -162,9 +167,10 @@ function buildDecisionDoc(args: {
   action: ProposedAction
   refs: Resolved & { actor: EntityRef; capability: CapabilityRef }
   decision: AuthorizeResult
+  review: ReviewResult | null
   now: string
 }) {
-  const { id, objective, constraints, reasoning, action, refs, decision, now } = args
+  const { id, objective, constraints, reasoning, action, refs, decision, review, now } = args
 
   // The kernel reports conflicts per shared scope as text; mark every applicable
   // policy in a shared scope as `conflicts` in the per-policy audit rows.
@@ -204,6 +210,15 @@ function buildDecisionDoc(args: {
     }),
     riskLevel: decision.riskLevel,
     requiredApproval: decision.requiresApproval,
+    reviewerNotes: review
+      ? {
+          valid: review.valid,
+          policyConflicts: review.policyConflicts,
+          missingEvidence: review.missingEvidence,
+          riskConcerns: review.riskConcerns,
+          suggestions: review.suggestions,
+        }
+      : undefined,
     status: decision.recommendation === 'reject' ? ('rejected' as const) : ('awaiting-approval' as const),
     createdAt: now,
   }
@@ -256,6 +271,7 @@ export async function POST(req: Request) {
       plan.candidateActions.map(async (action, i) => {
         const refs = await resolveAction(client, action as ProposedAction)
         let decision: AuthorizeResult | null = null
+        let review: ReviewResult | null = null
         let doc: ReturnType<typeof buildDecisionDoc> | null = null
 
         if (refs.actor && refs.capability) {
@@ -280,6 +296,25 @@ export async function POST(req: Request) {
             policies: refs.policies,
             evidence: refs.evidence,
           })
+
+          // Independent review — advisory only. The kernel above has already
+          // authorized/rejected the action; the reviewer never changes that
+          // outcome, it only adds a second opinion for the human approver to
+          // see. A reviewer failure (bad output, provider error) must not
+          // block the plan response, so reviewProposedAction() always
+          // resolves (see its own fallback) rather than throwing.
+          review = await reviewProposedAction({
+            action: kernelAction,
+            actor: { id: refs.actor.id, name: refs.actor.name, entityType: refs.actor.entityType },
+            capability: {
+              id: refs.capability.id,
+              name: refs.capability.name,
+              riskLevel: refs.capability.baseRiskLevel,
+            },
+            policies: refs.policies.map((p) => ({ id: p.id, name: p.name, scope: p.scope, priority: p.priority })),
+            evidence: refs.evidence,
+          })
+
           doc = buildDecisionDoc({
             id: `decision-plan-${runId}-${i}`,
             objective,
@@ -288,11 +323,12 @@ export async function POST(req: Request) {
             action: kernelAction,
             refs: { ...refs, actor: refs.actor, capability: refs.capability },
             decision,
+            review,
             now,
           })
         }
 
-        return { action: action as ProposedAction, decision, refs, doc }
+        return { action: action as ProposedAction, decision, review, refs, doc }
       }),
     )
 
@@ -308,6 +344,7 @@ export async function POST(req: Request) {
     const decisions = results.map((r) => ({
       action: r.action,
       decision: r.decision,
+      review: r.review,
       decisionDocId: r.doc?._id ?? null,
       resolvedReferences: {
         actor: r.refs.actor && {

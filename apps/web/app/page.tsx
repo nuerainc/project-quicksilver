@@ -12,6 +12,14 @@ type DecisionDecision = {
   recommendation: 'execute-autonomously' | 'request-approval' | 'reject'
 }
 
+type ReviewResult = {
+  valid: boolean
+  policyConflicts: string[]
+  missingEvidence: string[]
+  riskConcerns: string[]
+  suggestions: string[]
+}
+
 type DecisionResponse = {
   action: {
     description: string
@@ -25,6 +33,7 @@ type DecisionResponse = {
     uncertainty: number
   }
   decision: DecisionDecision | null
+  review: ReviewResult | null
   decisionDocId: string | null
   resolvedReferences: {
     actor: { id: string; name: string; entityType: string } | null
@@ -461,6 +470,54 @@ function DecisionCard({
             </li>
           ))}
         </ul>
+      )}
+
+      {/* Independent reviewer panel — advisory only. The kernel above is what
+          actually authorizes or blocks; this is a second opinion for the
+          human approver to weigh, never a gate. */}
+      {d.review && (
+        <div className="mb-3 rounded border border-dashed border-quicksilver-accent/60 bg-quicksilver-bg p-3">
+          <h4 className="mb-2 font-mono text-xs uppercase tracking-widest text-quicksilver-accent">
+            Independent review <span className="normal-case tracking-normal">(advisory, not a gate)</span>
+          </h4>
+          {d.review.policyConflicts.length === 0 &&
+          d.review.missingEvidence.length === 0 &&
+          d.review.riskConcerns.length === 0 &&
+          d.review.suggestions.length === 0 ? (
+            <p className="font-mono text-xs text-quicksilver-signal">No concerns raised.</p>
+          ) : (
+            <div className="space-y-2">
+              {d.review.policyConflicts.length > 0 && (
+                <ul className="space-y-1">
+                  {d.review.policyConflicts.map((c, i) => (
+                    <li key={i} className="font-mono text-xs text-red-400">⚠ policy: {c}</li>
+                  ))}
+                </ul>
+              )}
+              {d.review.missingEvidence.length > 0 && (
+                <ul className="space-y-1">
+                  {d.review.missingEvidence.map((c, i) => (
+                    <li key={i} className="font-mono text-xs text-yellow-300">? evidence: {c}</li>
+                  ))}
+                </ul>
+              )}
+              {d.review.riskConcerns.length > 0 && (
+                <ul className="space-y-1">
+                  {d.review.riskConcerns.map((c, i) => (
+                    <li key={i} className="font-mono text-xs text-yellow-300">! risk: {c}</li>
+                  ))}
+                </ul>
+              )}
+              {d.review.suggestions.length > 0 && (
+                <ul className="space-y-1">
+                  {d.review.suggestions.map((c, i) => (
+                    <li key={i} className="font-mono text-xs text-quicksilver-accent">→ {c}</li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+        </div>
       )}
 
       {/* Lifecycle buttons */}

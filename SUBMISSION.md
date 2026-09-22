@@ -17,6 +17,10 @@ Same codebase, two distinct narratives. Two separate DEV posts required.
 
 ---
 
+## Repository
+
+https://github.com/nuerainc/quicksilver-sanity-challenge (public, MIT licensed)
+
 ## Required Sanity Information
 
 | Field | Value |
@@ -24,43 +28,53 @@ Same codebase, two distinct narratives. Two separate DEV posts required.
 | Project URL | https://www.sanity.io/organizations/ou5ydq271/project/d280bqjc |
 | Organization ID | `ou5ydq271` |
 | Project ID | `d280bqjc` |
-| Dataset (default) | `production` |
-| Public dataset access | [See instructions below](#making-the-dataset-public-for-judges) |
+| Dataset (default) | `production` (**public** — confirmed in Sanity Manage → Datasets) |
+| Public dataset access | [See details below](#the-dataset-is-public-for-judges) |
+| Testing access | No login required — Quicksilver has no auth; the app, Studio, and dataset are all open. |
 
-### Making the dataset public for judges
+### The dataset is public for judges
 
 The judging criteria explicitly call out that judges will inspect the
-dataset directly. To make `d280bqjc/production` readable without auth:
+dataset directly. `d280bqjc/production` is set to **public** visibility
+(confirmed in Sanity Manage → Datasets):
 
-1. In your terminal: `npx sanity@latest dataset visibility set production public`
-2. Confirm with: `npx sanity@latest dataset list` — should show `visibility: public`
-3. In Sanity Manage → API → Tokens, ensure your read-only token has **Viewer** scope on the project (the seed loader uses it via `SANITY_AUTH_TOKEN`).
-4. Public dataset URL form: `https://d280bqjc.apicdn.sanity.io/data/query/production?query=*` (judges can hit this with any GROQ).
+1. Public dataset URL form: `https://d280bqjc.apicdn.sanity.io/data/query/production?query=*` (judges can hit this with any GROQ, no token required).
+2. To reproduce or re-verify this yourself: `npx sanity@latest dataset visibility set production public`, then confirm with `npx sanity@latest dataset list`.
+3. Note that a *public dataset* is still separate from write access — creating/editing decisions through the app still requires the project-scoped `SANITY_AUTH_TOKEN` described below; only reads are open.
 
 ### Context MCP endpoints (for judges who want to drive the agent directly)
 
-Once enabled in the dashboard:
+Both endpoints are live:
 
 ```
 # GROQ-mode (live dataset, structured)
-https://api.sanity.io/v1/context/organizations/ou5ydq271/mcp/<your-endpoint-name>
+https://api.sanity.io/v1/context/organizations/ou5ydq271/mcp/quicksilver-agent
 
-# Knowledge Base mode (compiled index — separate endpoint)
-https://api.sanity.io/v1/context/organizations/ou5ydq271/mcp/<your-kb-endpoint-name>
+# Knowledge Base mode (compiled index, 9 cited entries built from the
+# evidence + policy documents, with one contradiction — parameter drift
+# vs. mechanical failure — flagged by Sanity's own detection and left
+# unresolved by design)
+https://api.sanity.io/v1/context/organizations/ou5ydq271/mcp/quicksilver-knowledge-base
 ```
 
-Token (org-scoped, **Context Viewer** permission):
-The submission window is short; rotate the test token and reissue a clean
-one before Oct 4 if you want judges to drive the agent. Otherwise, the
-included demo video shows the full flow.
+Both are wired into the agent (`packages/agent/src/mcp.ts` connects to
+both and merges their tool sets) and verified end-to-end via
+`npm run verify:mcp` — including a real `knowledge_base_read` call
+against the live KB.
+
+Both require a bearer token (org-scoped, **Context Viewer** permission)
+that is not published in this document. The submission window is short;
+a fresh test token will be issued and rotated one final time immediately
+before Oct 4 if judges want to drive the agent directly against these
+endpoints. Otherwise, the included demo video shows the full flow.
 
 ---
 
 ## How to run locally
 
 ```bash
-git clone <this-repo>
-cd quicksilver
+git clone https://github.com/nuerainc/quicksilver-sanity-challenge.git
+cd quicksilver-sanity-challenge
 npm install
 
 # .env at the project root — fill in:
@@ -68,7 +82,8 @@ npm install
 #   NEXT_PUBLIC_SANITY_DATASET=production
 #   SANITY_ORG_ID=ou5ydq271
 #   SANITY_AUTH_TOKEN=<project-scoped Editor token>
-#   SANITY_CONTEXT_TOKEN=<org-scoped Context Viewer token>   # for MCP
+#   SANITY_CONTEXT_TOKEN=<org-scoped Context Viewer token>   # for MCP (both endpoints)
+#   SANITY_CONTEXT_KB_MCP_URL=https://api.sanity.io/v1/context/organizations/ou5ydq271/mcp/quicksilver-knowledge-base   # optional: adds KB-mode
 #   AZURE_RESOURCE_NAME=<resource>     # Azure OpenAI / Foundry (deployments: qs-planner,
 #   AZURE_API_KEY=<key>                #   qs-reviewer, qs-router, qs-executor)
 #   -- or direct provider keys instead of Azure --

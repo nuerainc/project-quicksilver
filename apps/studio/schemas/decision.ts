@@ -72,6 +72,20 @@ export default defineType({
     }),
     defineField({ name: 'requiredApproval', type: 'boolean' }),
     defineField({
+      name: 'reviewerNotes',
+      type: 'object',
+      description:
+        'Independent second opinion from the reviewer model (packages/agent/src/reviewer.ts). ' +
+        'Advisory only -- the kernel above is what actually authorizes or blocks.',
+      fields: [
+        { name: 'valid', type: 'boolean' },
+        { name: 'policyConflicts', type: 'array', of: [{ type: 'string' }] },
+        { name: 'missingEvidence', type: 'array', of: [{ type: 'string' }] },
+        { name: 'riskConcerns', type: 'array', of: [{ type: 'string' }] },
+        { name: 'suggestions', type: 'array', of: [{ type: 'string' }] },
+      ],
+    }),
+    defineField({
       name: 'status',
       type: 'string',
       options: {
