@@ -1,0 +1,16 @@
+node_modules
+.next
+dist
+build
+.env
+.env.local
+.env.*.local
+.DS_Store
+.turbo
+coverage
+*.log
+.vscode/*
+!.vscode/extensions.json
+.idea
+sanity-cli.json
+.sanity/

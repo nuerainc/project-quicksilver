@@ -1,0 +1,37 @@
+{
+  "name": "@quicksilver/agent",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Quicksilver agent harness \u2014 models, MCP, prompts",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./models": "./src/models.ts",
+    "./mcp": "./src/mcp.ts",
+    "./prompts": "./src/prompts.ts",
+    "./planner": "./src/planner.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "verify:mcp": "tsx src/verify-mcp.ts",
+    "verify:llm": "tsx src/verify-llm.ts",
+    "test": "node --experimental-strip-types --no-warnings --test src/models.test.ts"
+  },
+  "dependencies": {
+    "@ai-sdk/anthropic": "^3.0.0",
+    "@ai-sdk/azure": "^3.0.0",
+    "@ai-sdk/google": "^3.0.0",
+    "@ai-sdk/mcp": "^1.0.0",
+    "@ai-sdk/openai": "^3.0.0",
+    "@ai-sdk/openai-compatible": "^2.0.0",
+    "@quicksilver/kernel": "*",
+    "ai": "^6.0.0",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.3"
+  }
+}

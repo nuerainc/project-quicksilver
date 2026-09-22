@@ -1,0 +1,22 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg: #0a0a0f;
+  --panel: #13131a;
+  --border: #1f1f2a;
+  --signal: #e6e6ed;
+  --accent: #a8a8b3;
+}
+
+html,
+body {
+  background: var(--bg);
+  color: var(--signal);
+  font-feature-settings: 'ss01', 'cv11';
+}
+
+.qs-glow {
+  text-shadow: 0 0 20px rgba(200, 200, 208, 0.15);
+}

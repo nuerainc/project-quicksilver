@@ -1,0 +1,321 @@
+/**
+ * Seed loader — pushes the seed dataset into Sanity via @sanity/client.
+ *
+ * Run with:
+ *   SANITY_AUTH_TOKEN=... npm run seed
+ *
+ * Token needs write scope on the project (Manage → API → Tokens).
+ * Uses deterministic `_id` values so re-running overwrites cleanly.
+ */
+
+import { createClient, type SanityClient } from '@sanity/client'
+import { seedOrder, seed } from './index'
+import type {
+  CapabilitySeed,
+  DecisionSeed,
+  DepartmentSeed,
+  EntitySeed,
+  EvidenceSeed,
+  ObjectiveSeed,
+  OrganizationSeed,
+  PolicySeed,
+  WorkflowSeed,
+} from './types'
+
+// ── Inline .env loader ────────────────────────────────────────────────────
+// Walks up from this file looking for `.env`. Existing process.env wins so a
+// caller can still override by exporting a variable directly.
+
+import { existsSync, readFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+const __dirname = dirname(fileURLToPath(import.meta.url))
+function findEnvFile(startDir: string, maxDepth = 6): string | null {
+  let dir = startDir
+  for (let i = 0; i < maxDepth; i++) {
+    const candidate = join(dir, '.env')
+    if (existsSync(candidate)) return candidate
+    const parent = dirname(dir)
+    if (parent === dir) break
+    dir = parent
+  }
+  return null
+}
+
+const envPath = findEnvFile(__dirname)
+if (envPath) {
+  const content = readFileSync(envPath, 'utf8')
+  for (const line of content.split('\n')) {
+    const match = line.match(/^\s*([^#\s][^=\s]*)\s*=\s*(.+?)\s*$/)
+    if (match && !process.env[match[1]]) {
+      process.env[match[1]] = match[2]
+    }
+  }
+}
+
+interface SRef {
+  _type: 'reference'
+  _ref: string
+  _key: string
+}
+
+function refArray(ids: string[]): SRef[] {
+  return ids.map((id, i) => ({ _type: 'reference' as const, _ref: id, _key: `k${i}` }))
+}
+
+function ref(id: string | null): { _type: 'reference'; _ref: string } | undefined {
+  return id ? { _type: 'reference', _ref: id } : undefined
+}
+
+// ── Transformers: per-type seed → Sanity document ────────────────────────
+
+function organizationToSanity(s: OrganizationSeed) {
+  return {
+    _id: s._id,
+    _type: 'organization',
+    name: s.name,
+    mission: s.mission,
+    objectives: refArray(s.objectiveIds),
+    departments: refArray(s.departmentIds),
+    policies: refArray(s.policyIds),
+    resources: refArray(s.resourceEntityIds),
+  }
+}
+
+function departmentToSanity(s: DepartmentSeed) {
+  return {
+    _id: s._id,
+    _type: 'department',
+    name: s.name,
+    purpose: s.purpose,
+    parentDepartment: ref(s.parentDepartmentId),
+    leader: ref(s.leaderId),
+    members: refArray(s.memberIds),
+    capabilities: refArray(s.capabilityIds),
+    objectives: refArray(s.objectiveIds),
+  }
+}
+
+function entityToSanity(s: EntitySeed) {
+  return {
+    _id: s._id,
+    _type: 'entity',
+    name: s.name,
+    entityType: s.entityType,
+    capabilities: refArray(s.capabilityIds),
+    permissions: refArray(s.permissionIds),
+    constraints: refArray(s.constraintIds),
+    reportsTo: ref(s.reportsToId),
+    department: ref(s.departmentId),
+    availability: s.availability,
+    riskProfile: s.riskProfile,
+    costProfile: s.costProfile,
+  }
+}
+
+function capabilityToSanity(s: CapabilitySeed) {
+  return {
+    _id: s._id,
+    _type: 'capability',
+    name: s.name,
+    description: s.description,
+    requiredSkills: s.requiredSkills,
+    riskLevel: s.riskLevel,
+    authorizedEntities: refArray(s.authorizedEntityIds),
+    requiredTools: s.requiredTools,
+  }
+}
+
+function policyToSanity(s: PolicySeed) {
+  return {
+    _id: s._id,
+    _type: 'policy',
+    name: s.name,
+    scope: s.scope,
+    priority: s.priority,
+    rules: s.rules,
+    effectiveDate: s.effectiveDate,
+    expirationDate: s.expirationDate,
+    supersedes: refArray(s.supersedesIds),
+    appliesTo: refArray([]),
+    approvalRequirements: refArray(s.approvalRequirementIds),
+  }
+}
+
+function objectiveToSanity(s: ObjectiveSeed) {
+  return {
+    _id: s._id,
+    _type: 'objective',
+    name: s.name,
+    description: s.description,
+    owner: ref(s.ownerId),
+    priority: s.priority,
+    deadline: s.deadline,
+    constraints: s.constraints,
+    successMetrics: s.successMetrics,
+    budget: s.budget,
+    status: s.status,
+  }
+}
+
+function workflowToSanity(s: WorkflowSeed) {
+  return {
+    _id: s._id,
+    _type: 'workflow',
+    name: s.name,
+    trigger: s.trigger,
+    states: s.states,
+    transitions: s.transitions,
+    requiredCapabilities: refArray(s.requiredCapabilityIds),
+    approvalRequirements: refArray(s.approvalRequirementIds),
+    failureHandlers: s.failureHandlers,
+    rollbackProcedure: s.rollbackProcedure,
+  }
+}
+
+function evidenceToSanity(s: EvidenceSeed) {
+  return {
+    _id: s._id,
+    _type: 'evidence',
+    title: s.title,
+    type: s.type,
+    source: s.source,
+    claim: s.claim,
+    confidence: s.confidence,
+    effectiveDate: s.effectiveDate,
+    relatedEntities: refArray(s.relatedEntityIds),
+    supports: refArray(s.supportsObjectiveIds),
+    contradicts: refArray(s.contradictsEvidenceIds),
+  }
+}
+
+function decisionToSanity(s: DecisionSeed) {
+  return {
+    _id: s._id,
+    _type: 'decision',
+    question: s.question,
+    context: [
+      ...refArray(s.contextEntityIds),
+      ...refArray(s.contextCapabilityIds),
+      ...refArray(s.contextPolicyIds),
+    ],
+    candidateActions: s.candidateActions.map((c, i) => ({
+      _key: `k${i}`,
+      description: c.description,
+      actor: ref(c.actorId),
+      capability: ref(c.capabilityId),
+    })),
+    selectedAction: s.selectedAction,
+    reasoningSummary: s.reasoningSummary,
+    evidence: refArray(s.evidenceIds),
+    constraints: s.constraints,
+    policyChecks: s.policyChecks.map((p, i) => ({
+      _key: `k${i}`,
+      policy: ref(p.policyId),
+      result: p.result,
+      reason: p.reason,
+    })),
+    riskLevel: s.riskLevel,
+    requiredApproval: s.requiredApproval,
+    status: s.status,
+    createdAt: s.createdAt,
+    approvedBy: ref(s.approvedById),
+    executedAt: s.executedAt,
+  }
+}
+
+// ── Runner ───────────────────────────────────────────────────────────────
+
+async function pushSeed(client: SanityClient) {
+  // One big transaction so cross-document references resolve within it.
+  // Sanity needs referenced documents to exist before they're referenced,
+  // but a transaction commits everything atomically so order within it
+  // doesn't matter — only the final commit state does.
+  const tx = client.transaction()
+  const counts: Record<string, number> = {}
+
+  for (const [type, docs] of seedOrder) {
+    let transformer: (s: unknown) => unknown
+    switch (type) {
+      case 'organization':
+        transformer = organizationToSanity
+        break
+      case 'departments':
+        transformer = departmentToSanity
+        break
+      case 'entities':
+        transformer = entityToSanity
+        break
+      case 'capabilities':
+        transformer = capabilityToSanity
+        break
+      case 'policies':
+        transformer = policyToSanity
+        break
+      case 'objectives':
+        transformer = objectiveToSanity
+        break
+      case 'workflows':
+        transformer = workflowToSanity
+        break
+      case 'evidence':
+        transformer = evidenceToSanity
+        break
+      case 'decisions':
+        transformer = decisionToSanity
+        break
+      default:
+        throw new Error(`Unknown seed type: ${type}`)
+    }
+
+    const sanityDocs = (docs as unknown[]).map(transformer)
+    counts[type] = sanityDocs.length
+    for (const doc of sanityDocs) {
+      tx.createOrReplace(doc as Record<string, unknown>)
+    }
+  }
+
+  await tx.commit()
+
+  for (const [type, count] of Object.entries(counts)) {
+    process.stdout.write(`  ${type}: ${count} docs\n`)
+  }
+}
+
+async function main() {
+  const projectId = process.env.NEXT_PUBLIC_SANITY_PROJECT_ID || 'd280bqjc'
+  const dataset = process.env.NEXT_PUBLIC_SANITY_DATASET || 'production'
+  const token = process.env.SANITY_AUTH_TOKEN
+  if (!token) {
+    console.error('SANITY_AUTH_TOKEN is required. Generate one in Manage → API → Tokens with write scope, then re-run.')
+    process.exit(1)
+  }
+
+  const client = createClient({
+    projectId,
+    dataset,
+    apiVersion: '2024-10-01',
+    token,
+    useCdn: false,
+  })
+
+  console.log(`Pushing seed to ${projectId}/${dataset}...`)
+  await pushSeed(client)
+  console.log('Done.')
+  console.log(`\nSeed counts:`)
+  console.log(`  organization:  1`)
+  console.log(`  capabilities:   ${seed.capabilities.length}`)
+  console.log(`  policies:       ${seed.policies.length}`)
+  console.log(`  entities:       ${seed.entities.length}`)
+  console.log(`  departments:    ${seed.departments.length}`)
+  console.log(`  objectives:     ${seed.objectives.length}`)
+  console.log(`  workflows:      ${seed.workflows.length}`)
+  console.log(`  evidence:       ${seed.evidence.length}`)
+  console.log(`  decisions:      ${seed.decisions.length}`)
+}
+
+main().catch((err) => {
+  console.error(err)
+  process.exit(1)
+})

@@ -1,0 +1,6 @@
+export * from './types.ts'
+export { checkCapability } from './capability.ts'
+export { checkAuthority } from './authority.ts'
+export { computeRisk, averageEvidenceConfidence } from './risk.ts'
+export { authorize } from './approval.ts'
+export type { AuthorizeArgs, AuthorizeResult } from './approval.ts'
