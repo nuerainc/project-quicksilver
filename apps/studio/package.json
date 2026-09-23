@@ -13,6 +13,7 @@
     "seed": "tsx seed/loader.ts",
     "seed:processes": "tsx seed/processes.ts",
     "reset:history": "tsx scripts/reset-history.ts",
+    "e2e:live": "tsx scripts/e2e-live.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

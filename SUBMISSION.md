@@ -130,6 +130,11 @@ npm run verify:llm
 # Run the kernel tests (authorization + process engine: 38 tests)
 npm run kernel:test
 
+# Live end-to-end test against the deployed app (needs the process engine and
+# QUICKSILVER_ALLOW_FAULT_INJECTION=on on the deployment): proves Resume after
+# a broken process definition, and Retry after a rollback that fails
+npm run e2e:live
+
 # Start the Studio (localhost:3333)
 npm run dev:studio
 

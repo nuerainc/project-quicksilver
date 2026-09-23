@@ -10,8 +10,8 @@
  *                    --skip-backup to bypass, not recommended).
  *   3. Inventory   — every `decision`, runtime `metric`, and Sanity Workflows plugin
  *                    metadata doc (`workflow.metadata`), drafts included.
- *   4. Delete      — only with --confirm. Plugin metadata and rollback decisions go
- *                    first, because they hold strong references to other decisions.
+ *   4. Delete      — only with --confirm. Plugin metadata, metrics and rollback decisions
+ *                    go first, because they reference other decisions.
  *   5. Re-seed     — `npm run seed`: restores the 53 baseline docs, including the one
  *                    seeded decision and both process definitions (Decision Lifecycle v2).
  *   6. Verify      — counts after, definition version in Content Lake, `npm run smoke`.
@@ -125,9 +125,9 @@ async function main() {
   step(4, `Delete ${total} documents`)
   const ordered = [
     ...inv.metadata,
+    ...inv.metrics,
     ...inv.decisions.filter((d) => d.hasParent).map((d) => d._id),
     ...inv.decisions.filter((d) => !d.hasParent).map((d) => d._id),
-    ...inv.metrics,
   ]
   const BATCH = 100
   for (let i = 0; i < ordered.length; i += BATCH) {

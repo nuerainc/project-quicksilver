@@ -42,5 +42,12 @@ export default defineType({
       description: 'The last decision that moved this metric.',
     }),
     defineField({ name: 'updatedAt', type: 'datetime' }),
+    defineField({
+      name: 'faultInjection',
+      type: 'string',
+      options: { list: ['success', 'failure', 'deviation'] },
+      readOnly: true,
+      description: 'Set only when the simulated execution was forced by the e2e test (npm run e2e:live), never by normal use.',
+    }),
   ],
 })

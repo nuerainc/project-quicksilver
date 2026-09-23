@@ -112,6 +112,13 @@ export default defineType({
       description: 'plan = proposed by the planner; rollback = proposed to undo another decision',
     }),
     defineField({
+      name: 'faultInjection',
+      type: 'string',
+      options: { list: ['success', 'failure', 'deviation'] },
+      readOnly: true,
+      description: 'Set only when the simulated execution was forced by the e2e test (npm run e2e:live), never by normal use.',
+    }),
+    defineField({
       name: 'kernelRecommendation',
       type: 'string',
       options: { list: ['execute-autonomously', 'request-approval', 'reject'] },

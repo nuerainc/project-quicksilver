@@ -865,7 +865,36 @@ Result: 13 decisions in the log (plus the seed). Found along the way and
 fixed: the parent card's Process line didn't refresh after a rollback,
 and rollback decisions showed "risk ?/5" in the log. Not exercised in the
 curated history, so covered by the stress test and unit tests only:
-Resume, and Retry rollback (the rollback succeeded first time). All 20 live decisions
+Resume, and Retry rollback (the rollback succeeded first time).
+
+**Making the rare paths testable on demand.** Two paths need rare
+conditions: Resume needs a broken definition during a plan, and Retry
+rollback needs a rollback whose own execution fails, which the simulator
+decides from a timestamped id hash. So they were made reproducible:
+- **Gated fault injection.** `POST /execute` accepts
+  `{ inject: success | failure | deviation }` only when
+  `QUICKSILVER_ALLOW_FAULT_INJECTION=on` (a 403 otherwise). The kernel
+  still authorizes the resulting transition. Each forced run is stamped
+  `faultInjection` on the decision and its metric, and the Decision log
+  shows it, so a staged outcome is never passed off as organic. Metrics now
+  carry a weak `relatedDecision` reference, and `reset:history` deletes
+  metrics before decisions.
+- **`npm run e2e:live`**, a live end-to-end test against the deployed app:
+  - *Scenario A (Resume):* back up the definition, break it, show the kernel
+    refusing transitions, plan while broken (all decisions held in
+    `proposed`, and the UI told "invalid"), then restore it (in a `finally`,
+    on Ctrl+C, and on error) and verify the restore. Each held decision is
+    resumed, and a second resume is refused.
+  - *Scenario B (Retry rollback):* approve, execute with a forced
+    deviation, observe the deviation, propose rollback #1 (a duplicate is
+    refused), approve it, execute it with a forced failure (the original
+    stays `rollback-proposed`, and the failed rollback can't itself be
+    rolled back). Then retry through `retry-rollback`, approve and execute
+    rollback #2, and the original ends `rolled-back` (a late rollback is
+    refused).
+  Every step is asserted. It prints PASS/FAIL, exits non-zero on any
+  failure, keeps its decisions for the Decision log by default, and
+  removes them with `-- --cleanup`. All 20 live decisions
 scored risk 5/5 except one at 4, including "read-only diagnostic scan"
 proposals. Because risk adds three 0–5 inputs (base + operational impact
 + uncertainty, plus exposure and reversibility), almost any action clamps

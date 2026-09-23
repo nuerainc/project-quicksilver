@@ -18,6 +18,7 @@
     "seed": "npm run seed --workspace=@quicksilver/studio",
     "seed:processes": "npm run seed:processes --workspace=@quicksilver/studio",
     "reset:history": "npm run reset:history --workspace=@quicksilver/studio --",
+    "e2e:live": "npm run e2e:live --workspace=@quicksilver/studio --",
     "verify:mcp": "npm run verify:mcp --workspace=@quicksilver/agent",
     "verify:llm": "npm run verify:llm --workspace=@quicksilver/agent",
     "setup:azure": "node scripts/setup-azure.mjs",

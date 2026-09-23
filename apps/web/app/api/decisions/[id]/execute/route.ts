@@ -14,6 +14,15 @@
  * using the simulated outcome as the `execution.success` fact, before
  * anything is written. When a rollback decision executes successfully, the
  * decision it undoes is moved to `rolled-back` the same way.
+ *
+ * Fault injection (testing only). Body `{ "inject": "success" | "failure" |
+ * "deviation" }` forces the simulated outcome, so rare paths (a failed
+ * rollback, a metric moving the wrong way) can be exercised on demand by
+ * `npm run e2e:live`. It is refused unless QUICKSILVER_ALLOW_FAULT_INJECTION=on,
+ * it can only make an already-authorized execution succeed or fail (the
+ * kernel still authorizes the resulting transition), and every injected run
+ * is stamped `faultInjection` on both the decision and its metric, so the
+ * audit trail never passes a staged outcome off as an organic one.
  */
 
 import { NextResponse } from 'next/server'
@@ -104,7 +113,27 @@ function simulateExecution(decisionId: string, actionDescription: string): Simul
   }
 }
 
-const Body = z.object({}).optional()
+type FaultInjection = 'success' | 'failure' | 'deviation'
+const Body = z.object({ inject: z.enum(['success', 'failure', 'deviation']).optional() }).optional()
+
+function faultInjectionAllowed(): boolean {
+  return (process.env.QUICKSILVER_ALLOW_FAULT_INJECTION ?? '').trim().toLowerCase() === 'on'
+}
+
+/** A forced outcome on the downtime metric (baseline 32 h/week). */
+function injectedOutcome(kind: FaultInjection): SimulatedOutcome {
+  const baseline = 32
+  const factor = kind === 'success' ? 0.82 : kind === 'deviation' ? 1.06 : 1.003
+  const newValue = baseline * factor
+  return {
+    metricName: 'weekly downtime (hours)',
+    previousValue: baseline,
+    newValue,
+    delta: newValue - baseline,
+    unit: 'hours/week',
+    success: kind !== 'failure',
+  }
+}
 
 export async function POST(
   req: Request,
@@ -119,7 +148,14 @@ export async function POST(
   } catch {
     // Body optional
   }
-  Body.parse(body ?? {})
+  const parsedBody = Body.safeParse(body ?? {})
+  if (!parsedBody.success) {
+    return NextResponse.json({ error: 'Validation failed', issues: parsedBody.error.issues }, { status: 400 })
+  }
+  const inject = parsedBody.data?.inject
+  if (inject && !faultInjectionAllowed()) {
+    return NextResponse.json({ error: 'Fault injection is disabled (QUICKSILVER_ALLOW_FAULT_INJECTION is not on).' }, { status: 403 })
+  }
 
   if (!process.env.NEXT_PUBLIC_SANITY_PROJECT_ID) {
     return NextResponse.json({ error: 'Sanity not configured' }, { status: 500 })
@@ -152,7 +188,7 @@ export async function POST(
     }
     if (lifecycle.kind === 'ready') {
       const { definition } = lifecycle
-      const outcome = simulateExecution(decision._id, decision.selectedAction)
+      const outcome = inject ? injectedOutcome(inject) : simulateExecution(decision._id, decision.selectedAction)
       const facts = { ...factsFromDecision(decision), 'execution.success': outcome.success }
       const target = outcome.success ? 'executed' : 'failed'
       const step = authorizeTransition({ definition, currentState: decision.status, to: target, facts, actor: EXECUTOR_ACTOR })
@@ -160,7 +196,10 @@ export async function POST(
 
       const now = new Date().toISOString()
       try {
-        await commitTransition(client, decision._id, decision._rev, definition, step, EXECUTOR_ACTOR, now, { executedAt: now })
+        await commitTransition(client, decision._id, decision._rev, definition, step, EXECUTOR_ACTOR, now, {
+          executedAt: now,
+          ...(inject ? { faultInjection: inject } : {}),
+        })
       } catch (err) {
         if (isRevisionConflict(err)) {
           return NextResponse.json({ error: 'This decision changed while it was being executed. Reload and try again.' }, { status: 409 })
@@ -176,6 +215,8 @@ export async function POST(
         baseline: outcome.previousValue,
         direction: outcome.metricName.includes('downtime') ? 'lower-better' : 'higher-better',
         updatedAt: now,
+        relatedDecision: { _type: 'reference', _ref: decision._id, _weak: true },
+        ...(inject ? { faultInjection: inject } : {}),
       })
 
       // A successful rollback closes out the decision it undid.
@@ -188,6 +229,7 @@ export async function POST(
         decisionId: decision._id,
         status: step.to,
         outcome,
+        faultInjection: inject ?? null,
         at: now,
         process: processView(definition, step.to!, facts, step.transition?.id),
         rolledBackParent: parent,
@@ -202,6 +244,9 @@ export async function POST(
       )
     }
 
+    if (inject) {
+      return NextResponse.json({ error: 'Fault injection needs the process engine (QUICKSILVER_PROCESS_ENGINE=on).' }, { status: 409 })
+    }
     const outcome = simulateExecution(decision._id, decision.selectedAction)
     const now = new Date().toISOString()
 

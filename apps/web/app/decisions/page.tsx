@@ -66,6 +66,7 @@ type DecisionRow = {
   evidenceTitles: string[] | null
   reviewerNotes: ReviewerNotes
   kind: string | null
+  faultInjection: string | null
   processName: string | null
   processVersion: number | null
   processHistory: ProcessHistoryRow[] | null
@@ -99,6 +100,7 @@ const DECISIONS_QUERY = `*[_type == "decision"] | order(coalesce(createdAt, _cre
   "evidenceTitles": evidence[]->title,
   reviewerNotes,
   kind,
+  faultInjection,
   "processName": process.definition->name,
   "processVersion": process.version,
   processHistory[]{ transitionId, from, to, actorId, actorType, at }
@@ -237,6 +239,11 @@ function DecisionLogRow({ d }: { d: DecisionRow }) {
         <div className="mb-3 rounded border border-quicksilver-border/60 p-3">
           <h3 className="font-mono text-[11px] uppercase tracking-widest text-quicksilver-accent">
             Process: {d.processName ?? 'unknown'}{d.processVersion ? ` v${d.processVersion}` : ''}
+            {d.faultInjection && (
+              <span className="ml-2 normal-case tracking-normal text-yellow-300">
+                · execution outcome forced by the e2e test ({d.faultInjection})
+              </span>
+            )}
           </h3>
           <ol className="mt-1 space-y-0.5">
             {d.processHistory!.map((h, i) => (
