@@ -30,7 +30,7 @@ export const decisions: DecisionSeed[] = [
     ],
     selectedAction: 'Adjust controller parameter X on CNC 2 by +5%',
     reasoningSummary:
-      'Engineering analysis supports a parameter adjustment to compensate for controller drift. However, Operations Policy 17 (priority 5) requires VP approval for parameter changes, and Emergency Policy 4 (priority 7) permits automatic changes only under an officially declared emergency. Current incident status is NOT classified as emergency. Historical Incident #17 also suggests the underlying cause may be a worn seal rather than parameter drift, contradicting the parameter-adjustment hypothesis with higher confidence (0.92 vs 0.78). Kernel computes risk 4/5 and routes to human approval.',
+      'Engineering analysis supports a parameter adjustment to compensate for controller drift. However, Operations Policy 17 (priority 5) requires VP approval for parameter changes, and Emergency Policy 4 (priority 7) permits automatic changes only under an officially declared emergency. Current incident status is NOT classified as emergency. Historical Incident #17 also suggests the underlying cause may be a worn seal rather than parameter drift, contradicting the parameter-adjustment hypothesis with higher confidence (0.92 vs 0.78). Kernel computes risk 5/5 and routes to human approval.',
     evidenceIds: [
       'evidence-maint-847',
       'evidence-eng-analysis-c2',
@@ -44,7 +44,7 @@ export const decisions: DecisionSeed[] = [
       { policyId: 'policy-ops-17', result: 'applies', reason: 'Scope matches: production.parameter_changes' },
       { policyId: 'policy-emergency-4', result: 'conflicts', reason: 'Same scope, higher priority (7 > 5); not currently applicable because no declared emergency' },
     ],
-    riskLevel: 4,
+    riskLevel: 5,
     requiredApproval: true,
     status: 'awaiting-approval',
     createdAt: '2026-09-19T14:00:00Z',

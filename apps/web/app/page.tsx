@@ -209,7 +209,7 @@ export default function HomePage() {
       const data = await postJSON<{
         status: 'executed' | 'failed'
         process?: ProcessInfo
-        rolledBackParent?: { id: string; status?: string; error?: string } | null
+        rolledBackParent?: { id: string; status?: string; error?: string; process?: ProcessInfo } | null
       }>(`/api/decisions/${decisionDocId}/execute`, {})
       startTransition(() => {
         setStatuses((s) => {
@@ -218,7 +218,12 @@ export default function HomePage() {
           if (parent?.status) next[parent.id] = parent.status as DecisionStatus
           return next
         })
-        if (data.process) setProcesses((p) => ({ ...p, [decisionDocId]: data.process }))
+        const parentProcess = data.rolledBackParent?.process
+        setProcesses((p) => ({
+          ...p,
+          ...(data.process ? { [decisionDocId]: data.process } : {}),
+          ...(parentProcess && data.rolledBackParent ? { [data.rolledBackParent.id]: parentProcess } : {}),
+        }))
       })
     } catch (err) {
       setError((err as Error).message)
@@ -247,7 +252,7 @@ export default function HomePage() {
   async function handleRollback(decisionDocId: string) {
     setActingId(decisionDocId)
     try {
-      const data = await postJSON<{ rollbackDecisionId: string; parentStatus?: string; process?: ProcessInfo }>(
+      const data = await postJSON<{ rollbackDecisionId: string; parentStatus?: string; parentProcess?: ProcessInfo; process?: ProcessInfo }>(
         `/api/decisions/${decisionDocId}/rollback`,
         {},
       )
@@ -259,7 +264,11 @@ export default function HomePage() {
           [data.rollbackDecisionId]: (data.process?.state as DecisionStatus | undefined) ?? 'awaiting-approval',
           ...(data.parentStatus ? { [decisionDocId]: data.parentStatus as DecisionStatus } : {}),
         }))
-        if (data.process) setProcesses((p) => ({ ...p, [data.rollbackDecisionId]: data.process }))
+        setProcesses((p) => ({
+          ...p,
+          ...(data.process ? { [data.rollbackDecisionId]: data.process } : {}),
+          ...(data.parentProcess ? { [decisionDocId]: data.parentProcess } : {}),
+        }))
         setObservations((o) => ({
           ...o,
           [decisionDocId]: obs ? { ...obs, rollbackDecisionId: data.rollbackDecisionId } : obs,

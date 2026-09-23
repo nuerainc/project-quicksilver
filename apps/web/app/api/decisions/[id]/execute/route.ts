@@ -243,7 +243,7 @@ async function completeParentRollback(
   parentId: string,
   definition: Parameters<typeof authorizeTransition>[0]['definition'],
   now: string,
-): Promise<{ id: string; status: string } | { id: string; error: string }> {
+): Promise<{ id: string; status: string; process?: ReturnType<typeof processView> } | { id: string; error: string }> {
   const parent = await client.fetch<{
     _id: string
     _rev: string
@@ -265,5 +265,5 @@ async function completeParentRollback(
   } catch (err) {
     return { id: parentId, error: (err as Error).message }
   }
-  return { id: parentId, status: step.to! }
+  return { id: parentId, status: step.to!, process: processView(definition, step.to!, facts, step.transition?.id) }
 }

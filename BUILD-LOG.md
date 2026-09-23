@@ -839,7 +839,33 @@ first, in batches), re-seeds the 53-doc baseline, and verifies the result
 (1 seeded decision, 0 metrics, Decision Lifecycle v2 with 12 transitions,
 `npm run smoke`).
 
-**Was open, now fixed (see above):** risk saturation. All 20 live decisions
+**Was open, now fixed (see above):** risk saturation.
+
+**History reset and curated rebuild (same night).** The user ran
+`npm run reset:history -- --confirm`. It backed up 163 docs, deleted 106
+decisions and 5 metrics, re-seeded 53 docs, and the smoke test passed.
+The seeded decision was corrected to risk 5/5 to match the new formula.
+The history was then rebuilt through the live UI, on the final code
+(`d2bf1da`), in three runs:
+1. **Seed objective.** Risk spread across 1, 2, 1, 3 and 5. Two cards were
+   **auto-approved by the kernel**, the first live auto-approvals, and
+   both were executed with no human click. One risk-1 card still routed
+   to a human because the kernel flagged a concern. A simulation was
+   human-approved and executed. One card got "request more evidence".
+   The risk-5 policy-conflict parameter change was left awaiting a human.
+2. **Parameter-change pilot.** An auto-approved diagnostic was executed.
+   A human rejected the VP-approval parameter path. A firmware change was
+   approved and executed, and downtime moved 2.2% the wrong way. A
+   rollback was proposed, human-approved and executed, and the original
+   decision moved to **rolled-back** (5-step history).
+3. **Out-of-scope objective (TV ads).** 2 decisions were
+   **kernel-rejected**. The other 6 steps were never persisted, because
+   no actor or capability for them exists in the company model.
+Result: 13 decisions in the log (plus the seed). Found along the way and
+fixed: the parent card's Process line didn't refresh after a rollback,
+and rollback decisions showed "risk ?/5" in the log. Not exercised in the
+curated history, so covered by the stress test and unit tests only:
+Resume, and Retry rollback (the rollback succeeded first time). All 20 live decisions
 scored risk 5/5 except one at 4, including "read-only diagnostic scan"
 proposals. Because risk adds three 0–5 inputs (base + operational impact
 + uncertainty, plus exposure and reversibility), almost any action clamps

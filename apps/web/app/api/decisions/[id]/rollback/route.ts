@@ -149,6 +149,7 @@ export async function POST(
         rollbackDecisionId: rollbackId,
         parentDecisionId: id,
         parentStatus: step.to,
+        parentProcess: processView(definition, step.to!, facts, step.transition?.id),
         process: processView(definition, firstFields?.status ?? definition.initialState, rollbackFacts, first?.transition?.id),
       })
     }

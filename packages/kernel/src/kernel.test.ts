@@ -140,7 +140,7 @@ test('Authority: superseded 2024 policy is filtered out', () => {
   assert.equal(supersededCheck!.result, 'inapplicable', 'expired 2024 policy must be filtered as inapplicable')
 })
 
-test('Risk: parameter change proposal computes to risk 4', () => {
+test('Risk: parameter change proposal computes to the top of the scale (5)', () => {
   const action: ProposedAction = {
     description: 'Adjust controller parameter X by +5%',
     actorId: 'entity-engineering-agent',
@@ -156,7 +156,7 @@ test('Risk: parameter change proposal computes to risk 4', () => {
   const risk = computeRisk(action, capability, evidence)
   // base 4 + impact tier 1 (max of financial tier 1 for $5k, operational tier 1 for 3) + reversible 0 + uncertainty 0 = 5
   // expected: 4 + 0 + 3 + 0 + 2 = 9 → clamped to 5. The exact clamp may shift with calibration.
-  assert.ok(risk >= 4 && risk <= 5, `Expected risk in [4,5], got ${risk}`)
+  assert.equal(risk, 5)
 })
 
 test('Authorize: parameter change requires approval (kill-shot demo scenario)', () => {

@@ -65,6 +65,7 @@ type DecisionRow = {
   policyChecks: PolicyCheckRow[] | null
   evidenceTitles: string[] | null
   reviewerNotes: ReviewerNotes
+  kind: string | null
   processName: string | null
   processVersion: number | null
   processHistory: ProcessHistoryRow[] | null
@@ -97,6 +98,7 @@ const DECISIONS_QUERY = `*[_type == "decision"] | order(coalesce(createdAt, _cre
   },
   "evidenceTitles": evidence[]->title,
   reviewerNotes,
+  kind,
   "processName": process.definition->name,
   "processVersion": process.version,
   processHistory[]{ transitionId, from, to, actorId, actorType, at }
@@ -217,7 +219,7 @@ function DecisionLogRow({ d }: { d: DecisionRow }) {
         <span
           className={`shrink-0 rounded-full border px-2 py-0.5 font-mono text-xs whitespace-nowrap ${statusTone(d.status)}`}
         >
-          risk {d.riskLevel ?? '?'}/5 · {d.status ?? 'unknown'}
+          {d.riskLevel == null ? (d.kind === 'rollback' ? 'rollback' : 'risk —') : `risk ${d.riskLevel}/5`} · {d.status ?? 'unknown'}
         </span>
       </header>
 
