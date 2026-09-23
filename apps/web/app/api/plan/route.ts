@@ -363,6 +363,10 @@ export async function POST(req: Request) {
       }
       const doc = r.doc as Record<string, unknown>
       doc.kind = 'plan'
+      // Store the kernel's verdict so a decision held in `proposed` (e.g. while
+      // the definition was invalid) can resume later from the same facts.
+      doc.kernelRecommendation = r.decision.recommendation
+      doc.kernelAuthorized = r.decision.authorized
       if (lifecycle.kind === 'ready') {
         const step = nextAutomaticTransition(lifecycle.definition, lifecycle.definition.initialState, facts)
         if (step) {

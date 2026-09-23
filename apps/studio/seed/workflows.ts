@@ -30,7 +30,10 @@ import type { WorkflowSeed } from './types'
 export const decisionLifecycle: WorkflowSeed = {
   _id: 'workflow-decision-lifecycle',
   name: 'Decision Lifecycle',
-  version: 1,
+  // v2 (from the Sep 22 live stress test): rollback retry after a failed
+  // rollback, no "roll back a rollback", and plan decisions only for
+  // rollback proposals.
+  version: 2,
   trigger: 'The planner proposes an action and the kernel authorizes it (POST /api/plan).',
   initialState: 'proposed',
   states: [
@@ -123,7 +126,13 @@ export const decisionLifecycle: WorkflowSeed = {
       from: 'executed',
       to: 'rollback-proposed',
       requiresHumanApproval: true,
-      guard: { all: [{ fact: 'observation.deviationDetected', op: 'eq', value: true }] },
+      guard: {
+        all: [
+          { fact: 'observation.deviationDetected', op: 'eq', value: true },
+          // A rollback decision is never itself rolled back.
+          { fact: 'decision.kind', op: 'eq', value: 'plan' },
+        ],
+      },
     },
     {
       id: 'propose-rollback-after-failure',
@@ -131,6 +140,22 @@ export const decisionLifecycle: WorkflowSeed = {
       from: 'failed',
       to: 'rollback-proposed',
       requiresHumanApproval: true,
+      guard: { all: [{ fact: 'decision.kind', op: 'eq', value: 'plan' }] },
+    },
+    {
+      // Found live: a rollback whose own execution fails used to leave the
+      // original decision stuck in rollback-proposed with no way forward.
+      id: 'retry-rollback',
+      label: 'Retry rollback (previous attempt failed)',
+      from: 'rollback-proposed',
+      to: 'rollback-proposed',
+      requiresHumanApproval: true,
+      guard: {
+        all: [
+          { fact: 'rollback.lastAttemptFailed', op: 'eq', value: true },
+          { fact: 'rollback.pendingAttempts', op: 'eq', value: 0 },
+        ],
+      },
     },
     {
       id: 'complete-rollback',
@@ -144,6 +169,7 @@ export const decisionLifecycle: WorkflowSeed = {
   approvalRequirementIds: [],
   failureHandlers: [
     'If execution fails, the decision moves to "failed" and a human can propose a rollback.',
+    'If a rollback itself fails, a human can retry it with a new rollback decision.',
   ],
   rollbackProcedure:
     'A rollback is its own decision. It always routes to a human; once it executes, the original decision moves to "rolled-back".',

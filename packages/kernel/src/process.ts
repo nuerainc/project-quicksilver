@@ -344,8 +344,8 @@ export function authorizeTransition(args: AuthorizeTransitionArgs): TransitionDe
     (o) => (transitionId ? o.transition.id === transitionId : o.transition.to === to),
   )
   if (options.length === 0) {
-    const what = transitionId ? `transition "${transitionId}"` : `a transition to "${to}"`
-    return deny([`"${definition.name}" has no ${what} from state "${currentState}".`])
+    const what = transitionId ? `no transition "${transitionId}"` : `no transition to "${to}"`
+    return deny([`"${definition.name}" has ${what} from state "${currentState}".`])
   }
 
   // With a target state there may be several routes; take the first whose guard holds.

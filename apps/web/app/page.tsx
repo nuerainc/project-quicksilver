@@ -188,6 +188,21 @@ export default function HomePage() {
     }
   }
 
+  async function handleResume(decisionDocId: string) {
+    setActingId(decisionDocId)
+    try {
+      const data = await postJSON<{ status: string; process?: ProcessInfo }>(`/api/decisions/${decisionDocId}/resume`, {})
+      startTransition(() => {
+        setStatuses((s) => ({ ...s, [decisionDocId]: data.status as DecisionStatus }))
+        if (data.process) setProcesses((p) => ({ ...p, [decisionDocId]: data.process }))
+      })
+    } catch (err) {
+      setError((err as Error).message)
+    } finally {
+      setActingId(null)
+    }
+  }
+
   async function handleExecute(decisionDocId: string) {
     setActingId(decisionDocId)
     try {
@@ -314,6 +329,7 @@ export default function HomePage() {
           onExecute={handleExecute}
           onObserve={handleObserve}
           onRollback={handleRollback}
+          onResume={handleResume}
         />
       )}
 
@@ -363,6 +379,7 @@ function PlanAndDecisions({
   onExecute,
   onObserve,
   onRollback,
+  onResume,
 }: {
   plan: PlanResponse
   statuses: Record<string, DecisionStatus>
@@ -374,6 +391,7 @@ function PlanAndDecisions({
   onExecute: (id: string) => Promise<void>
   onObserve: (id: string) => Promise<void>
   onRollback: (id: string) => Promise<void>
+  onResume: (id: string) => Promise<void>
 }) {
   // Page-level nudge: how many of the current decisions still need a human
   // call. Purely derived from local state — no new data, just a count so a
@@ -460,6 +478,7 @@ function PlanAndDecisions({
             onExecute={onExecute}
             onObserve={onObserve}
             onRollback={onRollback}
+            onResume={onResume}
           />
         ))}
       </section>
@@ -478,6 +497,7 @@ function DecisionCard({
   onExecute,
   onObserve,
   onRollback,
+  onResume,
 }: {
   d: DecisionResponse
   status: DecisionStatus
@@ -489,6 +509,7 @@ function DecisionCard({
   onExecute: (id: string) => Promise<void>
   onObserve: (id: string) => Promise<void>
   onRollback: (id: string) => Promise<void>
+  onResume: (id: string) => Promise<void>
 }) {
   const decision = d.decision
   const docId = d.decisionDocId
@@ -569,6 +590,10 @@ function DecisionCard({
             <ActionButton label="Reject" onClick={() => onAct(docId, 'reject')} busy={actingId === docId} tone="secondary" />
             <ActionButton label="Request more evidence" onClick={() => onAct(docId, 'request-evidence')} busy={actingId === docId} tone="tertiary" />
           </>
+        )}
+
+        {docId && status === 'proposed' && process?.engine === 'on' && (
+          <ActionButton label="Resume (re-check process)" onClick={() => onResume(docId)} busy={actingId === docId} tone="primary" />
         )}
 
         {docId && status === 'approved' && (
@@ -747,6 +772,14 @@ function DecisionCard({
                         label="Execute rollback (simulated)"
                         onClick={() => onExecute(observation.rollbackDecisionId!)}
                         busy={actingId === observation.rollbackDecisionId}
+                        tone="primary"
+                      />
+                    )}
+                    {rollbackStatus === 'failed' && docId && (
+                      <ActionButton
+                        label="Retry rollback"
+                        onClick={() => onRollback(docId)}
+                        busy={actingId === docId}
                         tone="primary"
                       />
                     )}

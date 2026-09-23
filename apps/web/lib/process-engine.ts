@@ -81,6 +81,8 @@ export interface StoredDecisionFacts {
   riskLevel?: number | null
   requiredApproval?: boolean | null
   observedDeviation?: boolean | null
+  kernelRecommendation?: string | null
+  kernelAuthorized?: boolean | null
 }
 
 export function factsFromDecision(d: StoredDecisionFacts): Facts {
@@ -90,6 +92,8 @@ export function factsFromDecision(d: StoredDecisionFacts): Facts {
     'kernel.riskLevel': d.riskLevel ?? undefined,
     'kernel.requiresApproval': d.requiredApproval ?? undefined,
     'observation.deviationDetected': d.observedDeviation ?? undefined,
+    'kernel.recommendation': d.kernelRecommendation ?? undefined,
+    'kernel.authorized': d.kernelAuthorized ?? undefined,
   }
 }
 

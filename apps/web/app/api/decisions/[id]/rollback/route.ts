@@ -92,7 +92,18 @@ export async function POST(
     if (lifecycle.kind === 'ready') {
       const { definition } = lifecycle
       const actor = uiOperator(approverId)
-      const facts = factsFromDecision(original)
+      // Earlier rollback attempts for this decision, newest first: the facts
+      // behind `retry-rollback` (a failed rollback may be retried once nothing
+      // else is still in flight).
+      const attempts = await client.fetch<Array<{ status: string }>>(
+        `*[_type == "decision" && rollbackOf._ref == $id] | order(coalesce(createdAt, _createdAt) desc){ status }`,
+        { id },
+      )
+      const facts = {
+        ...factsFromDecision(original),
+        'rollback.lastAttemptFailed': attempts.length > 0 && attempts[0]!.status === 'failed',
+        'rollback.pendingAttempts': attempts.filter((a) => ['proposed', 'awaiting-approval', 'approved'].includes(a.status)).length,
+      }
       const step = authorizeTransition({ definition, currentState: original.status, to: 'rollback-proposed', facts, actor })
       if (!step.allowed) return NextResponse.json(refusal(step, definition), { status: 409 })
 
@@ -120,7 +131,9 @@ export async function POST(
         context: [{ _type: 'reference', _ref: original._id, _key: original._id }],
         candidateActions: [],
         selectedAction: summary ?? `Roll back: ${original.selectedAction}`,
-        reasoningSummary: original.observedDeviation
+        reasoningSummary: step.transition?.id === 'retry-rollback'
+          ? 'Retry: the previous rollback attempt failed to execute. Rolling back again to reach the last known-good state.'
+          : original.observedDeviation
           ? 'Closed-loop recovery: monitoring detected the metric moving in the wrong direction after execution. Rolling back the change is the first corrective action.'
           : 'Recovery after a failed execution: rolling back to the last known-good state.',
         evidence: [],

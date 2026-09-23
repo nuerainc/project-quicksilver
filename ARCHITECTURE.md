@@ -263,7 +263,14 @@ approved ─execute (execution.success)───────▶ executed | faile
 executed ─propose-rollback (human, deviation observed)─▶ rollback-proposed
 failed   ─propose-rollback (human)──────────▶ rollback-proposed
 rollback-proposed ─complete-rollback (rollback executed)─▶ rolled-back ■
+rollback-proposed ─retry-rollback (human; last attempt failed, none pending)─▶ rollback-proposed
 ```
+
+v2 (after the Sep 22 live stress test) also restricts rollback proposals to
+`decision.kind = plan`, so a rollback is never rolled back. It also adds
+`POST /api/decisions/[id]/resume`, which re-runs the automatic step for a
+decision held in `proposed` (for example while the definition was invalid),
+using the kernel verdict stored on the decision.
 
 Wiring: `apps/web/lib/process-engine.ts`, used by `/api/plan` and
 `/api/decisions/[id]/{action,execute,observe,rollback}`. It's behind

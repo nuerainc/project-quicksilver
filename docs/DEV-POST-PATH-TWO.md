@@ -153,7 +153,7 @@ refusals for illegal jumps. Each step is stamped with the definition's
 version and revision. The autonomy ceiling ("never auto-approve above
 risk 2") is a number an editor can change in Studio. If someone breaks
 the definition, the kernel stops moving decisions rather than bypassing
-it. The same file is the Sanity seed and the test fixture, so the 19
+it. The same file is the Sanity seed and the test fixture, so the 22
 process-engine tests exercise exactly what's in Content Lake.
 
 ## Sanity Project Details (Required)

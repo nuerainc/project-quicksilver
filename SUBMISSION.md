@@ -127,7 +127,7 @@ npm run verify:mcp
 # Verify the LLM (each role responds; planner/reviewer do tools + structured output)
 npm run verify:llm
 
-# Run the kernel tests (authorization + process engine: 34 tests)
+# Run the kernel tests (authorization + process engine: 37 tests)
 npm run kernel:test
 
 # Start the Studio (localhost:3333)

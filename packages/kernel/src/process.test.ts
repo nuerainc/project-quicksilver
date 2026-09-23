@@ -243,12 +243,13 @@ test('Lifecycle: execution outcome picks executed vs failed by guard', () => {
 })
 
 test('Lifecycle: rollback needs an observed deviation (after success) or a failure', () => {
-  const noDeviation = authorizeTransition({ definition: lifecycle, currentState: 'executed', to: 'rollback-proposed', facts: { 'observation.deviationDetected': false }, actor: human })
+  const noDeviation = authorizeTransition({ definition: lifecycle, currentState: 'executed', to: 'rollback-proposed', facts: { 'decision.kind': 'plan', 'observation.deviationDetected': false }, actor: human })
   assert.equal(noDeviation.allowed, false)
-  const deviation = authorizeTransition({ definition: lifecycle, currentState: 'executed', to: 'rollback-proposed', facts: { 'observation.deviationDetected': true }, actor: human })
+  const deviation = authorizeTransition({ definition: lifecycle, currentState: 'executed', to: 'rollback-proposed', facts: { 'decision.kind': 'plan', 'observation.deviationDetected': true }, actor: human })
   assert.equal(deviation.allowed, true)
   assert.equal(deviation.transition?.id, 'propose-rollback')
-  const afterFailure = authorizeTransition({ definition: lifecycle, currentState: 'failed', to: 'rollback-proposed', facts: {}, actor: human })
+  const afterFailure = authorizeTransition({ definition: lifecycle, currentState: 'failed', to: 'rollback-proposed', facts: { 'decision.kind': 'plan' }, actor: human })
+  assert.equal(afterFailure.allowed, true)
   assert.equal(afterFailure.transition?.id, 'propose-rollback-after-failure')
   const done = authorizeTransition({ definition: lifecycle, currentState: 'rollback-proposed', to: 'rolled-back', facts: { 'rollback.executed': true }, actor: kernelActor })
   assert.equal(done.allowed, true)
@@ -273,7 +274,7 @@ test('Lifecycle: history entries carry the definition version and revision', () 
     actorId: 'entity-diego-ruiz',
     actorType: 'human',
     at: '2026-09-22T00:00:00.000Z',
-    processVersion: 1,
+    processVersion: lifecycle.version,
     processRevision: 'rev-abc',
   })
   const refused = authorizeTransition({ definition: def, currentState: 'awaiting-approval', transitionId: 'approve', facts: {}, actor: agent })
@@ -327,4 +328,41 @@ test('Sanity mapping: a half-filled document is rejected by validation, not patc
   assert.equal(v.valid, false)
   assert.ok(v.errors.some((e) => e.includes('Version')))
   assert.ok(v.errors.some((e) => e.includes('Initial state')))
+})
+
+// ── Findings from the Sep 22 live stress test (Decision Lifecycle v2) ─────
+
+test('Lifecycle v2: a failed rollback can be retried, but only when nothing is still pending', () => {
+  const base = { 'decision.kind': 'plan' }
+  const retry = (facts: Facts) =>
+    authorizeTransition({ definition: lifecycle, currentState: 'rollback-proposed', to: 'rollback-proposed', facts: { ...base, ...facts }, actor: human })
+  assert.equal(retry({ 'rollback.lastAttemptFailed': true, 'rollback.pendingAttempts': 0 }).allowed, true)
+  assert.equal(retry({ 'rollback.lastAttemptFailed': true, 'rollback.pendingAttempts': 1 }).allowed, false)
+  assert.equal(retry({ 'rollback.lastAttemptFailed': false, 'rollback.pendingAttempts': 0 }).allowed, false)
+  // Fail closed when the route doesn't supply the facts at all.
+  assert.equal(retry({}).allowed, false)
+  // And an agent can't retry on a human's behalf.
+  const byAgent = authorizeTransition({ definition: lifecycle, currentState: 'rollback-proposed', transitionId: 'retry-rollback', facts: { 'rollback.lastAttemptFailed': true, 'rollback.pendingAttempts': 0 }, actor: agent })
+  assert.equal(byAgent.allowed, false)
+})
+
+test('Lifecycle v2: a rollback decision is never itself rolled back', () => {
+  for (const [state, facts] of [
+    ['failed', {}],
+    ['executed', { 'observation.deviationDetected': true }],
+  ] as const) {
+    const rollbackOfRollback = authorizeTransition({ definition: lifecycle, currentState: state, to: 'rollback-proposed', facts: { 'decision.kind': 'rollback', ...facts }, actor: human })
+    assert.equal(rollbackOfRollback.allowed, false, state)
+    const plan = authorizeTransition({ definition: lifecycle, currentState: state, to: 'rollback-proposed', facts: { 'decision.kind': 'plan', ...facts }, actor: human })
+    assert.equal(plan.allowed, true, state)
+  }
+})
+
+test('Lifecycle v2: a decision held in "proposed" can resume from stored facts once the definition is fixed', () => {
+  // Decisions planned while the definition was invalid stay in `proposed`.
+  // The resume route re-runs the automatic step from stored kernel facts.
+  assert.equal(nextAutomaticTransition(lifecycle, 'proposed', { 'kernel.recommendation': 'request-approval', 'kernel.riskLevel': 5 })?.to, 'awaiting-approval')
+  // Older documents stored no recommendation; risk alone still routes them to a human, never to auto-approve.
+  assert.equal(nextAutomaticTransition(lifecycle, 'proposed', { 'kernel.riskLevel': 4 })?.transition?.id, 'route-to-human')
+  assert.equal(nextAutomaticTransition(lifecycle, 'proposed', { 'kernel.riskLevel': 1 }), null)
 })

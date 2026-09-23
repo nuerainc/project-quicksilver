@@ -112,6 +112,13 @@ export default defineType({
       description: 'plan = proposed by the planner; rollback = proposed to undo another decision',
     }),
     defineField({
+      name: 'kernelRecommendation',
+      type: 'string',
+      options: { list: ['execute-autonomously', 'request-approval', 'reject'] },
+      description: "The kernel's recommendation at plan time (lets a held decision resume from the same facts)",
+    }),
+    defineField({ name: 'kernelAuthorized', type: 'boolean' }),
+    defineField({
       name: 'rollbackOf',
       type: 'reference',
       to: [{ type: 'decision' }],

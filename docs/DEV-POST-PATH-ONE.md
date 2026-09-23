@@ -85,7 +85,7 @@ demo; it's the reviewer model catching a real policy gap against
 structured data, live. From there: approve, execute (simulated), and
 observe the metric move.
 
-Each card also carries a **Process** line: *Decision Lifecycle v1 ·
+Each card also carries a **Process** line: *Decision Lifecycle v2 ·
 Awaiting human approval (via route-to-human) · Next: Approve (human) ·
 Reject (human)*. That is the kernel running a process definition read
 from Sanity. A card the kernel rates low-risk (risk ≤ 2) arrives already

@@ -34,7 +34,9 @@ export const QueryResultSchema = z.object({
       id: z.string(),
       name: z.string(),
       entityType: z.string(),
-      role: z.string().optional(),
+      // Nullable, not optional: Azure/OpenAI strict JSON-schema output needs
+      // every property listed in `required` (see schemas.test.ts).
+      role: z.string().nullable(),
       reasoning: z.string(),
     }),
   ),
@@ -45,8 +47,7 @@ export const QueryResultSchema = z.object({
         name: z.string(),
         riskLevel: z.number().int().min(0).max(5),
       }),
-    )
-    .default([]),
+    ),
   policies: z
     .array(
       z.object({
@@ -54,8 +55,7 @@ export const QueryResultSchema = z.object({
         name: z.string(),
         scope: z.string(),
       }),
-    )
-    .default([]),
+    ),
   supportingContext: z.array(z.string()),
   confidence: z.number().min(0).max(1),
 })
