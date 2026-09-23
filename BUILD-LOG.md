@@ -42,7 +42,7 @@ reconstructable at the same fidelity as the rest of this document.
 
 ## Timeline
 
-The build happened over a roughly 24-hour wall-clock window from the
+The build happened over a roughly 40-hour wall-clock window from the
 afternoon of **Sep 20, 2026** through the morning of **Sep 22, 2026**
 (MiniMax Agent, Days 1–14), followed by a second, separate stretch of
 work later on **Sep 22, 2026** (Claude Code, Days 15+) that took the
@@ -473,7 +473,8 @@ files confirmed it captured everything.) **Side effect:** this same
 `git add -A` also picked up a `Claude outputs/` folder — containing the
 already-secret-scanned session transcript and both DEV-post drafts — which
 landed in the public GitHub repo unintentionally. Flagged to the user; the
-transcript had already been scanned clean, and rewriting public git history
+transcript had already been scanned clean (a Sep 23 re-audit showed the scan
+had missed a session token; see the note on `Claude outputs/` below), and rewriting public git history
 this close to the deadline carried its own risk, so **the user explicitly
 decided to leave it as-is.**
 
@@ -957,7 +958,7 @@ README was rewritten for the public repo.
 | 15 / Claude Code | Dotted runtime IDs (`decision.rollback.<id>.<ts>`, `metric.<name>.<ts>`) — risky next to Sanity's `drafts.` prefix convention | Switched both to hyphenated IDs, matching the rest of the codebase |
 | 16 / Claude Code | Reviewer schema: `z.array(z.string()).default([])` on four fields — same bug class as the `financialExposure` fix, missed the first time | Removed `.default([])` from all four array fields |
 | 16 / Claude Code | Git: Day 15 code changes landed on the user's disk via `device_commit_files` but were never pushed to GitHub, so the first live Vercel deploy was stale | User ran `git add -A && git commit && git push` from their own terminal (VS Code) |
-| 16 / Claude Code | That same `git add -A` also committed a `Claude outputs/` folder to the public repo | Already scanned clean of secrets; user explicitly decided to leave it as-is rather than rewrite public git history |
+| 16 / Claude Code | That same `git add -A` also committed a `Claude outputs/` folder to the public repo | Believed scanned clean; left as-is by user decision. **Sep 23:** a re-audit found a Sanity session token the scan had missed; session signed out, all API tokens rotated, folder removed |
 | 16 / Claude Code | Vercel setup: a misclicked "Import .env" button bulk-imported every `.env.example` key as duplicate env-var rows | Removed the duplicates manually before the user entered real secrets |
 | 16 / Claude Code | Mount-propagation race (recurred 3×): `device_commit_files` reports success but an immediate read-back shows the old file | Retried the identical commit, or routed the write through `Write`/`Edit` directly instead of a shell `cp` |
 | 16 / Claude Code | First Sanity-Workflows research pass surfaced the wrong package (`@sanity-labs/sanity-plugin-workflows`) — needs Studio 6.9.2+, auto-injects conflicting fields | Rejected before writing code; found the correct `sanity-plugin-workflow` (v3.0.46) via the npm registry API directly |
@@ -966,13 +967,18 @@ README was rewritten for the public repo.
 | 17 / Claude Code | Studio dev server crashed: "Configuration must contain `projectId`" — `sanity.config.ts` read `NEXT_PUBLIC_SANITY_PROJECT_ID`, which Vite never exposes to the Studio's browser bundle (only `SANITY_STUDIO_`-prefixed vars are), with no fallback (unlike `sanity.cli.ts`, which had one) | Added the same hardcoded non-secret fallback (`'d280bqjc'` / `'production'`) directly to `sanity.config.ts`, matching the existing `sanity.cli.ts` pattern |
 | 17 / Claude Code | `sanity deploy` still failed on the same `projectId` error during its "Generating studio manifest" step, even after the config fix — that CLI step reads `process.env` directly and only auto-loads `.env` from the current directory (`apps/studio`), where none existed | User created `apps/studio/.env` with real `SANITY_STUDIO_PROJECT_ID` / `SANITY_STUDIO_DATASET` values (non-secret); `npm run deploy` then succeeded end to end |
 | 18 / Claude Code | Suspected risk-calibration bug: every decision across three real runs showed "risk 5/5" with zero variation, suggesting `computeRisk`'s additive-then-clamp formula always saturates | **Not a bug.** Traced every pinned `kernel.test.ts` expectation by hand, then ran one more live test with a deliberately trivial objective, which correctly computed to risk 3, not 5 — the formula differentiates fine; the seed objectives tested so far were just all genuinely high-stakes. No kernel change made. |
-| 19 / Claude Code | Audit log claimed 16 kernel tests; the suite actually had 15 | Counted from the real `node --test` output; corrected in this log (now 34 with the process-engine tests) |
+| 19 / Claude Code | Audit log claimed 16 kernel tests; the suite actually had 15 | Counted from the real `node --test` output; corrected in this log (34 with the first process-engine tests; 39 at submission) |
 | 19 / Claude Code | First draft of the `route-to-human` guard included `kernel.recommendation neq reject`, which fails closed for rollback decisions (no kernel facts) and would have stranded them in `proposed` | Caught while reading the guard against the fail-closed rule before tests ran; removed the clause and relied on declaration order (`kernel-reject` first), pinned by two tests |
 | 19 / VS Code → Claude Code | `npm run schema:deploy` and the new `npm run seed:processes` both failed with "SANITY_AUTH_TOKEN is required" even though the root `.env` has it | Every studio script's `.env` loader stopped at the FIRST `.env` walking up from `apps/studio`, which since Day 18 is `apps/studio/.env` (Studio-only vars). Changed all four (`deploy-schema`, `smoke-test`, `seed/loader`, `seed/processes`) to load every `.env` up to the root, nearest first; verified with a nested two-file fixture |
 
 ---
 
-## File inventory (current, all environments)
+## File inventory (all environments)
+
+*Written on Day 16 and only partly updated since. For the current layout,
+see the README's "Repository layout"; the process engine, e2e and reset
+scripts, `/resume`, the Decision log page and the Azure setup script were
+added after it.*
 
 ```
 quicksilver/
@@ -1073,6 +1079,16 @@ unintentionally via a broad `git add -A` (Day 16). Left as-is by explicit
 user decision at first; removed on Sep 23 during the pre-submission audit,
 because its early DEV-post drafts contradicted the final posts.
 
+**Correction (Sep 23): the earlier secret scan missed something.** An
+independent re-audit found a Sanity login-session token inside that
+transcript: a dashboard URL of the form `context.sanity.io/…#token=…`,
+captured from a browser tab. The earlier scan looked for API-key and
+`.env` patterns and missed the URL-fragment form. Response: the Sanity
+session was signed out everywhere, and every API token was replaced with
+four least-privilege tokens (Vercel writer: Editor; local dev: Developer;
+Context Viewer for Vercel and for local), each verified live. The value
+still exists in old git history but no longer grants access.
+
 ---
 
 ## What's done
@@ -1094,7 +1110,6 @@ because its early DEV-post drafts contradicted the final posts.
 
 ## What's pending
 
-- User: `npm run seed:processes` to push Decision Lifecycle v3 to Content Lake
 - Demo video recording per `docs/DEMO-SCRIPT.md` (optional — the live deployment already satisfies the "working demo" requirement)
 - Publish both DEV.to posts with `#sanitychallenge` on the user's own account
 - Final token rotation, both local `.env` and Vercel's project env vars, immediately before Oct 4
@@ -1204,7 +1219,10 @@ npx sanity build --no-minify      # exit code 0; grepped the output bundle for t
 
 ---
 
-## Architecture diagram (current)
+## Architecture diagram (Day 16)
+
+*Predates the process engine. For the current flow and the Decision
+Lifecycle state diagram, see the README.*
 
 ```
                           USER (CEO)

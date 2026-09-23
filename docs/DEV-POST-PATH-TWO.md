@@ -66,9 +66,10 @@ needed. All without leaving the page.
 No login required — the CEO intent box comes pre-filled. Click **SEND TO
 QUICKSILVER** (about a minute) and scroll past the Plan narrative to
 **DECISIONS**. The planner reasons fresh each run, so the cards vary, but
-each one shows the kernel's risk and verdict, a **Process** line saying
-where it sits in the Decision Lifecycle and what can happen next, and a
-dashed **INDEPENDENT REVIEW** block the reviewer model fills in live.
+each one shows the kernel's risk and verdict and a **Process** line saying
+where it sits in the Decision Lifecycle and what can happen next. **Show
+reasoning & evidence** opens the policies, the evidence, and a dashed
+**INDEPENDENT REVIEW** block the reviewer model fills in live.
 Then: approve, execute (simulated), watch the metric move. **Decision
 log →** (top right) shows every decision's full process history.
 

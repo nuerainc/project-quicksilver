@@ -41,12 +41,13 @@ Drop in the seed objective, *"Reduce production downtime by 20% over the
 next 30 days without increasing OPEX,"* and the agent decomposes it,
 identifies the relevant policies (Operations Policy 17 and Emergency
 Policy 4, both in scope `production.parameter_changes`), and proposes
-adjusting a CNC controller parameter by 5%. The kernel's authority check
-surfaces the conflict (same scope, priority 5 vs. priority 7) and the
+adjusting a CNC controller parameter by 5%. The agent pulls up the
 historical-incident evidence that contradicts the parameter-adjustment
-hypothesis (confidence 0.92). Risk lands at 5 of 5 (a base-4 capability
-plus real operational impact). The recommendation
-routes to **human approval**. Approve, execute (simulated), observe a
+hypothesis (confidence 0.92), which Sanity's Knowledge Base also flags as
+an open contradiction. The kernel's authority check flags the policy
+conflict (two live policies in the same scope, priorities 5 and 7), and
+risk lands at 5 of 5 (a base-4 capability plus real operational impact).
+The recommendation routes to **human approval**. Approve, execute (simulated), observe a
 metric move, and close the loop — the full decision record is persisted
 as an auditable `decision` doc in Sanity.
 
@@ -84,18 +85,18 @@ No login required — the CEO Intent box comes pre-filled with the seed
 objective. Click **SEND TO QUICKSILVER** (a real plan takes about a
 minute), then scroll past the Plan paragraph to the cards under
 **DECISIONS**. The planner reasons fresh on every run, so the exact cards
-vary. Each one carries a dashed **INDEPENDENT REVIEW** block, kept
-visually separate from the kernel's own risk/authority computation above
-it. Open **Show reasoning & evidence** on any card with a flag count to see
-the reviewer catching real gaps, like a proposal that never confirms
+vary. Open **Show reasoning & evidence** on a card to see the policies
+and evidence it considered, and a dashed **INDEPENDENT REVIEW** block kept
+visually separate from the kernel's own risk/authority computation. On a
+card with a flag count, that's the reviewer catching real gaps, like a proposal that never confirms
 alignment with Operations Policy 17. Nothing there is scripted. From
 there: approve, execute (simulated), and observe the metric move.
 
 Each card also carries a **Process** line: *Decision Lifecycle v3 ·
 Awaiting human approval (via route-to-human) · Next: Approve (human) ·
-Reject (human)*. That is the kernel running a process definition read
-from Sanity. A card the kernel rates low-risk (risk ≤ 2) arrives already
-approved, marked *"Auto-approved by the kernel."* If a metric moves the
+Reject (human) · Request more evidence (human)*. That is the kernel running a process definition read
+from Sanity. A card the kernel rates low-risk (risk ≤ 2, no policy conflict,
+solid evidence) arrives already approved, marked *"Auto-approved by the kernel."* If a metric moves the
 wrong way after execution, you can propose, approve, and execute a
 rollback, and the original decision moves to *rolled back*. If the
 rollback itself fails, a human can retry it. The **Decision log →** link

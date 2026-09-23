@@ -37,7 +37,7 @@ entity {
   entityType     // human | agent | robot | service | contractor | system
   capabilities[] // refs to capability docs
   permissions[]  // refs to policy/permission docs
-  constraints[]  // derived at runtime by kernel
+  constraints[]  // refs to policy docs that constrain this entity
   reportsTo      // ref to entity
   department     // ref to department
   availability
@@ -98,7 +98,7 @@ This lets the kernel reason about humans and machines using **the same organizat
       └─────────┬────────┘
                 │ state delta
                 ▼
-      Next.js server action → Sanity HTTP API → Content Lake (writes)
+      Next.js API route → @sanity/client → Content Lake (writes)
 ```
 
 ## 4. Architectural principle: separate cognition from authority
@@ -106,6 +106,11 @@ This lets the kernel reason about humans and machines using **the same organizat
 The LLM proposes. The kernel authorizes. **Never** the other way around.
 
 ```ts
+// Illustrative pseudocode. The real calls are planObjective() in
+// packages/agent/src/planner.ts and authorize() in packages/kernel/src/approval.ts,
+// which returns { authorized, riskLevel, requiresApproval, recommendation,
+//                 blockingReasons, concerns }.
+
 // ❌ wrong
 const decision = await llm(`Can ${entity} do ${action}?`)
 
@@ -160,10 +165,10 @@ Prerequisites:
 
 ### Writes — Sanity HTTP API (direct)
 
-Context MCP is read-only. Decision records, state updates, execution logs, and workflow transitions go through Next.js server actions → Sanity HTTP API. Simpler than wiring a second MCP client.
+Context MCP is read-only. Decision records, state updates, execution logs, and workflow transitions go through Next.js API route handlers (`apps/web/app/api/**`) using `@sanity/client` mutations. Simpler than wiring a second MCP client.
 
 ```
-Endpoint: https://<projectId>.api.sanity.io/v2024-01-01/data/mutate/<dataset>
+Endpoint: https://<projectId>.api.sanity.io/v2024-10-01/data/mutate/<dataset>   (via @sanity/client)
 Auth:     Bearer <SANITY_AUTH_TOKEN>
 ```
 
@@ -180,7 +185,7 @@ decision {
   reasoningSummary       // one-paragraph human-readable explanation
   evidence[]             // refs to evidence docs supporting the choice
   constraints[]
-  policyChecks[]         // [{ policyId, result: applies|superseded|conflicts, reason }]
+  policyChecks[]         // [{ policy (ref), result: applies|superseded|conflicts|inapplicable, reason }]
   riskLevel              // 0-5, computed by kernel
   requiredApproval       // bool, computed by kernel
   status                 // proposed | awaiting-approval | approved | rejected | executed
@@ -199,27 +204,23 @@ Judges see *why* without exposing internal LLM scratch space.
 
 ## 8. The kill-shot demo moment
 
-A policy conflict surfaced mid-decision:
+A policy conflict surfaced mid-decision. What the kernel computes for the
+parameter change (the card shows these fields; wording of the plan varies
+per run):
 
 ```
-PROPOSED ACTION
-
-Change CNC controller parameter X.
-
-Capability:    Engineering Agent ✓
-Permission:   Production Systems ✓
-Evidence:     3 supporting reports ✓
-
-Policy conflict detected:
-  Operations Policy 17     "Approval required for parameter changes."
-  Emergency Policy 4        "Automatic changes permitted under emergency conditions."
-  Current incident status:  NOT classified as emergency.
-
-Risk: 5 / 5
-Reversibility: ✗ (requires controlled rollback)
-
-→ HUMAN APPROVAL REQUIRED
+PROPOSED ACTION   Adjust CNC 2 controller parameter X by +5%
+Actor             Engineering Agent (holds Process Parameter Modification ✓)
+Risk              5 / 5   ·  reversible: no
+Policy conflict   Multiple non-superseded policies share scope
+                  "production.parameter_changes": Operations Policy 17,
+                  Emergency Policy 4
+Recommendation    request-approval  →  Awaiting human approval (route-to-human)
 ```
+
+The contradicting evidence (Historical Incident #17: worn hydraulic seal,
+confidence 0.92) is surfaced by the agent and by the Knowledge Base's own
+contradiction detection, not by the kernel.
 
 That single interaction demonstrates: structured content, relationships, provenance, policy, authority, reasoning, workflow, human-in-the-loop, agent execution.
 
@@ -267,7 +268,7 @@ awaiting-approval ─approve / reject (human)─▶ approved / rejected ■
 awaiting-approval ─request-evidence (human)─▶ awaiting-approval
 approved ─execute (execution.success)───────▶ executed | failed
 executed ─propose-rollback (human, deviation observed)─▶ rollback-proposed
-failed   ─propose-rollback (human)──────────▶ rollback-proposed
+failed   ─propose-rollback-after-failure (human)─▶ rollback-proposed
 rollback-proposed ─complete-rollback (rollback executed)─▶ rolled-back ■
 rollback-proposed ─retry-rollback (human; last attempt failed, none pending)─▶ rollback-proposed
 ```
@@ -286,7 +287,9 @@ Wiring: `apps/web/lib/process-engine.ts`, used by `/api/plan` and
 `/api/decisions/[id]/{action,execute,observe,rollback,resume}`. It's behind
 `QUICKSILVER_PROCESS_ENGINE=on`. If the definition isn't in the
 dataset, the routes fall back to their built-in checks. If it's present
-but invalid, they return 409 and move nothing.
+but invalid, the decision routes return 409 and move nothing, and
+`/api/plan` still records the plan but holds every decision in `proposed`
+(resumable once the definition is fixed).
 
 ## 9. Things we are NOT building
 

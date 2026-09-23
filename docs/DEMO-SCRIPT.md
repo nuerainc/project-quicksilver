@@ -33,26 +33,27 @@
 > "The agent found two potentially applicable policies. Watch."
 
 - Pan to the Decision card with a policy conflict (usually the controller
-  parameter change). It will look something like:
+  parameter change) and click **Show reasoning & evidence**. The kernel's
+  conflict line reads:
 
   ```
-  Policy conflict detected:
-    Operations Policy 17   "Approval required for parameter changes."
-    Emergency Policy 4      "Automatic changes permitted under emergency conditions."
-    Current incident status:  NOT classified as emergency.
+  Multiple non-superseded policies share scope "production.parameter_changes":
+  Operations Policy 17 — Production Parameter Changes, Emergency Policy 4 — Deviations Under Emergency Conditions.
   ```
+
+- The dashed **Independent review** block below it is the reviewer model:
+  advisory only, never a gate.
 
 > "Risk 5 of 5, and the change isn't reversible without a controlled rollback. So the kernel routes it to a human."
 
-- Point at the **Process** line: *Decision Lifecycle · Awaiting human approval (via route-to-human)*.
+- Point at the **Process** line: *Process · Decision Lifecycle v3 · Awaiting human approval (via route-to-human)*.
 - If a card arrived **Auto-approved by the kernel** (risk ≤ 2), point at it too: the autonomous lane, governed by a number in a Sanity document.
 
 ## 1:50–2:10 — Approve
 
 > "The CEO can approve. Watch the state change."
 
-- Click **Approve**. Notice the status flips to `approved` and the buttons swap.
-- Show the disposition banner.
+- Click **Approve**. The status pill flips to `approved`, the buttons swap, and the Process line moves to *Approved (via approve)*.
 
 ## 2:10–2:40 — Execute + observe
 
@@ -74,7 +75,7 @@
 
 ## Backup scenes (use only if main flow breaks)
 
-- If the rollback path triggers instead of improvement (~30% seeded chance): re-run the demo with a different `_id` seed or refresh state. Use the rollback demo as the main if the kill-shot lands on it.
+- If the rollback path triggers instead of improvement (~30% seeded chance): the outcome is decided per decision, so execute a different card, or use the rollback path as the demo: **Propose rollback** → **Approve rollback** → **Execute rollback (simulated)**.
 - If MCP isn't set up yet, point the camera at `Sanity Manage` and show the Context MCP endpoint configuration panel (proves the integration is real, not mocked).
 
 ## Cut-tracks to capture ahead of submission

@@ -100,6 +100,7 @@ npm install
 #   NEXT_PUBLIC_SANITY_DATASET=production
 #   SANITY_ORG_ID=ou5ydq271
 #   SANITY_AUTH_TOKEN=<project-scoped Editor token>
+#   SANITY_CONTEXT_MCP_URL=https://api.sanity.io/v1/context/organizations/ou5ydq271/mcp/quicksilver-agent
 #   SANITY_CONTEXT_TOKEN=<org-scoped Context Viewer token>   # for MCP (both endpoints)
 #   SANITY_CONTEXT_KB_MCP_URL=https://api.sanity.io/v1/context/organizations/ou5ydq271/mcp/quicksilver-knowledge-base   # optional: adds KB-mode
 #   AZURE_RESOURCE_NAME=<resource>     # Azure OpenAI / Foundry (deployments: qs-planner,
@@ -138,7 +139,8 @@ npm run kernel:test
 npm run agent:test
 
 # Live end-to-end test (Resume after a broken process definition; Retry after
-# a rollback that fails). Passed 44/44 against production on Sep 23, 2026.
+# a rollback that fails). Passed 44/44 against production on Sep 23, 2026, with
+# fault injection switched on for the run and off again afterwards.
 # It writes to the dataset and briefly breaks the Decision Lifecycle, so it
 # needs SANITY_AUTH_TOKEN and a deployment you control with
 # QUICKSILVER_PROCESS_ENGINE=on and QUICKSILVER_ALLOW_FAULT_INJECTION=on

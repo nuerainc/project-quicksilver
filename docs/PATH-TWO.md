@@ -116,8 +116,8 @@ demo; it encounters a real conflict the kernel has to adjudicate.
 
 ## Testing access
 
-No login required. Quicksilver has no auth layer — the app, the Sanity
-Studio, and the dataset itself are all open for inspection.
+No login required for the app or the dataset — Quicksilver has no auth
+layer. The deployed Sanity Studio needs a Sanity login.
 
 ## Repo & project
 

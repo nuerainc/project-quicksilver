@@ -59,7 +59,7 @@ flowchart LR
     Kernel{"⚖️ Quicksilver Kernel<br/>capability · authority<br/>risk · approval"}
     Proc --> Kernel
 
-    Kernel -- "risk ≤ 2" --> Auto["✅ Auto-approved"]
+    Kernel -- "risk ≤ 2, no conflicts" --> Auto["✅ Auto-approved"]
     Kernel -- "needs a human" --> UI["👤 Approval UI"]
     Kernel -- "hard block" --> Rej["⛔ Rejected"]
 
@@ -72,15 +72,15 @@ flowchart LR
 
 ## Why it isn't "just RAG"
 
-A keyword search finds *"Engineering approval is required for parameter changes."* Quicksilver's kernel works out things a search can't:
+A keyword search finds *"Engineering approval is required for parameter changes."* Quicksilver works out things a search can't, and it's clear about which part does what: the **kernel** is deterministic code, the **agent** is the LLM reading Sanity.
 
-| Question | Answered by |
+| Question | Worked out by |
 |---|---|
-| Does this actor actually **hold the capability**, and is it granted? | `entity` → `capability` references |
-| Which policies **apply**, which are **superseded**, which **conflict** (and at what priority)? | `policy` scope, priority, `supersedes[]` |
-| Does any evidence **contradict** the plan, and how confidently? | `evidence.contradicts[]` + confidence |
-| How **risky** is it: base risk, impact, reversibility, uncertainty? | Deterministic risk formula, 0–5 |
-| Who has to approve, and **what can happen next**? | The Decision Lifecycle process, stored in Sanity |
+| Does this actor actually **hold the capability**, and is it granted? | Kernel, from `entity` → `capability` references |
+| Which policies **apply**, which are **superseded**, which **conflict**? | Kernel: policy scope + `supersedes[]`; two live policies in the same scope are flagged as a conflict |
+| Does any evidence **contradict** the plan, and how confidently? | Agent, from `evidence.contradicts[]` + confidence (GROQ) and the Knowledge Base's own contradiction detection |
+| How **risky** is it: base risk, impact, reversibility, uncertainty? | Kernel, a deterministic formula, 0–5 |
+| Who has to approve, and **what can happen next**? | Kernel, running the Decision Lifecycle process stored in Sanity |
 
 The seed data includes a real dilemma. Operations Policy 17 and Emergency Policy 4 conflict in the same scope, and a historical incident (confidence 0.92) says the root cause is mechanical, not parameter drift. The agent has to reason through a conflict that is actually in the data, not one staged for the demo.
 
@@ -109,7 +109,7 @@ stateDiagram-v2
 ```
 
 - **Tighten the autonomy ceiling in Studio** by changing one number, and the next decision follows it, with no redeploy.
-- **Illegal jumps are refused** with a plain-English reason. Approve, reject and rollback always need a human.
+- **Illegal jumps are refused** with a plain-English reason. Approve, reject and rollback always need a human click; the kernel and executor can never take them. (The demo has no login, so anyone using the app is that human.)
 - **Every step is stamped** with the definition's version and `_rev`, so you can see exactly which rules were in force.
 - **A broken definition stops the line.** If a state is unreachable or a guard is malformed, the kernel moves nothing rather than bypassing its own playbook.
 - **Optimistic locking**: two simultaneous approvals give exactly one success and one clean `409`.
@@ -118,7 +118,7 @@ stateDiagram-v2
 
 1. Open **[quicksilver-seven.vercel.app](https://quicksilver-seven.vercel.app)**. There's no login, and the objective is pre-filled.
 2. Click **Send to Quicksilver**. A real plan takes about a minute.
-3. Scroll to **Decisions**. Each card shows the kernel's risk and verdict, a **Process** line (where it is, what can happen next) and a dashed **Independent review** block.
+3. Scroll to **Decisions**. Each card shows the kernel's risk and verdict and a **Process** line (where it is, what can happen next). Click **Show reasoning & evidence** for the policies, evidence and the dashed **Independent review** from the reviewer model.
 4. **Approve** a card, **Execute** it (simulated) and **Observe** the metric. If it moves the wrong way, **propose a rollback**.
 5. Open the **[Decision log](https://quicksilver-seven.vercel.app/decisions)** to see every transition, who took it (kernel, human or executor) and when.
 
@@ -130,6 +130,8 @@ stateDiagram-v2
 | Agent tests: model config, strict-schema guards for every model schema | **13 / 13** |
 | Live governance stress test on production: lanes, races, prompt injection, a broken definition | **17 / 17** |
 | Automated live e2e (`npm run e2e:live`): Resume after a broken definition, Retry after a failed rollback | **44 / 44** |
+
+The two live runs were made against Decision Lifecycle v2; v3 changed only which guard catches decisions routed to a human.
 
 The stress test found real bugs: a risk formula that scored nearly everything 5/5, a failed rollback that could strand a decision, and a strict-schema error on the query route. Each one is fixed and written up in the [build log](./BUILD-LOG.md).
 
@@ -156,7 +158,7 @@ quicksilver/
 ├── packages/
 │   ├── kernel/         Deterministic authority + process engine (no LLM)
 │   └── agent/          Planner, reviewer, query agent, MCP bindings, model roles
-├── docs/               DEV posts, demo script
+├── docs/               DEV posts, demo script, early drafts
 ├── ARCHITECTURE.md     Design and data model
 ├── SUBMISSION.md       Challenge details, Sanity project info, how to run
 └── BUILD-LOG.md        Day-by-day build history across every environment
@@ -181,7 +183,7 @@ npm run kernel:test         # 39 kernel tests
 npm run agent:test          # 13 agent tests
 npm run smoke               # dataset integrity
 npm run verify:mcp          # both Context MCP endpoints, live
-npm run verify:llm          # each model role responds with tools + structured output
+npm run verify:llm          # each model role responds; planner + reviewer also do tools + structured output
 ```
 
 Set `QUICKSILVER_PROCESS_ENGINE=on` to have the kernel run the Decision Lifecycle stored in Sanity. See [`.env.example`](./.env.example) for every variable and [`SUBMISSION.md`](./SUBMISSION.md) for the full setup, including Azure.
@@ -206,4 +208,4 @@ Quicksilver was built for the **[Sanity Challenge](https://dev.to/challenges)** 
 
 ## License
 
-[MIT](./LICENSE) © 2026 Brodi
+[MIT](./LICENSE) © 2026 J.B.T. Beebe
