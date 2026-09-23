@@ -154,7 +154,7 @@ test('Risk: parameter change proposal computes to risk 4', () => {
   }
   const capability = capabilities.find((c) => c.id === 'cap-process-param')
   const risk = computeRisk(action, capability, evidence)
-  // base 4 + financial 0 (<10k tier 0 or 1) + operational 3 + reversibility 0 + uncertainty 2
+  // base 4 + impact tier 1 (max of financial tier 1 for $5k, operational tier 1 for 3) + reversible 0 + uncertainty 0 = 5
   // expected: 4 + 0 + 3 + 0 + 2 = 9 → clamped to 5. The exact clamp may shift with calibration.
   assert.ok(risk >= 4 && risk <= 5, `Expected risk in [4,5], got ${risk}`)
 })
@@ -317,7 +317,7 @@ test('Thresholds: explicit thresholds argument overrides env', () => {
 
 test('Authorize: mid-tier risk (above autoMax, at or below review) still requires approval -- tier quirk regression', () => {
   // Default thresholds: autoMax=2, review=3. This action computes to risk
-  // exactly 3 (base 2 + operational 1), which is > autoMax but not > review.
+  // exactly 3 (base 2 + operational impact tier 1), which is > autoMax but not > review.
   // Before the fix, that combination could produce recommendation:
   // 'execute-autonomously' with requiresApproval: true simultaneously -- an
   // inconsistent result, since the UI labels the decision from `recommendation`.
@@ -330,7 +330,7 @@ test('Authorize: mid-tier risk (above autoMax, at or below review) still require
     evidenceIds: ['evidence-maint-847'],
     financialExposure: 0,
     reversible: true,
-    operationalImpact: 1,
+    operationalImpact: 2,
     uncertainty: 0,
   }
   const result = authorize({ action, actor, capabilities, policies, evidence })
@@ -361,4 +361,27 @@ test('Authorize: result carries per-policy audit rows for the decision record', 
     result.policyChecks.map((c) => c.policyId).sort(),
     ['policy-emergency-4', 'policy-ops-17'],
   )
+})
+test('Risk calibration: real planner inputs spread across the scale instead of saturating at 5', () => {
+  // Inputs taken from the Sep 22 live stress test (capability base, $ exposure,
+  // operational impact, uncertainty, reversible). Under the original formula
+  // every one of these computed to 5.
+  const cases: Array<[string, number, number, number, number, boolean, number]> = [
+    ['read-only diagnostic scan', 1, 0, 2, 2, true, 2],
+    ['read-only maintenance log query', 2, 0, 1, 2, true, 2],
+    ['escalate to maintenance lead', 2, 0, 2, 3, true, 3],
+    ['on-site inspection with $4.2k parts', 1, 4200, 4, 2, true, 3],
+    ['incident response notice, high uncertainty', 3, 0, 1, 4, true, 4],
+    ['CNC parameter change', 4, 0, 5, 2, true, 5],
+    ['emergency override', 5, 0, 2, 4, true, 5],
+    ['irreversible parameter change', 4, 0, 0, 0, false, 5],
+  ]
+  for (const [name, base, exposure, impact, uncertainty, reversible, expected] of cases) {
+    const risk = computeRisk(
+      { description: name, actorId: 'a', capabilityId: 'c', applicablePolicyIds: [], evidenceIds: [], financialExposure: exposure, reversible, operationalImpact: impact as never, uncertainty: uncertainty as never },
+      { id: 'c', name, baseRiskLevel: base as never, authorizedEntityIds: [] },
+      [],
+    )
+    assert.equal(risk, expected, name)
+  }
 })

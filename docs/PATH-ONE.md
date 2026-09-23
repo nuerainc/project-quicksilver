@@ -69,7 +69,7 @@ Policy 4, both in scope `production.parameter_changes`), and proposes
 adjusting a CNC controller parameter by 5%. The kernel's authority
 check surfaces the conflict (same scope, priority 5 vs. priority 7) and
 the historical-incident evidence that contradicts the parameter-adjustment
-hypothesis (confidence 0.92). Risk computes to 4 of 5. Reversibility is
+hypothesis (confidence 0.92). Risk lands at 5 of 5. Reversibility is
 partial. The recommendation routes to **human approval**.
 
 Approve, execute (simulated), observe a metric moved 32 → 25.6 hours

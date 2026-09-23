@@ -38,7 +38,7 @@ that knows its place: the kernel authorizes; the agent proposes.
 The company model — organizations, departments, humans, agents, robots,
 capabilities, policies, evidence, objectives, decisions, metrics — is
 all structured content in Sanity. Ten document types, a Studio schema
-that ships in the repo, 52 seed docs covering a manufacturing scenario
+that ships in the repo, 53 seed docs covering a manufacturing scenario
 deliberately engineered with a policy conflict and contradicting
 evidence so the agent has *real* things to reason over. (`metric` docs
 aren't part of the seed — they're created at runtime by the closed-loop

@@ -40,7 +40,8 @@ Policy 4, both in scope `production.parameter_changes`), and proposes
 adjusting a CNC controller parameter by 5%. The kernel's authority check
 surfaces the conflict (same scope, priority 5 vs. priority 7) and the
 historical-incident evidence that contradicts the parameter-adjustment
-hypothesis (confidence 0.92). Risk computes to 4 of 5. The recommendation
+hypothesis (confidence 0.92). Risk lands at 5 of 5 (a base-4 capability
+plus real operational impact). The recommendation
 routes to **human approval**. Approve, execute (simulated), observe a
 metric move, and close the loop — the full decision record is persisted
 as an auditable `decision` doc in Sanity.
@@ -73,17 +74,15 @@ data is structured.
 **Live, deployed, click-through: https://quicksilver-seven.vercel.app**
 
 No login required — the CEO Intent box comes pre-filled with the seed
-objective. Click **SEND TO QUICKSILVER**, then scroll past the Plan
-paragraph and the Required Capabilities / Constraints sections to the
-four cards under **DECISIONS**. Each one carries a dashed **INDEPENDENT
-REVIEW** block, kept visually separate from the kernel's own
-risk/authority computation above it. Go straight to the **fourth card**
-("Plan a staged firmware update…") if you're short on time — its
-independent review throws a real ⚠️ flag in red: the proposal doesn't
-specify alignment with Operations Policy 17. That's not scripted for the
-demo; it's the reviewer model catching a real policy gap against
-structured data, live. From there: approve, execute (simulated), and
-observe the metric move.
+objective. Click **SEND TO QUICKSILVER** (a real plan takes about a
+minute), then scroll past the Plan paragraph to the cards under
+**DECISIONS**. The planner reasons fresh on every run, so the exact cards
+vary. Each one carries a dashed **INDEPENDENT REVIEW** block, kept
+visually separate from the kernel's own risk/authority computation above
+it. Open **Show reasoning & evidence** on any card with a flag count to see
+the reviewer catching real gaps, like a proposal that never confirms
+alignment with Operations Policy 17. Nothing there is scripted. From
+there: approve, execute (simulated), and observe the metric move.
 
 Each card also carries a **Process** line: *Decision Lifecycle v2 ·
 Awaiting human approval (via route-to-human) · Next: Approve (human) ·
@@ -91,8 +90,11 @@ Reject (human)*. That is the kernel running a process definition read
 from Sanity. A card the kernel rates low-risk (risk ≤ 2) arrives already
 approved, marked *"Auto-approved by the kernel."* If a metric moves the
 wrong way after execution, you can propose, approve, and execute a
-rollback, and the original decision moves to *rolled back*. The
-**Decision log** page shows every decision's full process history.
+rollback, and the original decision moves to *rolled back*. If the
+rollback itself fails, a human can retry it. The **Decision log →** link
+(top right) shows every decision on record with its full process history:
+which transition moved it, who or what took it (kernel, human, executor),
+and when.
 
 ## Code
 
@@ -138,6 +140,16 @@ content and read by the kernel on every state change. Round-tripping
 them to and from Sanity's typed fields is covered by the kernel's tests,
 so what's in Content Lake is exactly what the kernel runs.
 
+**Proven live, not just in tests.** Before submitting, I stress-tested the
+deployed site against the production dataset. Every status change went
+through the Sanity-stored process. Two simultaneous approvals of the same
+decision gave exactly one success and one clean refusal. A guard added to
+the process in Content Lake took effect on the very next request, with no
+redeploy. A deliberately broken definition made the kernel refuse every
+transition until it was restored. The same run found five real problems,
+including a risk formula that scored nearly everything 5/5. All five are
+fixed, and the fixes are in the build log.
+
 Writes go through `@sanity/client` mutations against the HTTP API
 (Context MCP is read-only) — every plan run persists a `decision`
 document with the question, the evidence and policies considered, the
@@ -169,10 +181,12 @@ pass end to end (schema lock, kernel, agent harness, the full Next.js app,
 seed data with the deliberate policy conflict, first submission drafts);
 **Claude Code** (via Cowork) then took it the rest of the way — the real
 Knowledge Base Context MCP integration, the independent reviewer wired
-into the live `/api/plan` route, three real bugs found and fixed (a
-kernel risk-tier edge case, and the same strict-JSON-schema mistake made
-twice), the live Vercel deployment, the Sanity Workflows bonus, and
-the kernel's process engine that runs Sanity-stored process definitions.
+into the live `/api/plan` route, real bugs found and fixed (a kernel
+risk-tier edge case, and the same strict-JSON-schema mistake three times,
+now guarded by a test), the live Vercel deployment, the Sanity Workflows bonus,
+the kernel's process engine that runs Sanity-stored process definitions,
+and a live stress test of the deployed site that led to a recalibrated
+risk formula and a v2 of the Decision Lifecycle.
 
 ---
 

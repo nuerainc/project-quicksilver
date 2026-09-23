@@ -815,7 +815,31 @@ objectives and API scenarios were run, all tagged `[STRESS TEST 9/22]`.
 5. Cosmetic: the refusal text "has no a transition" is fixed.
 Kernel tests: 37/37. Agent tests: 13/13.
 
-**Open, for the user to decide:** risk saturation. All 20 live decisions
+**Risk formula recalibrated (the user's call, same night).** The saturation
+problem described below was fixed. `computeRisk` now adds the capability's
+base risk + one impact tier (the larger of the financial tier and
+operational impact tiered 0/1/2) + 1 if irreversible + 1 if uncertainty
+≥ 4, clamped to 0–5. On the same 17 live inputs the scores spread to
+2 ×3, 3 ×6, 4 ×2, 5 ×6. Read-only work lands at 2 (autonomous), and
+parameter changes and emergency overrides stay at 5. The tier-quirk
+regression test's input moved from operational impact 1 to 2 to keep its
+intended risk-3 case. A new calibration test pins all 8 live-derived
+cases. Kernel tests: 38/38. The posts' "risk 4 of 5" became "5 of 5"
+(matches live), and their card-specific demo instructions were replaced,
+because planner output varies per run.
+
+**History reset tooling.** The user chose to wipe all decisions and
+rebuild a curated history for the submission. The new
+`npm run reset:history` does a dry run by default and takes `--confirm`.
+It runs a preflight (token, every definition valid), takes a
+`sanity dataset export` backup to `apps/studio/backups/` (gitignored), and
+aborts if the backup fails. It then deletes every decision, runtime
+metric and Sanity Workflows `workflow.metadata` doc (referencing docs
+first, in batches), re-seeds the 53-doc baseline, and verifies the result
+(1 seeded decision, 0 metrics, Decision Lifecycle v2 with 12 transitions,
+`npm run smoke`).
+
+**Was open, now fixed (see above):** risk saturation. All 20 live decisions
 scored risk 5/5 except one at 4, including "read-only diagnostic scan"
 proposals. Because risk adds three 0–5 inputs (base + operational impact
 + uncertainty, plus exposure and reversibility), almost any action clamps
@@ -977,7 +1001,7 @@ user decision.
 - Schema (10 types, incl. `reviewerNotes` on `decision`) — locked, deployed live
 - Seed (52 docs) — locked, in `d280bqjc/production`, **public dataset visibility confirmed**
 - Kernel (capability + authority + risk + approval) — tier-quirk bug fixed
-- Kernel process engine — runs Sanity-stored process definitions; 37/37 kernel tests (15 authorization + 22 process engine), live stress-tested; wired into every decision route behind `QUICKSILVER_PROCESS_ENGINE=on`
+- Kernel process engine — runs Sanity-stored process definitions; 38/38 kernel tests (16 authorization incl. risk calibration + 22 process engine), live stress-tested; wired into every decision route behind `QUICKSILVER_PROCESS_ENGINE=on`
 - Agent harness (AI SDK 6, structured output, dual-mode MCP: GROQ + Knowledge Base) — wired and live
 - Independent reviewer — wired into the live `/api/plan` route, confirmed rendering real content on production
 - Decision engine (`/api/plan`) — wired, persists decisions with reviewer notes attached
@@ -1031,7 +1055,8 @@ user decision.
 ## Test commands
 
 ```bash
-npm run kernel:test         # kernel tests — 37/37 (authorization + tier-quirk regression + process engine)
+npm run kernel:test         # kernel tests — 38/38 (authorization + tier-quirk regression + risk calibration + process engine)
+npm run reset:history       # dry run; add -- --confirm to back up, wipe decisions/metrics, re-seed, verify
 npm run agent:test          # agent tests — 13/13 (model routing + strict structured-output guard for all 3 schemas)
 npm run smoke               # dataset integrity (counts, conflict pair, capability chain)
 npm run verify:mcp          # both Context MCP endpoints (GROQ mode + Knowledge Base mode), incl. a real knowledge_base_read call

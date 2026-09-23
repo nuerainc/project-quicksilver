@@ -12,6 +12,7 @@
     "smoke": "tsx scripts/smoke-test.ts",
     "seed": "tsx seed/loader.ts",
     "seed:processes": "tsx seed/processes.ts",
+    "reset:history": "tsx scripts/reset-history.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

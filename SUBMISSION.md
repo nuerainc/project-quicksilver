@@ -127,7 +127,7 @@ npm run verify:mcp
 # Verify the LLM (each role responds; planner/reviewer do tools + structured output)
 npm run verify:llm
 
-# Run the kernel tests (authorization + process engine: 37 tests)
+# Run the kernel tests (authorization + process engine: 38 tests)
 npm run kernel:test
 
 # Start the Studio (localhost:3333)
@@ -168,7 +168,7 @@ The **Quicksilver Kernel** is a deterministic TypeScript library that:
 
 - checks capability (does the actor have it AND is it granted)
 - checks authority (which policies apply, which are superseded, which conflict)
-- computes risk (deterministic formula clamped 0–5)
+- computes risk (deterministic, tiered: capability base risk + impact tier + irreversibility + high uncertainty, clamped 0–5)
 - routes to approval gate (autonomous / request-approval / reject)
 - runs process definitions stored in Sanity (`packages/kernel/src/process.ts`):
   validates them (reachability, dead ends, guard shape), evaluates

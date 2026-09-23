@@ -40,7 +40,7 @@
     Current incident status:  NOT classified as emergency.
   ```
 
-> "Risk level 4 of 5. Reversibility is partial. So Quicksilver routes to human approval."
+> "Risk level 5 of 5. Reversibility is partial. So Quicksilver routes to human approval."
 
 ## 1:50–2:10 — Approve
 
