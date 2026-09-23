@@ -13,7 +13,7 @@
  *   4. Delete      — only with --confirm. Plugin metadata, metrics and rollback decisions
  *                    go first, because they reference other decisions.
  *   5. Re-seed     — `npm run seed`: restores the 53 baseline docs, including the one
- *                    seeded decision and both process definitions (Decision Lifecycle v2).
+ *                    seeded decision and both process definitions (Decision Lifecycle v3).
  *   6. Verify      — counts after, definition version in Content Lake, `npm run smoke`.
  *
  * Nothing else is touched: organization, departments, entities, capabilities,
@@ -163,9 +163,9 @@ async function main() {
   console.log(`decisions now:          ${after.decisions} (expected 1 seeded)`)
   console.log(`metrics now:            ${after.metrics} (expected 0)`)
   console.log(`workflow plugin meta:   ${after.metadata} (expected 0)`)
-  console.log(`Decision Lifecycle:     v${after.lifecycle?.version ?? '?'}, ${after.lifecycle?.transitions ?? '?'} transitions (expected v2, 12)`)
+  console.log(`Decision Lifecycle:     v${after.lifecycle?.version ?? '?'}, ${after.lifecycle?.transitions ?? '?'} transitions (expected v3, 12)`)
   const smoke = run('npm', ['run', 'smoke'], studioDir)
-  const ok = after.decisions === 1 && after.metrics === 0 && after.metadata === 0 && after.lifecycle?.version === 2 && smoke === 0
+  const ok = after.decisions === 1 && after.metrics === 0 && after.metadata === 0 && after.lifecycle?.version === 3 && smoke === 0
   console.log(ok ? '\n✓ Reset complete. The decision history is clean and ready to rebuild.' : '\n! Reset finished, but a check above did not match — paste this output to Claude.')
 }
 

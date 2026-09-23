@@ -33,7 +33,10 @@ export const decisionLifecycle: WorkflowSeed = {
   // v2 (from the Sep 22 live stress test): rollback retry after a failed
   // rollback, no "roll back a rollback", and plan decisions only for
   // rollback proposals.
-  version: 2,
+  // v3 (Sep 23 pre-submission audit): route-to-human is the catch-all for
+  // every non-rejected decision that auto-approve doesn't take, so an editor
+  // can tighten the autonomy ceiling by changing ONE number in Studio.
+  version: 3,
   trigger: 'The planner proposes an action and the kernel authorizes it (POST /api/plan).',
   initialState: 'proposed',
   states: [
@@ -77,8 +80,12 @@ export const decisionLifecycle: WorkflowSeed = {
       automatic: true,
       guard: {
         any: [
-          { fact: 'kernel.recommendation', op: 'eq', value: 'request-approval' },
-          // Autonomous per the kernel, but above this process's autonomy ceiling.
+          // Everything the kernel didn't hard-block and auto-approve didn't
+          // take: approval requests, and "autonomous" actions above this
+          // process's autonomy ceiling (whatever number the ceiling holds).
+          { fact: 'kernel.recommendation', op: 'in', value: ['request-approval', 'execute-autonomously'] },
+          // Older decision documents stored no recommendation: risk alone
+          // still sends them to a human.
           { fact: 'kernel.riskLevel', op: 'gt', value: 2 },
           // Rollback decisions always get a human, whatever the risk math says.
           { fact: 'decision.kind', op: 'eq', value: 'rollback' },

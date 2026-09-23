@@ -16,16 +16,16 @@ Ten document types. Enough to express the company; few enough to keep authoring 
 
 | Type | Purpose | Status |
 |---|---|---|
-| `organization` | The fictional company (root doc) | stub |
-| `department` | Organizational units with leader, members, capabilities, objectives | stub |
-| `entity` | The unified entity abstraction (human, agent, robot, service, system, contractor) | stub |
-| `capability` | What can be done, by whom, with what risk and tools | stub |
-| `policy` | Rules with scope, priority, supersedes, appliesTo, approvalRequirements | stub |
-| `objective` | Goal with deadline, constraints, successMetrics, budget, status | stub |
-| `workflow` | State machine: states, transitions, requiredCapabilities, rollback | stub |
-| `evidence` | Source of truth with type, claim, confidence, supports/contradicts | stub |
-| `decision` | Auditable record: question, evidence, candidateActions, selectedAction, policyChecks, riskLevel, status | stub |
-| `metric` | Measurable state with baseline + direction; not seeded — created at runtime by the closed-loop execute/observe flow | stub |
+| `organization` | The fictional company (root doc) | implemented |
+| `department` | Organizational units with leader, members, capabilities, objectives | implemented |
+| `entity` | The unified entity abstraction (human, agent, robot, service, system, contractor) | implemented |
+| `capability` | What can be done, by whom, with what risk and tools | implemented |
+| `policy` | Rules with scope, priority, supersedes, appliesTo, approvalRequirements | implemented |
+| `objective` | Goal with deadline, constraints, successMetrics, budget, status | implemented |
+| `workflow` | State machine: states, transitions, requiredCapabilities, rollback | implemented |
+| `evidence` | Source of truth with type, claim, confidence, supports/contradicts | implemented |
+| `decision` | Auditable record: question, evidence, candidateActions, selectedAction, policyChecks, riskLevel, status | implemented |
+| `metric` | Measurable state with baseline + direction; not seeded — created at runtime by the closed-loop execute/observe flow | implemented |
 
 Schema lives in `apps/studio/schemas/`. Deployed via `sanity schema deploy` (required for Context MCP GROQ mode).
 
@@ -139,7 +139,7 @@ export const MODELS: Record<QuicksilverModelRole, string> = {
 }
 ```
 
-A bake-off (Day 14–15) would test `gemini-3.8-flash` against `gpt-5.6-sol` for the planner role. Google's explicit positioning of Gemini 3.8 Flash for "autonomous agents and complex enterprise workflows" makes it a serious candidate.
+These are the direct-provider defaults. The live deployment runs on Azure OpenAI, where each role maps to a deployment (`qs-planner`, `qs-reviewer`, `qs-router`, `qs-executor`). Only the **planner** and **reviewer** are called at runtime today; `router` and `executor` are configured and health-checked by `npm run verify:llm`, and execution is simulated.
 
 ## 6. The MCP integration
 
@@ -147,7 +147,7 @@ A bake-off (Day 14–15) would test `gemini-3.8-flash` against `gpt-5.6-sol` for
 
 ```
 Endpoint: https://api.sanity.io/v1/context/organizations/:orgId/mcp/:endpointName
-Auth:     Bearer <SANITY_ORG_TOKEN with Context Viewer permission>
+Auth:     Bearer <SANITY_CONTEXT_TOKEN, org-scoped, Context Viewer permission>
 Modes:    GROQ (live dataset, structured) | Knowledge Base (compiled index)
 Tools:    initial_context, schema_explorer, groq_query, array_field_reader (GROQ)
           initial_context, knowledge_base_read (KB)
@@ -164,7 +164,7 @@ Context MCP is read-only. Decision records, state updates, execution logs, and w
 
 ```
 Endpoint: https://<projectId>.api.sanity.io/v2024-01-01/data/mutate/<dataset>
-Auth:     Bearer <SANITY_WRITE_TOKEN>
+Auth:     Bearer <SANITY_AUTH_TOKEN>
 ```
 
 ## 7. The decision object (auditability without CoT)
@@ -183,7 +183,12 @@ decision {
   policyChecks[]         // [{ policyId, result: applies|superseded|conflicts, reason }]
   riskLevel              // 0-5, computed by kernel
   requiredApproval       // bool, computed by kernel
-  status                 // proposed | approved | rejected | executed | failed
+  status                 // proposed | awaiting-approval | approved | rejected | executed
+                         //   | failed | rollback-proposed | rolled-back
+  kind                   // plan | rollback  (rollbackOf → the decision being rolled back)
+  process                // { definition ref, version, revision } of the lifecycle in force
+  processHistory[]       // one row per transition: from, to, transition, actor, version, _rev, at
+  reviewerNotes          // the independent reviewer's advisory output
   createdAt
   approvedBy?            // ref to entity (human) if status >= approved
   executedAt?
@@ -210,7 +215,7 @@ Policy conflict detected:
   Emergency Policy 4        "Automatic changes permitted under emergency conditions."
   Current incident status:  NOT classified as emergency.
 
-Risk: 4 / 5
+Risk: 5 / 5
 Reversibility: ✗ (requires controlled rollback)
 
 → HUMAN APPROVAL REQUIRED
@@ -259,12 +264,17 @@ proposed ─kernel-reject (auto)──────────────▶ re
 proposed ─auto-approve (auto, risk ≤ 2)─────▶ approved
 proposed ─route-to-human (auto)─────────────▶ awaiting-approval
 awaiting-approval ─approve / reject (human)─▶ approved / rejected ■
+awaiting-approval ─request-evidence (human)─▶ awaiting-approval
 approved ─execute (execution.success)───────▶ executed | failed
 executed ─propose-rollback (human, deviation observed)─▶ rollback-proposed
 failed   ─propose-rollback (human)──────────▶ rollback-proposed
 rollback-proposed ─complete-rollback (rollback executed)─▶ rolled-back ■
 rollback-proposed ─retry-rollback (human; last attempt failed, none pending)─▶ rollback-proposed
 ```
+
+8 states, 12 transitions. `route-to-human` is the catch-all for every
+decision that isn't hard-blocked and isn't auto-approved (v3), so tightening
+the auto-approve ceiling in Studio is a one-number edit.
 
 v2 (after the Sep 22 live stress test) also restricts rollback proposals to
 `decision.kind = plan`, so a rollback is never rolled back. It also adds
@@ -273,7 +283,7 @@ decision held in `proposed` (for example while the definition was invalid),
 using the kernel verdict stored on the decision.
 
 Wiring: `apps/web/lib/process-engine.ts`, used by `/api/plan` and
-`/api/decisions/[id]/{action,execute,observe,rollback}`. It's behind
+`/api/decisions/[id]/{action,execute,observe,rollback,resume}`. It's behind
 `QUICKSILVER_PROCESS_ENGINE=on`. If the definition isn't in the
 dataset, the routes fall back to their built-in checks. If it's present
 but invalid, they return 409 and move nothing.
@@ -288,9 +298,9 @@ but invalid, they return 409 and move nothing.
 - Multiple specialized agents (CEO agent, COO agent, …) — one primary agent with a kernel
 - A general-purpose autonomous agent marketplace
 
-## 10. Open questions (Day 1)
+## 10. Day 1 open questions (all resolved)
 
-- [ ] Sanity org ID (Context MCP requires org-level setup)
-- [ ] Public dataset for judge inspection
-- [ ] Whether to enter both paths (decision: yes)
-- [ ] Demo video length target (3 min)
+- [x] Sanity org ID: `ou5ydq271`, Context enabled
+- [x] Public dataset for judge inspection: `production` is public
+- [x] Enter both paths: yes
+- [x] Working demo: live at https://quicksilver-seven.vercel.app

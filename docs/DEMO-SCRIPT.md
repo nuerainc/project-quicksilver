@@ -1,6 +1,8 @@
 # Quicksilver demo — 3-minute script
 
-> Record against `npm run dev:web` once your `.env` is filled in.
+> Record against the live deployment, https://quicksilver-seven.vercel.app
+> (or `npm run dev:web` locally). The planner reasons fresh on every run, so
+> card wording and numbers vary: narrate what is on screen, not this script.
 > Scripted for screen-recording; voiceover optional.
 
 ---
@@ -9,7 +11,7 @@
 
 > "Most AI business assistants know your documents. Quicksilver knows your company."
 
-- Show `localhost:3000` with the default state.
+- Show https://quicksilver-seven.vercel.app with the default state.
 - Pan across the homepage header.
 
 ## 0:20–0:50 — The objective
@@ -30,8 +32,8 @@
 
 > "The agent found two potentially applicable policies. Watch."
 
-- Pan to the Decision card with policy conflict.
-- The text reads:
+- Pan to the Decision card with a policy conflict (usually the controller
+  parameter change). It will look something like:
 
   ```
   Policy conflict detected:
@@ -40,7 +42,10 @@
     Current incident status:  NOT classified as emergency.
   ```
 
-> "Risk level 5 of 5. Reversibility is partial. So Quicksilver routes to human approval."
+> "Risk 5 of 5, and the change isn't reversible without a controlled rollback. So the kernel routes it to a human."
+
+- Point at the **Process** line: *Decision Lifecycle · Awaiting human approval (via route-to-human)*.
+- If a card arrived **Auto-approved by the kernel** (risk ≤ 2), point at it too: the autonomous lane, governed by a number in a Sanity document.
 
 ## 1:50–2:10 — Approve
 
@@ -55,7 +60,9 @@
 
 - Click **Execute (simulated)**.
 - Click **Observe metric**.
-- Show the observation panel: baseline 32 h/wk, new value 25.6 h/wk, -20% (within tolerance).
+- Show the observation panel: baseline vs. new value and the % change.
+- If it moved the wrong way, click **Propose rollback**: rollbacks always go to a human.
+- Open **Decision log →** to show the full process history (kernel, human, executor).
 
 ## 2:40–3:00 — Cut
 

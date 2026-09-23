@@ -1,126 +1,209 @@
-# Quicksilver
+<div align="center">
 
-> **An Autonomous Company Operating System.**
-> Structured organizational knowledge → agent reasoning → deterministic authority → recorded decision → state update.
+# ⚡ Quicksilver
 
-Submitted to the **Sanity Challenge (Sept 18 – Oct 4, 2026)**: Path One (*Ship an Agent That Queries Real Content*) and Path Two (*Vibe-Code Something Strange*).
+### An Autonomous Company Operating System
 
----
+**A chatbot reads your documents. Quicksilver reasons over your company.**
 
-## The thesis
+[![Live demo](https://img.shields.io/badge/live_demo-quicksilver--seven.vercel.app-000000?style=for-the-badge&logo=vercel&logoColor=white)](https://quicksilver-seven.vercel.app)
+[![Sanity Challenge 2026](https://img.shields.io/badge/Sanity_Challenge-2026-F03E2F?style=for-the-badge&logo=sanity&logoColor=white)](https://dev.to/challenges)
 
-A chatbot reads your documents. **Quicksilver reasons over your company.**
+![Next.js 15](https://img.shields.io/badge/Next.js-15-000000?logo=nextdotjs&logoColor=white)
+![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript&logoColor=white)
+![Sanity](https://img.shields.io/badge/Sanity-Content_Lake_%2B_Context_MCP-F03E2F?logo=sanity&logoColor=white)
+![AI SDK 6](https://img.shields.io/badge/AI_SDK-6-000000?logo=vercel&logoColor=white)
+![Kernel tests](https://img.shields.io/badge/kernel_tests-39%2F39-2EA043)
+![Agent tests](https://img.shields.io/badge/agent_tests-13%2F13-2EA043)
+![Live e2e](https://img.shields.io/badge/live_e2e-44%2F44-2EA043)
+![License: MIT](https://img.shields.io/badge/license-MIT-blue)
 
-The difference is structural: an LLM with access to ordinary documents answers questions. An LLM with access to a structured **company model** — entities, capabilities, policies, evidence, objectives, workflows — can determine *what the company should do*, propose a course of action, route it through a deterministic authority kernel, and record the result as state.
+[**Try it live**](https://quicksilver-seven.vercel.app) ·
+[**Decision log**](https://quicksilver-seven.vercel.app/decisions) ·
+[**Studio**](https://qkslvr.sanity.studio) ·
+[**Path One post**](./docs/DEV-POST-PATH-ONE.md) ·
+[**Path Two post**](./docs/DEV-POST-PATH-TWO.md) ·
+[**Build log**](./BUILD-LOG.md)
 
-```
-CEO: "Reduce production downtime by 20%."
-              ↓
-       QUICKSILVER
-              ↓
-   Sanity Context (MCP, read-only)
-              ↓
-   Structured company model (GROQ + Knowledge Base)
-              ↓
-   Candidate plan (planner model)
-              ↓
-   Independent review (reviewer model)
-              ↓
-   Quicksilver Kernel (capability + authority + risk + approval)
-              ↓
-        APPROVAL GATE
-        /         \
-   autonomous     human
-        \         /
-         \       /
-          state update
-```
+</div>
+
+<p align="center">
+  <a href="https://quicksilver-seven.vercel.app"><img src="docs/images/console.png" alt="The Quicksilver console: a CEO intent box pre-filled with 'Reduce production downtime by 20% over the next 30 days without increasing OPEX.' and a Send to Quicksilver button" width="760"></a>
+</p>
 
 ---
 
-## Repo layout
+Give Quicksilver an objective like *"Reduce production downtime by 20% without increasing OPEX."* An LLM agent reads a **structured model of the company** stored in Sanity (people, agents, capabilities, policies, evidence) and proposes a plan. Then a **deterministic kernel with no LLM inside it** decides what may happen. Each proposed action is auto-approved, sent to a human, or hard-blocked. Every step is recorded as an auditable decision in Sanity.
+
+> **The LLM proposes. The kernel authorizes. The company's playbook is content, and the kernel runs it.**
+
+## How it works
+
+```mermaid
+flowchart LR
+    CEO(["🎯 CEO objective"]) --> Agent
+
+    subgraph Sanity["Sanity: the operating substrate"]
+        Model[("Company model<br/>10 document types")]
+        KB[("Knowledge Base<br/>evidence + policies")]
+        Proc[("Process definitions<br/>states · transitions · guards")]
+    end
+
+    Model -- "Context MCP (GROQ)" --> Agent
+    KB -- "Context MCP (KB)" --> Agent
+
+    Agent["🧠 Planner model<br/>proposes actions"] --> Kernel
+    Agent --> Reviewer["🔍 Reviewer model<br/>advisory only"]
+    Reviewer -.-> UI
+
+    Kernel{"⚖️ Quicksilver Kernel<br/>capability · authority<br/>risk · approval"}
+    Proc --> Kernel
+
+    Kernel -- "risk ≤ 2" --> Auto["✅ Auto-approved"]
+    Kernel -- "needs a human" --> UI["👤 Approval UI"]
+    Kernel -- "hard block" --> Rej["⛔ Rejected"]
+
+    Auto --> Exec["▶️ Execute (simulated)<br/>→ observe metric"]
+    UI --> Exec
+    Exec -- "metric moved the wrong way" --> RB["↩️ Rollback<br/>(always human)"]
+    Exec --> Log[("📜 Decision record<br/>+ process history")]
+    RB --> Log
+```
+
+## Why it isn't "just RAG"
+
+A keyword search finds *"Engineering approval is required for parameter changes."* Quicksilver's kernel works out things a search can't:
+
+| Question | Answered by |
+|---|---|
+| Does this actor actually **hold the capability**, and is it granted? | `entity` → `capability` references |
+| Which policies **apply**, which are **superseded**, which **conflict** (and at what priority)? | `policy` scope, priority, `supersedes[]` |
+| Does any evidence **contradict** the plan, and how confidently? | `evidence.contradicts[]` + confidence |
+| How **risky** is it: base risk, impact, reversibility, uncertainty? | Deterministic risk formula, 0–5 |
+| Who has to approve, and **what can happen next**? | The Decision Lifecycle process, stored in Sanity |
+
+The seed data includes a real dilemma. Operations Policy 17 and Emergency Policy 4 conflict in the same scope, and a historical incident (confidence 0.92) says the root cause is mechanical, not parameter drift. The agent has to reason through a conflict that is actually in the data, not one staged for the demo.
+
+## The playbook is content
+
+Every decision moves through the **Decision Lifecycle**, a process definition stored as a Sanity document and run by the kernel. It has 8 states and 12 transitions. Its guards are structured data (`{ fact, op, value }`), never code strings.
+
+```mermaid
+stateDiagram-v2
+    direction LR
+    [*] --> proposed
+    proposed --> rejected: kernel-reject (hard block)
+    proposed --> approved: auto-approve (risk ≤ 2)
+    proposed --> awaiting_approval: route-to-human
+    awaiting_approval --> awaiting_approval: request-evidence 👤
+    awaiting_approval --> approved: approve 👤
+    awaiting_approval --> rejected: reject 👤
+    approved --> executed: execute-succeeded
+    approved --> failed: execute-failed
+    executed --> rollback_proposed: propose-rollback 👤
+    failed --> rollback_proposed: propose-rollback-after-failure 👤
+    rollback_proposed --> rollback_proposed: retry-rollback 👤
+    rollback_proposed --> rolled_back: complete-rollback
+    rejected --> [*]
+    rolled_back --> [*]
+```
+
+- **Tighten the autonomy ceiling in Studio** by changing one number, and the next decision follows it, with no redeploy.
+- **Illegal jumps are refused** with a plain-English reason. Approve, reject and rollback always need a human.
+- **Every step is stamped** with the definition's version and `_rev`, so you can see exactly which rules were in force.
+- **A broken definition stops the line.** If a state is unreachable or a guard is malformed, the kernel moves nothing rather than bypassing its own playbook.
+- **Optimistic locking**: two simultaneous approvals give exactly one success and one clean `409`.
+
+## Try it in 60 seconds
+
+1. Open **[quicksilver-seven.vercel.app](https://quicksilver-seven.vercel.app)**. There's no login, and the objective is pre-filled.
+2. Click **Send to Quicksilver**. A real plan takes about a minute.
+3. Scroll to **Decisions**. Each card shows the kernel's risk and verdict, a **Process** line (where it is, what can happen next) and a dashed **Independent review** block.
+4. **Approve** a card, **Execute** it (simulated) and **Observe** the metric. If it moves the wrong way, **propose a rollback**.
+5. Open the **[Decision log](https://quicksilver-seven.vercel.app/decisions)** to see every transition, who took it (kernel, human or executor) and when.
+
+## Proven live, not just in tests
+
+| Check | Result |
+|---|---|
+| Kernel unit tests: authorization, risk calibration, process engine | **39 / 39** |
+| Agent tests: model config, strict-schema guards for every model schema | **13 / 13** |
+| Live governance stress test on production: lanes, races, prompt injection, a broken definition | **17 / 17** |
+| Automated live e2e (`npm run e2e:live`): Resume after a broken definition, Retry after a failed rollback | **44 / 44** |
+
+The stress test found real bugs: a risk formula that scored nearly everything 5/5, a failed rollback that could strand a decision, and a strict-schema error on the query route. Each one is fixed and written up in the [build log](./BUILD-LOG.md).
+
+## Stack
+
+| Layer | Choice |
+|---|---|
+| App | Next.js 15 (App Router), TypeScript, Tailwind, deployed on Vercel |
+| Content & state | Sanity Studio + Content Lake: 10 document types, 53 seed documents |
+| Agent read path | Sanity **Context MCP**, in both GROQ mode (live dataset) and Knowledge Base mode (cited, with contradiction detection) |
+| Agent harness | AI SDK 6 + `@ai-sdk/mcp`, role-based models (planner + independent reviewer; Azure OpenAI in production) |
+| Authority | **Quicksilver Kernel**: deterministic TypeScript with no LLM, fail-closed |
+| Write path | `@sanity/client` mutations with `ifRevisionId` optimistic locking |
+| Studio extras | `sanity-plugin-workflow` board for editorial review of decisions |
+
+## Repository layout
 
 ```
 quicksilver/
 ├── apps/
-│   ├── web/          # Next.js 15 + AI SDK 6 — Quicksilver UI + agent runtime
-│   └── studio/       # Sanity Studio — schema authoring + content editing
+│   ├── web/            Next.js app: CEO console, Decision log, API routes
+│   │   └── app/api/    plan · query · decisions/[id]/{action,execute,observe,rollback,resume}
+│   └── studio/         Sanity Studio: schemas, seed data, scripts (seed, smoke, e2e, reset)
 ├── packages/
-│   ├── kernel/       # Deterministic authority: capability, authority, risk, approval
-│   └── agent/        # Model roles + MCP bindings + prompts
-├── ARCHITECTURE.md
-└── README.md
+│   ├── kernel/         Deterministic authority + process engine (no LLM)
+│   └── agent/          Planner, reviewer, query agent, MCP bindings, model roles
+├── docs/               DEV posts, demo script
+├── ARCHITECTURE.md     Design and data model
+├── SUBMISSION.md       Challenge details, Sanity project info, how to run
+└── BUILD-LOG.md        Day-by-day build history across every environment
 ```
 
----
-
-## Stack
-
-| Layer | Choice | Why |
-|---|---|---|
-| Runtime | Next.js 15 (App Router) + TypeScript | Server actions for agent calls, streaming UI |
-| Agent harness | AI SDK 6 (`@ai-sdk/mcp`) | First-class MCP, role-based model config, tool calls |
-| Structured store | Sanity Studio + Content Lake | Schema + GROQ, competition-aligned |
-| Read path | Sanity Context MCP (hosted, read-only) | GROQ mode for structured, Knowledge Base mode for provenance |
-| Write path | Next.js server actions → Sanity HTTP API | Simpler than wiring two MCP clients; Context MCP is read-only |
-| Model — planner | `gpt-5.6-sol` (default) | Strongest reasoning; bake-off candidate: `gemini-3.8-flash`, `claude-sonnet-5` |
-| Model — reviewer | `claude-sonnet-5` | Independent second opinion, near-Opus at Sonnet cost |
-| Model — router | `gpt-5.6-luna` | Cheap classification/intent routing |
-| Styling | Tailwind | Boring and fast |
-| Deploy | Vercel | Lowest-friction deployment for Next.js |
-
-Model IDs are **configuration**, not architecture. Swapping is a one-line change per role.
-
-On **Azure OpenAI / Foundry** (auto-selected when `AZURE_API_KEY` and `AZURE_RESOURCE_NAME` are set) each role maps to a *deployment name* — by default `qs-planner`, `qs-reviewer`, `qs-router`, `qs-executor` — overridable per role with `QUICKSILVER_<ROLE>_MODEL` or globally with `AZURE_DEPLOYMENT`. Run `npm run setup:azure` (needs the Azure CLI and `az login`) to create the resource and the four deployments and write `AZURE_RESOURCE_NAME` / `AZURE_API_KEY` into `.env`, then `npm run verify:llm` to confirm each deployment responds, supports tool calling, and accepts the plan schema.
-
----
-
-## Quickstart (planned)
+## Run it locally
 
 ```bash
-# Install deps at root
+git clone https://github.com/nuerainc/quicksilver-sanity-challenge.git
+cd quicksilver-sanity-challenge
 npm install
+cp .env.example .env        # then fill in Sanity + model credentials
 
-# Run Studio (localhost:3333)
-npm run dev:studio
-
-# Run Quicksilver UI (localhost:3000)
-npm run dev:web
-
-# Deploy schema (required for Context MCP GROQ mode)
-npm run schema:deploy
+npm run schema:deploy       # deploy the Studio schema (Context MCP needs it)
+npm run seed                # push the 53-document demo company
+npm run dev:studio          # Studio  → http://localhost:3333
+npm run dev:web             # App     → http://localhost:3000
 ```
 
-See `.env.example` for required environment variables. **Never commit `.env.local`** — it holds real tokens.
+```bash
+npm run kernel:test         # 39 kernel tests
+npm run agent:test          # 13 agent tests
+npm run smoke               # dataset integrity
+npm run verify:mcp          # both Context MCP endpoints, live
+npm run verify:llm          # each model role responds with tools + structured output
+```
 
-## Sanity setup (current state)
+Set `QUICKSILVER_PROCESS_ENGINE=on` to have the kernel run the Decision Lifecycle stored in Sanity. See [`.env.example`](./.env.example) for every variable and [`SUBMISSION.md`](./SUBMISSION.md) for the full setup, including Azure.
 
-| Field | Value |
+## Sanity project
+
+| | |
 |---|---|
-| Project URL | https://www.sanity.io/organizations/ou5ydq271/project/d280bqjc |
-| Org ID | `ou5ydq271` |
 | Project ID | `d280bqjc` |
+| Dataset | `production`, **public** (query it: `https://d280bqjc.apicdn.sanity.io/data/query/production?query=*`) |
+| Studio | https://qkslvr.sanity.studio (needs a Sanity login with project access) |
+| Organization | `ou5ydq271` |
 
-To get the agent running, you'll need to do this in the Sanity dashboard **once** before Day 6:
+## How it was built
 
-1. **Enable Context** on the org — Manage → Labs → Context (it's a beta opt-in).
-2. **Create an org-scoped API token** with the `Context Viewer` grant — Manage → API → Tokens (organization scope). Put this in `.env.local` as `SANITY_CONTEXT_TOKEN`.
-3. **Create a Context MCP endpoint** in the Context app — pick GROQ mode (live dataset) for the primary read path. Optionally create a second KB-mode endpoint later (one endpoint = one mode).
-4. **Deploy the schema** with `npm run schema:deploy` — without a deployed schema, the Context MCP GROQ endpoint refuses connections with error `-32004`.
+Quicksilver was built for the **[Sanity Challenge](https://dev.to/challenges)** (Sept 18 – Oct 4, 2026) and entered in both paths from one codebase:
 
-Model credentials go in the same root `.env` (the web app reads it too): `AZURE_RESOURCE_NAME` + `AZURE_API_KEY` for Azure, or `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` / `GOOGLE_GENERATIVE_AI_API_KEY` for direct providers.
+- **Path One**, *Ship an Agent That Queries Real Content*: [Quicksilver: An Autonomous Company Operating System](./docs/DEV-POST-PATH-ONE.md)
+- **Path Two**, *Vibe-Code Something Strange*: [Quicksilver: The Company That Operates Itself](./docs/DEV-POST-PATH-TWO.md)
 
----
-
-## Submissions
-
-- **Path One**: *Quicksilver — An Autonomous Company Operating System.* Watch it think.
-- **Path Two**: *Quicksilver — The Company That Operates Itself.* Watch it operate.
-
-One codebase. Two narratives. Two posts.
-
----
+**MiniMax Agent** built the architecture through hardening. **Claude Code** (via Cowork) added the Knowledge Base integration, the live reviewer, the deployment, the process engine and the live testing. The manual work was done in **VS Code**. All of it is in one unified [build log](./BUILD-LOG.md), including every real error and how it was fixed.
 
 ## License
 
-MIT — see [LICENSE](./LICENSE).
+[MIT](./LICENSE) © 2026 Brodi

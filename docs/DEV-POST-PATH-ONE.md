@@ -1,7 +1,11 @@
 <!--
 DEV.to submission post -- Path One ("Ship an Agent That Queries Real Content").
-Paste this into DEV's Path One submission template (dev.to/new, using the
-challenge's prefilled Path One template). Required tag: #sanitychallenge.
+How to publish: open the challenge's prefilled Path One template on DEV. Keep
+its front matter (title / published / tags -- tags must include
+sanitychallenge) and its first "This is a submission for..." line, then
+paste everything below the title here in place of the template's sections.
+Suggested title: Quicksilver: An Autonomous Company Operating System
+Suggested tags: sanitychallenge, ai, webdev, typescript
 -->
 
 # Quicksilver: An Autonomous Company Operating System
@@ -55,8 +59,11 @@ whose guard holds (hard block → rejected, low risk → auto-approved,
 everything else → a human), refuses illegal jumps with a plain-English
 reason, requires a human for approve/reject/rollback, and stamps the
 definition's version and `_rev` on every step in the decision's process
-history. The company's autonomy ceiling is a number in a Sanity document:
-edit it in Studio and the app's behavior follows. An invalid definition
+history. The company's autonomy ceiling is a number in a Sanity document
+(`kernel.riskLevel lte 2`): an editor can tighten it in Studio and the app's
+behavior follows on the next request, no redeploy. (Loosening it past the
+kernel's own env threshold does nothing, on purpose: content can make the
+company more careful, never less.) An invalid definition
 (unreachable state, dead end, malformed guard) stops the kernel moving
 anything, rather than being bypassed.
 
@@ -84,7 +91,7 @@ the reviewer catching real gaps, like a proposal that never confirms
 alignment with Operations Policy 17. Nothing there is scripted. From
 there: approve, execute (simulated), and observe the metric move.
 
-Each card also carries a **Process** line: *Decision Lifecycle v2 ·
+Each card also carries a **Process** line: *Decision Lifecycle v3 ·
 Awaiting human approval (via route-to-human) · Next: Approve (human) ·
 Reject (human)*. That is the kernel running a process definition read
 from Sanity. A card the kernel rates low-risk (risk ≤ 2) arrives already
@@ -105,7 +112,7 @@ Repo: https://github.com/nuerainc/quicksilver-sanity-challenge (public, MIT lice
 | Runtime | Next.js 15, TypeScript, Tailwind |
 | Knowledge substrate | Sanity Studio + Content Lake + Context MCP + Knowledge Bases |
 | Agent harness | AI SDK 6 + `@ai-sdk/mcp` |
-| Models | `gpt-5.6-sol` (planner), `claude-sonnet-5` (reviewer), `gpt-5.6-luna` (router), `gemini-3.8-flash` (executor) — role-based |
+| Models | Role-based: a planner and an independent reviewer, both called live on every plan. In production each role is an Azure OpenAI deployment (`qs-planner`, `qs-reviewer`); swapping a model is a one-line config change |
 | Authority | Quicksilver Kernel (deterministic TypeScript, no LLM) |
 | Write path | `@sanity/client` against the Sanity HTTP API |
 
@@ -134,9 +141,11 @@ aliasing the `initial_context` tool name collision between them to
 including a real `knowledge_base_read` call.
 
 Sanity also holds the company's **processes**. The two `workflow`
-documents (Decision Lifecycle, Production Parameter Change) are process
-definitions with structured guards, edited in Studio like any other
-content and read by the kernel on every state change. Round-tripping
+documents are process definitions with structured guards, edited in
+Studio like any other content. The **Decision Lifecycle** (8 states, 12
+transitions) is read by the kernel on every decision state change; the
+Production Parameter Change process is declared and validated the same
+way, ready for a route to drive it. Round-tripping
 them to and from Sanity's typed fields is covered by the kernel's tests,
 so what's in Content Lake is exactly what the kernel runs.
 
@@ -146,9 +155,13 @@ through the Sanity-stored process. Two simultaneous approvals of the same
 decision gave exactly one success and one clean refusal. A guard added to
 the process in Content Lake took effect on the very next request, with no
 redeploy. A deliberately broken definition made the kernel refuse every
-transition until it was restored. The same run found five real problems,
-including a risk formula that scored nearly everything 5/5. All five are
-fixed, and the fixes are in the build log.
+transition until it was restored (17 of 17 governance checks passed). The
+same run found real problems, including a risk formula that scored nearly
+everything 5/5; all of them are fixed, and the fixes are in the build log.
+Then an automated live test (`npm run e2e:live`) drove the two paths that
+are hardest to trigger by hand, against production: decisions held while
+the process definition was broken, then resumed once it was fixed; and a
+rollback that fails, is retried, and succeeds. **44 of 44 checks passed.**
 
 Writes go through `@sanity/client` mutations against the HTTP API
 (Context MCP is read-only) — every plan run persists a `decision`
@@ -157,7 +170,7 @@ kernel's risk/authority computation, and now the independent reviewer's
 notes too, so a judge can see *why* a decision was made without exposing
 raw LLM scratch space.
 
-## Sanity Project Details (Required)
+## Sanity Project Details
 
 | Field | Value |
 |---|---|
@@ -168,9 +181,10 @@ raw LLM scratch space.
 | Public dataset query | `https://d280bqjc.apicdn.sanity.io/data/query/production?query=*` |
 | Context MCP (GROQ mode) | `https://api.sanity.io/v1/context/organizations/ou5ydq271/mcp/quicksilver-agent` |
 | Context MCP (Knowledge Base mode) | `https://api.sanity.io/v1/context/organizations/ou5ydq271/mcp/quicksilver-knowledge-base` |
-| Testing access | No login required — Quicksilver has no auth layer; the app, Studio, and dataset are all open. |
+| Deployed Studio | https://qkslvr.sanity.studio (needs a Sanity login with project access) |
+| Testing access | No login required for the app or the dataset — Quicksilver has no auth layer. |
 
-## Agent Session (optional but encouraged)
+## Agent Session
 
 The full day-by-day build history — every environment, every real error
 hit and how it was fixed, the final file inventory, and the exact handoff
@@ -186,8 +200,6 @@ risk-tier edge case, and the same strict-JSON-schema mistake three times,
 now guarded by a test), the live Vercel deployment, the Sanity Workflows bonus,
 the kernel's process engine that runs Sanity-stored process definitions,
 and a live stress test of the deployed site that led to a recalibrated
-risk formula and a v2 of the Decision Lifecycle.
+risk formula and a new version of the Decision Lifecycle, plus an
+automated live test (44/44) of its hardest paths.
 
----
-
-#sanitychallenge #ai #webdev #typescript

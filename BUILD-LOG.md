@@ -16,7 +16,7 @@ chronological; each day/section below is tagged with which one did the work.
 |---|---|---|
 | **MiniMax Agent** | Autonomous AI coding agent. Built the project from an empty repo through a working, hardened, submission-drafted vertical slice. | Day 1 – Day 14 (Sep 20–22, 2026) |
 | **VS Code (manual, no AI agent)** | The user's own hands. Never an autonomous phase of its own — runs underneath both agent phases wherever a human had to sit at a real terminal or type a real secret. Used throughout for: running the `npm`/`git`/`sanity` CLI commands that either agent asked for (`PS C:\...` prompts throughout MiniMax's own user-prompt log, and every `git add -A && git commit && git push` in the Claude Code phase below), and entering actual token/API-key values into `.env` and into web forms (Vercel's secret fields) — both AI agents are structurally barred from ever entering credentials themselves and never did. | Continuous, alongside both agent phases |
-| **Claude Code (via Cowork)** | Picked up the repo after MiniMax Agent's Day 14 hardening pass. Built the real Knowledge Base Context MCP integration, wired the independent reviewer into the live app, found and fixed three real bugs (one pre-existing, two it introduced and caught itself), deployed the app live to Vercel, implemented the Sanity Workflows bonus, and wrote this log. | Day 15 onward (Sep 22, 2026 – present) |
+| **Claude Code (via Cowork)** | Picked up the repo after MiniMax Agent's Day 14 hardening pass. Built the real Knowledge Base Context MCP integration, wired the independent reviewer into the live app, found and fixed real bugs (several it introduced and caught itself), deployed the app live to Vercel, implemented the Sanity Workflows bonus, built the kernel's process engine, stress-tested the live site, recalibrated the risk formula, wrote an automated live e2e test (44/44), and wrote this log. | Day 15 onward (Sep 22, 2026 – present) |
 
 **The handoff (Day 14 → Day 15):** MiniMax Agent's own build log (the
 predecessor to this document) ends at "Day 15 of 16" with a hardened,
@@ -816,7 +816,8 @@ objectives and API scenarios were run, all tagged `[STRESS TEST 9/22]`.
 Kernel tests: 37/37. Agent tests: 13/13.
 
 **Risk formula recalibrated (the user's call, same night).** The saturation
-problem described below was fixed. `computeRisk` now adds the capability's
+problem (19 of 20 live decisions scored 5/5, so the autonomous lane was
+unreachable) was fixed. `computeRisk` now adds the capability's
 base risk + one impact tier (the larger of the financial tier and
 operational impact tiered 0/1/2) + 1 if irreversible + 1 if uncertainty
 ≥ 4, clamped to 0–5. On the same 17 live inputs the scores spread to
@@ -894,13 +895,35 @@ decides from a timestamped id hash. So they were made reproducible:
     refused).
   Every step is asserted. It prints PASS/FAIL, exits non-zero on any
   failure, keeps its decisions for the Decision log by default, and
-  removes them with `-- --cleanup`. All 20 live decisions
-scored risk 5/5 except one at 4, including "read-only diagnostic scan"
-proposals. Because risk adds three 0–5 inputs (base + operational impact
-+ uncertainty, plus exposure and reversibility), almost any action clamps
-to 5. So the kernel's autonomous lane is effectively unreachable with real
-planner output, which contradicts the Day 18 conclusion drawn from a single
-risk-3 run.
+  removes them with `-- --cleanup`.
+
+**Sep 23, ~2:30 AM MT: e2e passes live, 44/44.** The first run got 24/25:
+the fault-injection commit hadn't been pushed yet, so production ignored
+`inject`. The preflight now tells old code from new (an invalid inject kind
+gets 400 on new code, 404 on old) and every injected execute asserts the
+response names the fault. After the push (`317372e`), `npm run e2e:live --
+--cleanup` passed **44/44**:
+  - Scenario A: 7 decisions held while the definition was broken, all 7
+    resumed after the restore (3 kernel-reject, 2 auto-approve, 2
+    route-to-human), every second resume refused with 409.
+  - Scenario B: deviation → rollback #1 → injected failure → parent stays
+    `rollback-proposed` → retry-rollback → rollback #2 succeeds → parent
+    `rolled-back`; rollback-of-rollback and late rollback both refused.
+`QUICKSILVER_ALLOW_FAULT_INJECTION` was switched back to `off` in Vercel and
+redeployed; an inject probe now returns 403. The six leftover decisions from the
+failed first run, and the one metric it created, were deleted, so the
+Decision log shows only the curated history (13 decisions).
+
+**Sep 23: pre-submission audit.** Every submission doc was re-checked
+against the code. Fixes: the Studio needs a Sanity login (docs had said it
+was open); only the planner and reviewer run live (router/executor are
+configured, not called); the Decision Lifecycle's autonomy-ceiling claim
+was made true. In v2, lowering the auto-approve ceiling in Studio would
+have left a newly-excluded decision stuck in `proposed`, because
+`route-to-human` hard-coded `riskLevel gt 2`. **v3** makes `route-to-human`
+the catch-all for every non-rejected decision auto-approve doesn't take, so
+tightening the ceiling is a one-number edit (new kernel test; 39/39). The
+README was rewritten for the public repo.
 
 ---
 
@@ -1047,16 +1070,17 @@ quicksilver/
 **Note on `Claude outputs/`:** a folder in the public repo containing an
 already secret-scanned session transcript and DEV-post drafts, committed
 unintentionally via a broad `git add -A` (Day 16). Left as-is by explicit
-user decision.
+user decision at first; removed on Sep 23 during the pre-submission audit,
+because its early DEV-post drafts contradicted the final posts.
 
 ---
 
 ## What's done
 
 - Schema (10 types, incl. `reviewerNotes` on `decision`) — locked, deployed live
-- Seed (52 docs) — locked, in `d280bqjc/production`, **public dataset visibility confirmed**
+- Seed (53 docs) — locked, in `d280bqjc/production`, **public dataset visibility confirmed**
 - Kernel (capability + authority + risk + approval) — tier-quirk bug fixed
-- Kernel process engine — runs Sanity-stored process definitions; 38/38 kernel tests (16 authorization incl. risk calibration + 22 process engine), live stress-tested; wired into every decision route behind `QUICKSILVER_PROCESS_ENGINE=on`
+- Kernel process engine — runs Sanity-stored process definitions; 39/39 kernel tests (16 authorization incl. risk calibration + 23 process engine), live stress-tested (17/17) and e2e-tested (44/44); wired into every decision route behind `QUICKSILVER_PROCESS_ENGINE=on`
 - Agent harness (AI SDK 6, structured output, dual-mode MCP: GROQ + Knowledge Base) — wired and live
 - Independent reviewer — wired into the live `/api/plan` route, confirmed rendering real content on production
 - Decision engine (`/api/plan`) — wired, persists decisions with reviewer notes attached
@@ -1064,16 +1088,13 @@ user decision.
 - Smoke test — green
 - **Live deployment** — https://quicksilver-seven.vercel.app, confirmed working end-to-end against real Azure + Sanity infrastructure
 - Sanity Studio deployed live — https://qkslvr.sanity.studio/
-- Sanity Workflows bonus (Path Two) — implemented, real-build-verified in a clean sandbox; not yet deployed to the user's live Studio
+- Sanity Workflows bonus (Path Two) — deployed live to the Studio
 - Submission artifacts — `SUBMISSION.md`, both DEV.to posts (template-formatted, live URL included) — ready pending final review
 - This unified build log
 
 ## What's pending
 
-- User: `npm install`, `npm run schema:deploy`, `npm run seed:processes`, Studio `npm run deploy`, `git push`, then `QUICKSILVER_PROCESS_ENGINE=on` on Vercel + redeploy, then a live check of the process engine
-
-- User: `npm install`, local Studio check, `sanity deploy`, and `git push` to actually activate the Sanity Workflows bonus live
-- User: commit `BUILD-LOG.md` itself (and the pending Workflows changes) to git so the GitHub link to it resolves
+- User: `npm run seed:processes` to push Decision Lifecycle v3 to Content Lake
 - Demo video recording per `docs/DEMO-SCRIPT.md` (optional — the live deployment already satisfies the "working demo" requirement)
 - Publish both DEV.to posts with `#sanitychallenge` on the user's own account
 - Final token rotation, both local `.env` and Vercel's project env vars, immediately before Oct 4
@@ -1099,7 +1120,7 @@ user decision.
 | Hyphenated runtime IDs everywhere, no dots | Avoids any ambiguity with Sanity's own `drafts.<id>` prefix convention or GROQ path-like semantics | Claude Code |
 | Never enter credentials/secrets into any field, even during deployment | A hard operating rule, not a per-task judgment call — the user enters every secret themselves, in their own browser session | Claude Code |
 | Sanity Workflows kept purely additive (separate metadata doc, no shared fields) | The kernel-driven `decision.status` field must stay the single source of truth the app reads; a plugin that wrote its own `status` field onto the same doc would create two competing truths | Claude Code |
-| Leave the accidentally-committed `Claude outputs/` folder as-is | Already scanned clean of secrets; rewriting public git history this close to the Oct 4 deadline carries more risk than the folder itself | User (explicit decision) |
+| Leave the accidentally-committed `Claude outputs/` folder as-is (later: removed Sep 23, without rewriting history) | Already scanned clean of secrets; rewriting public git history this close to the Oct 4 deadline carries more risk than the folder itself. Its stale post drafts were removed from `main` once they contradicted the final posts | User (explicit decisions) |
 | VS Code stays manual, no AI agent added to it | Secrets and real terminal commands against the user's own machine are the one part of this project neither agent should touch directly | User (established convention, held throughout) |
 | Processes live in Sanity, not YAML in git | The competition rewards Sanity usage: processes in Content Lake are editable in Studio, readable over Context MCP, and versioned by `_rev`; YAML stays a possible export on a later fork | User (on Claude Code's recommendation) |
 | Process guards are structured `{ fact, op, value }`, never evaluated strings | A string expression is an injection path the moment an agent can propose process edits; a closed operator set keeps the kernel the only authority | Claude Code |
@@ -1110,7 +1131,8 @@ user decision.
 ## Test commands
 
 ```bash
-npm run kernel:test         # kernel tests — 38/38 (authorization + tier-quirk regression + risk calibration + process engine)
+npm run kernel:test         # kernel tests — 39/39 (authorization + tier-quirk regression + risk calibration + process engine)
+npm run e2e:live            # live e2e vs. a deployment with fault injection on (44/44 on Sep 23); -- --cleanup removes its data
 npm run reset:history       # dry run; add -- --confirm to back up, wipe decisions/metrics, re-seed, verify
 npm run agent:test          # agent tests — 13/13 (model routing + strict structured-output guard for all 3 schemas)
 npm run smoke               # dataset integrity (counts, conflict pair, capability chain)

@@ -8,10 +8,10 @@
 
 ## Paths
 
-| Path | Title | Post draft |
+| Path | Title | DEV post |
 |---|---|---|
-| **Path One** — *Ship an Agent That Queries Real Content* | Quicksilver: An Autonomous Company Operating System | [`docs/PATH-ONE.md`](./docs/PATH-ONE.md) |
-| **Path Two** — *Vibe-Code Something Strange* | Quicksilver: The Company That Operates Itself | [`docs/PATH-TWO.md`](./docs/PATH-TWO.md) |
+| **Path One** — *Ship an Agent That Queries Real Content* | Quicksilver: An Autonomous Company Operating System | [`docs/DEV-POST-PATH-ONE.md`](./docs/DEV-POST-PATH-ONE.md) |
+| **Path Two** — *Vibe-Code Something Strange* | Quicksilver: The Company That Operates Itself | [`docs/DEV-POST-PATH-TWO.md`](./docs/DEV-POST-PATH-TWO.md) |
 
 Same codebase, two distinct narratives. Two separate DEV posts required.
 
@@ -33,7 +33,12 @@ https://github.com/nuerainc/quicksilver-sanity-challenge (public, MIT licensed)
 **https://quicksilver-seven.vercel.app** — deployed on Vercel, no login
 required, running against real Azure LLM + Sanity infrastructure
 end-to-end (verified: plan → kernel authorization → independent review →
-approve → simulated execute → observe).
+approve → simulated execute → observe → rollback). The **Decision log**
+(https://quicksilver-seven.vercel.app/decisions) shows every decision on
+record with its full process history.
+
+**Studio:** https://qkslvr.sanity.studio (a Sanity login with project
+access is required; the dataset itself is public, see below).
 
 ## Required Sanity Information
 
@@ -44,7 +49,7 @@ approve → simulated execute → observe).
 | Project ID | `d280bqjc` |
 | Dataset (default) | `production` (**public** — confirmed in Sanity Manage → Datasets) |
 | Public dataset access | [See details below](#the-dataset-is-public-for-judges) |
-| Testing access | No login required — Quicksilver has no auth; the app, Studio, and dataset are all open. |
+| Testing access | No login required for the app or the dataset — Quicksilver has no auth. The deployed Studio needs a Sanity login. |
 
 ### The dataset is public for judges
 
@@ -53,7 +58,7 @@ dataset directly. `d280bqjc/production` is set to **public** visibility
 (confirmed in Sanity Manage → Datasets):
 
 1. Public dataset URL form: `https://d280bqjc.apicdn.sanity.io/data/query/production?query=*` (judges can hit this with any GROQ, no token required).
-2. To reproduce or re-verify this yourself: `npx sanity@latest dataset visibility set production public`, then confirm with `npx sanity@latest dataset list`.
+2. To reproduce or re-verify this yourself (from `apps/studio`): `npx sanity dataset visibility set production public`, then confirm with `npx sanity dataset list`.
 3. Note that a *public dataset* is still separate from write access — creating/editing decisions through the app still requires the project-scoped `SANITY_AUTH_TOKEN` described below; only reads are open.
 
 ### Context MCP endpoints (for judges who want to drive the agent directly)
@@ -77,10 +82,9 @@ both and merges their tool sets) and verified end-to-end via
 against the live KB.
 
 Both require a bearer token (org-scoped, **Context Viewer** permission)
-that is not published in this document. The submission window is short;
-a fresh test token will be issued and rotated one final time immediately
-before Oct 4 if judges want to drive the agent directly against these
-endpoints. Otherwise, the included demo video shows the full flow.
+that is not published here. You don't need one to evaluate the project:
+the live deployment runs the same agent against both endpoints on every
+plan, and the dataset itself is public.
 
 ---
 
@@ -127,12 +131,19 @@ npm run verify:mcp
 # Verify the LLM (each role responds; planner/reviewer do tools + structured output)
 npm run verify:llm
 
-# Run the kernel tests (authorization + process engine: 38 tests)
+# Run the kernel tests (authorization + process engine: 39 tests)
 npm run kernel:test
 
-# Live end-to-end test against the deployed app (needs the process engine and
-# QUICKSILVER_ALLOW_FAULT_INJECTION=on on the deployment): proves Resume after
-# a broken process definition, and Retry after a rollback that fails
+# Run the agent tests (model config + strict-schema guards: 13 tests)
+npm run agent:test
+
+# Live end-to-end test (Resume after a broken process definition; Retry after
+# a rollback that fails). Passed 44/44 against production on Sep 23, 2026.
+# It writes to the dataset and briefly breaks the Decision Lifecycle, so it
+# needs SANITY_AUTH_TOKEN and a deployment you control with
+# QUICKSILVER_PROCESS_ENGINE=on and QUICKSILVER_ALLOW_FAULT_INJECTION=on
+# (off in production). Point it with QUICKSILVER_E2E_BASE_URL; add
+# -- --cleanup to delete what it created.
 npm run e2e:live
 
 # Start the Studio (localhost:3333)
@@ -186,15 +197,19 @@ The **LLM proposes, the kernel authorizes**. Never the other way around.
 And the kernel's own processes are content, not code.
 
 The **AI SDK 6 agent harness** uses `@ai-sdk/mcp` with role-based model
-configuration:
+configuration. Two roles run live on every plan:
 
-- **planner**: `gpt-5.6-sol` (or `gemini-3.8-flash` after bake-off)
-- **reviewer**: `claude-sonnet-5`
-- **router**: `gpt-5.6-luna`
-- **executor**: `gemini-3.8-flash`
+- **planner** — proposes the plan and candidate actions (in production: Azure deployment `qs-planner`; direct-provider default `gpt-5.6-sol`)
+- **reviewer** — independent, advisory second opinion on each action (Azure `qs-reviewer`; direct default `claude-sonnet-5`)
 
-All reads go through Sanity Context MCP; all writes go through
-`@sanity/client` mutations against the HTTP API (Context MCP is read-only).
+`router` and `executor` roles are configured (`packages/agent/src/models.ts`)
+and checked by `npm run verify:llm`, but nothing calls them at runtime yet:
+execution is simulated.
+
+The agent reads the company model through Sanity Context MCP (GROQ and
+Knowledge Base modes). The API routes read the kernel's facts and the
+process definition directly with `@sanity/client`, and all writes go
+through `@sanity/client` mutations (Context MCP is read-only).
 
 ## What we deliberately did NOT build
 

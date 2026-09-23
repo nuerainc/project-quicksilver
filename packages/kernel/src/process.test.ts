@@ -192,7 +192,7 @@ test('Lifecycle: the autonomy ceiling in content beats loosened env thresholds',
   // Raise the ceiling in the definition (what an edit in Studio does) and behavior follows.
   const raised: ProcessDefinition = {
     ...lifecycle,
-    version: 2,
+    version: 99,
     transitions: lifecycle.transitions.map((t) =>
       t.id === 'auto-approve'
         ? { ...t, guard: { all: t.guard!.all!.map((c) => (c.fact === 'kernel.riskLevel' ? { ...c, value: 3 } : c)) } }
@@ -201,6 +201,26 @@ test('Lifecycle: the autonomy ceiling in content beats loosened env thresholds',
   }
   // route-to-human still has "riskLevel gt 2" in its own guard, but auto-approve is declared first.
   assert.equal(nextAutomaticTransition(raised, 'proposed', facts)?.transition?.id, 'auto-approve')
+})
+
+test('Lifecycle v3: tightening the ceiling in content alone routes the newly-excluded risk to a human', () => {
+  // The kernel (default env) calls a risk-2 action autonomous...
+  const facts: Facts = { 'kernel.recommendation': 'execute-autonomously', 'kernel.authorized': true, 'kernel.riskLevel': 2 }
+  assert.equal(nextAutomaticTransition(lifecycle, 'proposed', facts)?.transition?.id, 'auto-approve')
+  // ...an editor lowers the ceiling to 1 in Studio, touching nothing else...
+  const tightened: ProcessDefinition = {
+    ...lifecycle,
+    transitions: lifecycle.transitions.map((t) =>
+      t.id === 'auto-approve'
+        ? { ...t, guard: { all: t.guard!.all!.map((c) => (c.fact === 'kernel.riskLevel' ? { ...c, value: 1 } : c)) } }
+        : t,
+    ),
+  }
+  assert.equal(validateProcessDefinition(tightened).valid, true)
+  // ...and the same action now waits for a human instead of stalling in "proposed".
+  const step = nextAutomaticTransition(tightened, 'proposed', facts)
+  assert.equal(step?.transition?.id, 'route-to-human')
+  assert.equal(step?.to, 'awaiting-approval')
 })
 
 test('Lifecycle: a kernel hard block always wins, even at high risk', () => {

@@ -1,3 +1,7 @@
+> **Superseded.** This was an early draft. The posts to publish are
+> [`DEV-POST-PATH-ONE.md`](./DEV-POST-PATH-ONE.md); the repo overview is the
+> [README](../README.md). Kept for the build history.
+
 # Path One post — *Quicksilver: An Autonomous Company Operating System*
 
 > Path: **Ship an Agent That Queries Real Content**
