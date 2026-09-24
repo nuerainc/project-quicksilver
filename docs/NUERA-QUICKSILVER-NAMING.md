@@ -13,7 +13,8 @@ them to the current Quicksilver repository.
 - **Nuera Quicksilver Agents** are worker agents. They propose plans and
   perform bounded work under NQC Kernel controls.
 - **Quicksilver Engine** is the evaluation engine integrated with NQC Kernel,
-  evolved from the Quicksilver Sanity Challenge repository.
+  evolved from our Quicksilver Sanity Challenge submission
+  ([nuerainc/quicksilver-sanity-challenge](https://github.com/nuerainc/quicksilver-sanity-challenge)).
   It produces reasoning-quality, grounding, hallucination-risk, brittleness,
   failure-exemplar, and diagnostic signals.
 

@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "license": "MIT",
-  "description": "Autonomous Company Operating System \u2014 Sanity Challenge 2026",
+  "description": "Nuera Quicksilver: cognitive and automation platform (inspired by the Quicksilver Sanity Challenge submission)",
   "workspaces": [
     "apps/*",
     "packages/*"

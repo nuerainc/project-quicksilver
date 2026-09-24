@@ -1,3 +1,10 @@
+> **Historical record: Sanity Challenge submission.** This document belongs to
+> **Quicksilver**, our Sanity Challenge 2026 entry, which lives at
+> [nuerainc/quicksilver-sanity-challenge](https://github.com/nuerainc/quicksilver-sanity-challenge).
+> A copy is kept here because Nuera Quicksilver was inspired by that submission.
+> It does not describe this repository, and the live demo it mentions is the
+> challenge deployment, not a deployment of Nuera Quicksilver.
+
 # Quicksilver — Sanity Challenge Submission
 
 > An Autonomous Company Operating System that turns a company's structure,

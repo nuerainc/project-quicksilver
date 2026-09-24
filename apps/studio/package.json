@@ -2,6 +2,7 @@
   "name": "@quicksilver/studio",
   "version": "0.1.0",
   "private": true,
+  "license": "MIT",
   "description": "Quicksilver — Sanity Studio (schema authoring)",
   "scripts": {
     "dev": "sanity dev",

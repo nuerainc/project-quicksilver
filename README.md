@@ -6,32 +6,38 @@
 
 **NQC Kernel governs. Quicksilver Engine evaluates. Nuera Quicksilver Agents do the work.**
 
-[![Legacy challenge demo](https://img.shields.io/badge/live_demo-quicksilver--seven.vercel.app-000000?style=for-the-badge&logo=vercel&logoColor=white)](https://quicksilver-seven.vercel.app)
-[![Sanity Challenge 2026](https://img.shields.io/badge/Sanity_Challenge-2026-F03E2F?style=for-the-badge&logo=sanity&logoColor=white)](https://dev.to/challenges)
-
 ![Next.js 15](https://img.shields.io/badge/Next.js-15-000000?logo=nextdotjs&logoColor=white)
 ![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript&logoColor=white)
 ![Sanity](https://img.shields.io/badge/Sanity-Content_Lake_%2B_Context_MCP-F03E2F?logo=sanity&logoColor=white)
 ![AI SDK 6](https://img.shields.io/badge/AI_SDK-6-000000?logo=vercel&logoColor=white)
-![Kernel tests](https://img.shields.io/badge/kernel_tests-39%2F39-2EA043)
+![Kernel tests](https://img.shields.io/badge/kernel_tests-133%2F133-2EA043)
 ![Agent tests](https://img.shields.io/badge/agent_tests-13%2F13-2EA043)
-![Live e2e](https://img.shields.io/badge/live_e2e-44%2F44-2EA043)
 ![License: MIT](https://img.shields.io/badge/license-MIT-blue)
 
-[**Legacy challenge demo**](https://quicksilver-seven.vercel.app) ·
-[**Legacy decision log**](https://quicksilver-seven.vercel.app/decisions) ·
-[**Legacy challenge Studio**](https://qkslvr.sanity.studio) ·
-[**Path One post**](./docs/DEV-POST-PATH-ONE.md) ·
-[**Path Two post**](./docs/DEV-POST-PATH-TWO.md) ·
+[**Docs**](./docs/README.md) ·
+[**NQC Kernel**](./docs/nqc/README.md) ·
+[**Platform**](./docs/platform/README.md) ·
+[**Spec coverage**](./docs/NUERA-QUICKSILVER-SPEC-COVERAGE.md) ·
+[**Roadmap**](./docs/NUERA-QUICKSILVER-ROADMAP.md) ·
 [**Build log**](./BUILD-LOG.md)
 
 </div>
-> **Current build status:** This repository preserves the tested Sanity Challenge foundation. NQC evaluation and governance, tool contracts, a draft workflow builder, and an in-process graph runner are implemented foundations. Quicksilver Engine also provides a bounded, provider-neutral final-answer stress harness for multi-step arithmetic and logic traps; it does not request or retain private chain-of-thought. The editor visualizes graph connections and exposes agent retry and handler timeout settings. The runner supports opt-in bounded concurrency for independent low/moderate-impact agent steps; the read-only query route caps this at three. The read-only query worker uses a shared governed-agent contract and returns its full NQC evaluation response. Workflow drafts autosave locally, support validated JSON import/export, and can run an opt-in read-only query-agent path through NQC evaluation. Workflow tools remain blocked; shared storage and hosted execution are not implemented. An internal TypeScript SDK and a dependency-free Python SDK/CLI foundation now cover workflow validation, safe preview, and opt-in read-only runs; neither is published as a stable public API. Accounts/RBAC, secrets vault, hosted execution, Go SDK, observability, and marketplace remain unimplemented.
+
+> **Which repository is this?**
+>
+> | Repository | What it is |
+> |---|---|
+> | **[nuerainc/project-quicksilver](https://github.com/nuerainc/project-quicksilver)** (this repo) | **Nuera Quicksilver**, the ongoing cognitive and automation platform. It is under active development, is not deployed, and has no live demo. |
+> | **[nuerainc/quicksilver-sanity-challenge](https://github.com/nuerainc/quicksilver-sanity-challenge)** | **Quicksilver**, our Sanity Challenge 2026 submission. It holds the live demo, the challenge Studio, and the DEV posts, and it stays as it was submitted. |
+>
+> Project Quicksilver was inspired by our Sanity Challenge submission and started from its codebase. See [Origins](#origins).
+> **Current build status:** Nuera Quicksilver keeps the tested decision-governance foundation it inherited from the challenge build as its regression baseline. NQC evaluation and governance, tool contracts, a draft workflow builder, and an in-process graph runner are implemented foundations. Quicksilver Engine also provides a bounded, provider-neutral final-answer stress harness for multi-step arithmetic and logic traps; it does not request or retain private chain-of-thought. The editor visualizes graph connections and exposes agent retry and handler timeout settings. The runner supports opt-in bounded concurrency for independent low/moderate-impact agent steps; the read-only query route caps this at three. The read-only query worker uses a shared governed-agent contract and returns its full NQC evaluation response. Workflow drafts autosave locally, support validated JSON import/export, and can run an opt-in read-only query-agent path through NQC evaluation. Workflow tools remain blocked. A durable run queue and worker (`@quicksilver/kernel/runtime`) now provide idempotent admission, backpressure, leases, cancellation, retries, and a dead-letter queue in a single process; shared storage and multi-host hosted execution are not implemented. An internal TypeScript SDK and a dependency-free Python SDK/CLI foundation now cover workflow validation, safe preview, and opt-in read-only runs; neither is published as a stable public API. Accounts/RBAC, secrets vault, multi-host hosted execution, triggers, Go SDK, observability, and marketplace remain unimplemented.
 >
 > Canonical product docs: [Documentation index](./docs/README.md) · [NQC Kernel](./docs/nqc/README.md) · [Platform](./docs/platform/README.md) · [Spec coverage](./docs/NUERA-QUICKSILVER-SPEC-COVERAGE.md) · [Roadmap](./docs/NUERA-QUICKSILVER-ROADMAP.md)
 
 <p align="center">
-  <a href="https://quicksilver-seven.vercel.app"><img src="docs/images/console.png" alt="The Quicksilver console: a CEO intent box pre-filled with 'Reduce production downtime by 20% over the next 30 days without increasing OPEX.' and a Send to Quicksilver button" width="760"></a>
+  <img src="docs/images/console.png" alt="The Quicksilver console: a CEO intent box pre-filled with 'Reduce production downtime by 20% over the next 30 days without increasing OPEX.' and a Send to Quicksilver button" width="760"><br>
+  <sub>The objective console, carried over from the challenge build.</sub>
 </p>
 
 ---
@@ -85,7 +91,7 @@ A keyword search finds *"Engineering approval is required for parameter changes.
 | How **risky** is it: base risk, impact, reversibility, uncertainty? | Kernel, a deterministic formula, 0–5 |
 | Who has to approve, and **what can happen next**? | Kernel, running the Decision Lifecycle process stored in Sanity |
 
-The seed data includes a real dilemma. Operations Policy 17 and Emergency Policy 4 conflict in the same scope, and a historical incident (confidence 0.92) says the root cause is mechanical, not parameter drift. The agent has to reason through a conflict that is actually in the data, not one staged for the demo.
+The seed data includes a real dilemma. Operations Policy 17 and Emergency Policy 4 conflict in the same scope, and a historical incident (confidence 0.92) says the root cause is mechanical, not parameter drift. The agent has to reason through a conflict that is actually in the data, not a staged one.
 
 ## The playbook is content
 
@@ -112,38 +118,46 @@ stateDiagram-v2
 ```
 
 - **Tighten the autonomy ceiling in Studio** by changing one number, and the next decision follows it, with no redeploy.
-- **Illegal jumps are refused** with a plain-English reason. Approve, reject and rollback always need a human click; the kernel and executor can never take them. (The demo has no login, so anyone using the app is that human.)
+- **Illegal jumps are refused** with a plain-English reason. Approve, reject and rollback always need a human click; the kernel and executor can never take them. (There is no login yet, so anyone using a local instance is that human. Authentication and RBAC are on the roadmap.)
 - **Every step is stamped** with the definition's version and `_rev`, so you can see exactly which rules were in force.
 - **A broken definition stops the line.** If a state is unreachable or a guard is malformed, the kernel moves nothing rather than bypassing its own playbook.
 - **Optimistic locking**: two simultaneous approvals give exactly one success and one clean `409`.
 
-## Try it in 60 seconds
+## Trying it
 
-1. Open **[quicksilver-seven.vercel.app](https://quicksilver-seven.vercel.app)**. There's no login, and the objective is pre-filled.
+Nuera Quicksilver has **no hosted demo**. Run it locally (see [Run it locally](#run-it-locally)); then:
+
+1. Open the console at `http://localhost:3000`. The objective is pre-filled.
 2. Click **Send to Quicksilver**. A real plan takes about a minute.
 3. Scroll to **Decisions**. Each card shows the kernel's risk and verdict and a **Process** line (where it is, what can happen next). Click **Show reasoning & evidence** for the policies, evidence and the dashed **Independent review** from the reviewer model.
 4. **Approve** a card, **Execute** it (simulated) and **Observe** the metric. If it moves the wrong way, **propose a rollback**.
-5. Open the **[Decision log](https://quicksilver-seven.vercel.app/decisions)** to see every transition, who took it (kernel, human or executor) and when.
+5. Open `/decisions` to see every transition, who took it (kernel, human or executor) and when. Open `/workflows` for the draft workflow builder.
 
-## Proven live, not just in tests
+Local runs need a configured Sanity project and model credentials. The live demo
+at quicksilver-seven.vercel.app belongs to the
+[challenge submission](https://github.com/nuerainc/quicksilver-sanity-challenge), not to this repository.
+
+## Tests
 
 | Check | Result |
 |---|---|
-| Kernel unit tests: authorization, risk calibration, process engine | **39 / 39** |
+| Kernel suites (`npm run kernel:test`): authorization, risk, process engine, workflow graphs and runtime, Quicksilver Engine, NQC, routing, memory, registries, durable run queue | **133 / 133** |
 | Agent tests: model config, strict-schema guards for every model schema | **13 / 13** |
-| Live governance stress test on production: lanes, races, prompt injection, a broken definition | **17 / 17** |
-| Automated live e2e (`npm run e2e:live`): Resume after a broken definition, Retry after a failed rollback | **44 / 44** |
 
-The two live runs were made against Decision Lifecycle v2; v3 changed only which guard catches decisions routed to a human.
+Inherited from the challenge build, and run against that build's live
+environment rather than this repository: a live governance stress test (lanes,
+races, prompt injection, a broken definition, **17 / 17**) and an automated
+live e2e (`npm run e2e:live`, **44 / 44**), both against Decision Lifecycle v2.
+They have not been re-run against the dedicated Nuera Quicksilver project.
 
-The stress test found real bugs: a risk formula that scored nearly everything 5/5, a failed rollback that could strand a decision, and a strict-schema error on the query route. Each one is fixed and written up in the [build log](./BUILD-LOG.md).
+The challenge-era stress test found real bugs: a risk formula that scored nearly everything 5/5, a failed rollback that could strand a decision, and a strict-schema error on the query route. Each one is fixed and written up in the [build log](./BUILD-LOG.md).
 
 ## Stack
 
 | Layer | Choice |
 |---|---|
-| App | Next.js 15 (App Router), TypeScript, Tailwind, deployed on Vercel |
-| Content & state | Existing challenge dataset is preserved as the regression baseline; the dedicated Nuera Quicksilver project is pending configuration |
+| App | Next.js 15 (App Router), TypeScript, Tailwind; not currently deployed |
+| Content & state | Dedicated Nuera Quicksilver Sanity project (`f87t11g1`), pending configuration; the challenge dataset is not used by this repo |
 | Agent read path | Sanity **Context MCP**, in both GROQ mode (live dataset) and Knowledge Base mode (cited, with contradiction detection) |
 | Agent harness | AI SDK 6 + `@ai-sdk/mcp`, role-based models (planner + independent reviewer; Azure OpenAI in production) |
 | Authority | **NQC Kernel**: deterministic TypeScript with no LLM, fail-closed |
@@ -153,23 +167,24 @@ The stress test found real bugs: a risk formula that scored nearly everything 5/
 | Workflow authoring | Draft graph builder, browser-local autosave, validated JSON import/export, validation API, separate `automationWorkflow` schema, safe preview, and opt-in read-only query-agent run through NQC; tools blocked, safe data-only conditions, not shared or hosted |
 | Developer SDK | Internal TypeScript client for workflow validation; not yet published |
 | Python SDK/CLI | Internal Python client and `qs` CLI for validation, safe preview, and gated read-only runs; not published |
+| Run runtime | `@quicksilver/kernel/runtime`: durable run records, journaled store, governed priority queue with dead letters, and a worker; single-process ([details](./docs/platform/durable-runs.md)) |
 
 ## Repository layout
 
 ```
-quicksilver/
+project-quicksilver/
 ├── apps/
 │   ├── web/            Next.js app: CEO console, Decision log, API routes
 │   │   └── app/api/    plan · query · decisions/[id]/{action,execute,observe,rollback,resume}
 │   └── studio/         Nuera Quicksilver Studio: core schemas, graph schema, guarded seed scripts
 ├── packages/
-│   ├── kernel/         Deterministic authority + process engine (no LLM)
+│   ├── kernel/         Deterministic authority, NQC, workflows, run runtime (no LLM)
 │   ├── agent/          Planner, reviewer, query agent, MCP bindings, model roles
 │   ├── sdk/            Internal TypeScript API client
 │   └── sdk-python/     Internal Python SDK and `qs` CLI foundation
-├── docs/               Canonical NQC/platform docs plus historical challenge writeups
+├── docs/               Canonical NQC/platform docs plus historical challenge writeups (marked as such)
 ├── ARCHITECTURE.md     Design and data model
-├── SUBMISSION.md       Challenge details, Sanity project info, how to run
+├── SUBMISSION.md       Historical: the Sanity Challenge submission record
 └── BUILD-LOG.md        Day-by-day build history across every environment
 ```
 
@@ -189,14 +204,23 @@ it. Schema deployment and seed writes remain pending until a new project-scoped 
 deployed. Set
 `QUICKSILVER_PROCESS_ENGINE=on` to run the existing Decision Lifecycle process
 engine from the configured project.
-## How it was built
+## Origins
 
-Quicksilver was built for the **[Sanity Challenge](https://dev.to/challenges)** (Sept 18 – Oct 4, 2026) and entered in both paths from one codebase:
+Project Quicksilver was inspired by **Quicksilver**, our submission to the
+**[Sanity Challenge](https://dev.to/challenges)** (Sept 18 – Oct 4, 2026). That
+submission lives in its own repository,
+**[nuerainc/quicksilver-sanity-challenge](https://github.com/nuerainc/quicksilver-sanity-challenge)**,
+with its live demo, and was entered in both paths:
 
-- **Path One**, *Ship an Agent That Queries Real Content*: [Quicksilver: An Autonomous Company Operating System](./docs/DEV-POST-PATH-ONE.md)
-- **Path Two**, *Vibe-Code Something Strange*: [Quicksilver: The Company That Operates Itself](./docs/DEV-POST-PATH-TWO.md)
+- **Path One**, *Ship an Agent That Queries Real Content*: Quicksilver: An Autonomous Company Operating System
+- **Path Two**, *Vibe-Code Something Strange*: Quicksilver: The Company That Operates Itself
 
-**MiniMax Agent** built the architecture through hardening. **Claude Code** (via Cowork) added the Knowledge Base integration, the live reviewer, the deployment, the process engine and the live testing. The manual work was done in **VS Code**. All of it is in one unified [build log](./BUILD-LOG.md), including every real error and how it was fixed.
+Nuera Quicksilver started from that codebase and is not a challenge entry. Copies
+of the challenge documents ([submission record](./SUBMISSION.md),
+[Path One post](./docs/DEV-POST-PATH-ONE.md), [Path Two post](./docs/DEV-POST-PATH-TWO.md),
+[demo script](./docs/DEMO-SCRIPT.md)) are kept here for history.
+
+**MiniMax Agent** built the architecture through hardening. **Claude Code** (via Cowork) added the Knowledge Base integration, the live reviewer, the deployment, the process engine and the live testing. The manual work was done in **VS Code**. All of it is in one unified [build log](./BUILD-LOG.md), including every real error and how it was fixed. Later Nuera Quicksilver work (regression suites, the durable run runtime) was added with Claude in Cowork.
 
 ## License
 

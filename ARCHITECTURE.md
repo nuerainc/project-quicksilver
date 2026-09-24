@@ -301,7 +301,9 @@ but invalid, the decision routes return 409 and move nothing, and
 `/api/plan` still records the plan but holds every decision in `proposed`
 (resumable once the definition is fixed).
 
-## 9. Things we are NOT building
+## 9. Out of scope for the original challenge build
+
+> Recorded from the Sanity Challenge build. Several items (multi-tenancy, authentication, specialised agents, a marketplace) are now on the Nuera Quicksilver [roadmap](./docs/NUERA-QUICKSILVER-ROADMAP.md).
 
 - Real robotic control
 - Real financial transactions
@@ -311,9 +313,9 @@ but invalid, the decision routes return 409 and move nothing, and
 - Multiple specialized agents (CEO agent, COO agent, …) — one primary agent with a kernel
 - A general-purpose autonomous agent marketplace
 
-## 10. Day 1 open questions (all resolved)
+## 10. Challenge-build Day 1 questions (all resolved)
 
 - [x] Sanity org ID: `ou5ydq271`, Context enabled
 - [x] Public dataset for judge inspection: `production` is public
 - [x] Enter both paths: yes
-- [x] Working demo: live at https://quicksilver-seven.vercel.app
+- [x] Working demo: live at https://quicksilver-seven.vercel.app (the challenge deployment, from [quicksilver-sanity-challenge](https://github.com/nuerainc/quicksilver-sanity-challenge); this repo is not deployed)

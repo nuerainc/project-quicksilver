@@ -2,6 +2,7 @@
   "name": "@nuera/quicksilver-sdk",
   "version": "0.1.0",
   "private": true,
+  "license": "MIT",
   "description": "TypeScript client for the Nuera Quicksilver platform API",
   "type": "module",
   "main": "./src/index.ts",

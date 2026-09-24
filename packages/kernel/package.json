@@ -2,6 +2,7 @@
   "name": "@quicksilver/kernel",
   "version": "0.1.0",
   "private": true,
+  "license": "MIT",
   "description": "Deterministic authority, NQC Kernel, Quicksilver Engine, workflows, and the durable run runtime",
   "main": "./src/index.ts",
   "types": "./src/index.ts",

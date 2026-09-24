@@ -2,6 +2,7 @@
   "name": "@quicksilver/agent",
   "version": "0.1.0",
   "private": true,
+  "license": "MIT",
   "description": "Quicksilver agent harness \u2014 models, MCP, prompts",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
