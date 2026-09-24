@@ -284,23 +284,18 @@ export default function HomePage() {
   return (
     <main className="mx-auto max-w-6xl px-6 py-12">
       <header className="mb-12">
-        <div className="flex items-start justify-between gap-4">
-          <h1 className="qs-glow font-mono text-3xl tracking-[0.3em] text-quicksilver-quicksilver">
-            QUICKSILVER
-          </h1>
-          <a
-            href="/decisions"
-            className="mt-2 shrink-0 font-mono text-xs uppercase tracking-widest text-quicksilver-accent transition hover:text-quicksilver-signal"
-          >
-            Decision log →
-          </a>
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <h1 className="qs-glow font-mono text-2xl tracking-[0.18em] text-quicksilver-quicksilver sm:text-3xl">NUERA QUICKSILVER</h1>
+          <nav aria-label="Main navigation" className="flex gap-4 font-mono text-xs uppercase tracking-widest text-quicksilver-accent">
+            <a href="/workflows" className="transition hover:text-quicksilver-signal">Workflow builder →</a>
+            <a href="/decisions" className="transition hover:text-quicksilver-signal">Decision log →</a>
+          </nav>
         </div>
         <p className="mt-2 text-sm uppercase tracking-widest text-quicksilver-accent">
-          Autonomous Company Operating System
+          Cognitive + automation platform
         </p>
         <p className="mt-6 max-w-2xl text-base text-quicksilver-accent">
-          A chatbot reads your documents.{' '}
-          <span className="text-quicksilver-signal">Quicksilver reasons over your company.</span>
+          Govern company actions and shape automated workflows with the NQC Kernel.
         </p>
       </header>
 

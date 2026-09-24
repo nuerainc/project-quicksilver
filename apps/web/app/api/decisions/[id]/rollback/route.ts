@@ -13,9 +13,11 @@
  */
 
 import { NextResponse } from 'next/server'
+import { getDedicatedSanityProjectId } from '@/lib/sanity-config'
 import { createClient } from '@sanity/client'
 import { z } from 'zod'
 import { authorizeTransition, nextAutomaticTransition } from '@quicksilver/kernel'
+import { verifySupervisorCredential } from '@/lib/nqc-approval'
 import {
   KERNEL_ACTOR,
   commitTransition,
@@ -31,7 +33,7 @@ import {
 
 function getSanityClient() {
   return createClient({
-    projectId: process.env.NEXT_PUBLIC_SANITY_PROJECT_ID!,
+    projectId: getDedicatedSanityProjectId(),
     dataset: process.env.NEXT_PUBLIC_SANITY_DATASET ?? 'production',
     apiVersion: process.env.NEXT_PUBLIC_SANITY_API_VERSION ?? '2024-10-01',
     useCdn: false,
@@ -41,15 +43,16 @@ function getSanityClient() {
 
 const Body = z.object({
   summary: z.string().optional(),
-  approverId: z.string().optional(),
 })
+
+export const runtime = 'nodejs'
 
 export async function POST(
   req: Request,
   ctx: { params: Promise<{ id: string }> },
 ) {
   const { id } = await ctx.params
-  let body: { summary?: string; approverId?: string } = {}
+  let body: { summary?: string } = {}
   try {
     body = await req.json()
   } catch {
@@ -59,7 +62,9 @@ export async function POST(
   if (!parsed.success) {
     return NextResponse.json({ error: 'Validation failed', issues: parsed.error.issues }, { status: 400 })
   }
-  const { summary, approverId } = parsed.data
+  const { summary } = parsed.data
+  const supervisor = verifySupervisorCredential(req)
+  if (!supervisor.ok) return NextResponse.json({ error: supervisor.reason }, { status: supervisor.status })
 
   if (!process.env.NEXT_PUBLIC_SANITY_PROJECT_ID) {
     return NextResponse.json({ error: 'Sanity not configured' }, { status: 500 })
@@ -76,12 +81,21 @@ export async function POST(
       riskLevel?: number | null
       requiredApproval?: boolean | null
       observedDeviation?: boolean | null
+      policySnapshotVersion?: string | null
+      policyChecks?: unknown[]
     } | null>(
-      `*[_type == "decision" && _id == $id][0]{ _id, _rev, selectedAction, status, kind, riskLevel, requiredApproval, observedDeviation }`,
+      `*[_type == "decision" && _id == $id][0]{ _id, _rev, selectedAction, status, kind, riskLevel, requiredApproval, observedDeviation, policySnapshotVersion, policyChecks }`,
       { id },
     )
     if (!original) {
       return NextResponse.json({ error: 'Decision not found' }, { status: 404 })
+    }
+    const supervisorEntity = await client.fetch<{ entityType: string } | null>(
+      '*[_type == "entity" && _id == $id][0]{ entityType }',
+      { id: supervisor.supervisorId },
+    )
+    if (supervisorEntity?.entityType !== 'human') {
+      return NextResponse.json({ error: 'Configured supervisor must resolve to a human entity.' }, { status: 403 })
     }
 
     // ── Process engine path ────────────────────────────────────────────────
@@ -91,7 +105,7 @@ export async function POST(
     }
     if (lifecycle.kind === 'ready') {
       const { definition } = lifecycle
-      const actor = uiOperator(approverId)
+      const actor = uiOperator(supervisor.supervisorId)
       // Earlier rollback attempts for this decision, newest first: the facts
       // behind `retry-rollback` (a failed rollback may be retried once nothing
       // else is still in flight).
@@ -138,7 +152,8 @@ export async function POST(
           : 'Recovery after a failed execution: rolling back to the last known-good state.',
         evidence: [],
         constraints: [],
-        policyChecks: [],
+        policyChecks: original.policyChecks ?? [],
+        policySnapshotVersion: original.policySnapshotVersion,
         requiredApproval: true,
         status: firstFields?.status ?? definition.initialState,
         ...(firstFields ? { process: firstFields.process, processHistory: [firstFields.historyEntry] } : {}),
@@ -172,9 +187,10 @@ export async function POST(
         'Closed-loop recovery: monitoring detected metric deviation in the wrong direction. High-confidence evidence (Historical Incident #17) suggests the underlying cause is mechanical (worn seal), not parameter drift. Rolling back the parameter change is the first corrective action.',
       evidence: [],
       constraints: [],
-      policyChecks: [],
+      policyChecks: original.policyChecks ?? [],
+      policySnapshotVersion: original.policySnapshotVersion,
       riskLevel: 2,
-      requiredApproval: false,
+      requiredApproval: true,
       status: 'awaiting-approval',
       createdAt: new Date().toISOString(),
     })

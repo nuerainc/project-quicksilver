@@ -13,19 +13,26 @@ import { generateText, Output, stepCountIs } from 'ai'
 import { z } from 'zod'
 
 import { PLANNER_SYSTEM_PROMPT } from './prompts.ts'
-import { isLlmConfigured, modelForRole } from './models.ts'
+import { getMode, isLlmConfigured, modelForRole, resolveId } from './models.ts'
 import {
   closeAll,
   createSanityContextClients,
   mergeClientTools,
   readEnvMcpConfigs,
 } from './mcp.ts'
-import type { ProposedAction } from '@quicksilver/kernel'
+import type { EvaluatorToolCall, ProposedAction } from '@quicksilver/kernel'
+import { assertAgentDispatch } from './governance.ts'
 
 export interface PlannerInput {
   objective: string
   /** Optional pre-loaded context to skip MCP round-trips (used for tests). */
   context?: Record<string, unknown>
+}
+
+export interface PlannerOutput extends z.infer<typeof PlanOutputSchema> {
+  /** Runtime metadata, not model-generated structured output. */
+  toolCalls: EvaluatorToolCall[]
+  modelId: string
 }
 
 const ProposedActionSchema = z.object({
@@ -53,8 +60,6 @@ export const PlanOutputSchema = z.object({
   reasoning: z.string(),
 })
 
-export type PlannerOutput = z.infer<typeof PlanOutputSchema>
-
 /** Re-exported so callers can gate on it without importing models directly. */
 export { isLlmConfigured }
 
@@ -66,6 +71,7 @@ export { isLlmConfigured }
 const PLANNER_MAX_STEPS = 15
 
 export async function planObjective(input: PlannerInput): Promise<PlannerOutput> {
+  assertAgentDispatch('nuera-quicksilver:planner', 'planning')
   if (!isLlmConfigured()) {
     throw new Error(
       'No LLM configured. Set AZURE_API_KEY + AZURE_RESOURCE_NAME (or OPENAI_API_KEY / ANTHROPIC_API_KEY / GOOGLE_GENERATIVE_AI_API_KEY) in .env.',
@@ -76,7 +82,8 @@ export async function planObjective(input: PlannerInput): Promise<PlannerOutput>
   const clients = await createSanityContextClients(mcpConfigs)
 
   try {
-    const tools = await mergeClientTools(clients)
+    const toolCalls: EvaluatorToolCall[] = []
+    const tools = await mergeClientTools(clients, toolCalls)
 
     // Day 8: agentic loop with structured output. The model uses MCP tools
     // to discover entities/capabilities/policies/evidence, then emits a plan
@@ -111,7 +118,11 @@ The kernel will compute risk and authorization from your candidate actions. Be s
     if (!parsed || parsed.candidateActions.length === 0) {
       throw new Error('Planner produced no candidate actions.')
     }
-    return parsed
+    return {
+      ...parsed,
+      toolCalls,
+      modelId: resolveId('planner', getMode()),
+    }
   } finally {
     await closeAll(clients)
   }

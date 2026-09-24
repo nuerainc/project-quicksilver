@@ -5,6 +5,7 @@ import capability from './capability'
 import policy from './policy'
 import objective from './objective'
 import workflow from './workflow'
+import automationWorkflow from './automation-workflow'
 import evidence from './evidence'
 import decision from './decision'
 import metric from './metric'
@@ -17,6 +18,7 @@ export const schemaTypes = [
   policy,
   objective,
   workflow,
+  automationWorkflow,
   evidence,
   decision,
   metric,

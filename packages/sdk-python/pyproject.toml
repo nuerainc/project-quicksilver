@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "nuera-quicksilver-sdk"
+version = "0.1.0"
+description = "Python client for the Nuera Quicksilver workflow API"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+dependencies = []
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+]
+
+[project.scripts]
+qs = "nuera_quicksilver_sdk.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["nuera_quicksilver_sdk*"]

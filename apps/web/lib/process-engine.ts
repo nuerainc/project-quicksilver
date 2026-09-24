@@ -36,13 +36,9 @@ export const DECISION_LIFECYCLE_ID = 'workflow-decision-lifecycle'
 export const KERNEL_ACTOR: ProcessActor = { id: 'quicksilver-kernel', entityType: 'system' }
 export const EXECUTOR_ACTOR: ProcessActor = { id: 'quicksilver-executor', entityType: 'system' }
 
-/**
- * The person clicking in the UI. Quicksilver has no auth (single-user demo),
- * so whoever uses the UI is treated as the human approver, identified by
- * `approverId` when the client sends one.
- */
-export function uiOperator(approverId?: string): ProcessActor {
-  return { id: approverId ?? 'ui-operator', entityType: 'human' }
+/** The trusted human supervisor identity resolved after server credential validation. */
+export function uiOperator(supervisorId: string): ProcessActor {
+  return { id: supervisorId, entityType: 'human' }
 }
 
 export function processEngineEnabled(): boolean {

@@ -1,16 +1,24 @@
-# Quicksilver — Architecture
+# Nuera Quicksilver — Architecture
 
 > Internal design document. Updated as decisions lock.
 
 ---
 
-## 1. The model
+## 1. Canonical component names
+
+The full subsystem is **Nuera Quicksilver**. Its final authority is the **NQC
+Kernel** (Nuera Quicksilver Cognitive Kernel), its worker family is **Nuera
+Quicksilver Agents**, and its deterministic evaluation core is the **Quicksilver
+Engine**. The current code mapping and implementation boundaries are recorded
+in [NUERA-QUICKSILVER-NAMING.md](./docs/NUERA-QUICKSILVER-NAMING.md).
+
+## 2. The model
 
 A company is not a document. It is a graph of **entities** (humans, agents, systems, services) bound by **policies**, **capabilities**, **permissions**, and **evidence**, pursuing **objectives** through **workflows**, producing and consuming **state**.
 
-Quicksilver's job is to make that graph **machine-queryable**, **reason-over-able**, and **authoritative**.
+Nuera Quicksilver's job is to make that graph **machine-queryable**, **reason-over-able**, and **authoritative**.
 
-## 2. The schema (locked Day 1, refined Days 2–5)
+## 3. The schema (locked Day 1, refined Days 2–5)
 
 Ten document types. Enough to express the company; few enough to keep authoring manageable.
 
@@ -48,20 +56,20 @@ entity {
 
 This lets the kernel reason about humans and machines using **the same organizational primitive**. Crucial for "the agent" being just another entity with a `entityType: agent`.
 
-## 3. The runtime
+## 4. The runtime
 
 ```
             USER (CEO)
                │
                ▼
       ┌──────────────────┐
-      │  Quicksilver UI  │   Next.js App Router
+      │ Nuera Quicksilver│   Next.js App Router
       │  (apps/web)      │
       └─────────┬────────┘
                 │
                 ▼
       ┌──────────────────┐
-      │  Agent runtime   │   packages/agent
+      │ Nuera Quicksilver Agents │ packages/agent
       │  (AI SDK 6)      │
       │                  │
       │  ┌────────────┐  │
@@ -77,13 +85,15 @@ This lets the kernel reason about humans and machines using **the same organizat
                 │ candidate action + evidence
                 ▼
       ┌──────────────────┐
-      │  Quicksilver     │   packages/kernel
+      │  NQC Kernel      │   packages/kernel
       │  Kernel          │
       │                  │   DETERMINISTIC — no LLM
       │  • capability    │
       │  • authority     │
       │  • risk          │
       │  • approval      │
+      │  • Quicksilver Engine evaluation
+      │  • tool-use validation
       └─────────┬────────┘
                 │ decision record
                 ▼
@@ -101,7 +111,7 @@ This lets the kernel reason about humans and machines using **the same organizat
       Next.js API route → @sanity/client → Content Lake (writes)
 ```
 
-## 4. Architectural principle: separate cognition from authority
+## 5. Architectural principle: separate cognition from authority
 
 The LLM proposes. The kernel authorizes. **Never** the other way around.
 
@@ -128,7 +138,7 @@ const decision = kernel.authorize({
 
 This is what makes Quicksilver more than a chatbot. The agent has *opinions*; the kernel has *authority*.
 
-## 5. Model configuration
+## 6. Model configuration
 
 Models are role names. Names are IDs. Roles are code.
 
@@ -146,7 +156,7 @@ export const MODELS: Record<QuicksilverModelRole, string> = {
 
 These are the direct-provider defaults. The live deployment runs on Azure OpenAI, where each role maps to a deployment (`qs-planner`, `qs-reviewer`, `qs-router`, `qs-executor`). Only the **planner** and **reviewer** are called at runtime today; `router` and `executor` are configured and health-checked by `npm run verify:llm`, and execution is simulated.
 
-## 6. The MCP integration
+## 7. The MCP integration
 
 ### Reads — Sanity Context MCP (hosted, read-only)
 
@@ -172,7 +182,7 @@ Endpoint: https://<projectId>.api.sanity.io/v2024-10-01/data/mutate/<dataset>   
 Auth:     Bearer <SANITY_AUTH_TOKEN>
 ```
 
-## 7. The decision object (auditability without CoT)
+## 8. The decision object (auditability without private reasoning traces)
 
 We do not store chain-of-thought. We store the **decision artifact**:
 

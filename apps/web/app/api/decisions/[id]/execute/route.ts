@@ -26,7 +26,9 @@
  */
 
 import { NextResponse } from 'next/server'
+import { getDedicatedSanityProjectId } from '@/lib/sanity-config'
 import { createClient } from '@sanity/client'
+import { currentPolicySnapshotVersion, decisionActionFingerprint } from '@/lib/nqc-approval'
 import { z } from 'zod'
 import { authorizeTransition } from '@quicksilver/kernel'
 import {
@@ -41,9 +43,11 @@ import {
   refusal,
 } from '@/lib/process-engine'
 
+export const runtime = 'nodejs'
+
 function getSanityClient() {
   return createClient({
-    projectId: process.env.NEXT_PUBLIC_SANITY_PROJECT_ID!,
+    projectId: getDedicatedSanityProjectId(),
     dataset: process.env.NEXT_PUBLIC_SANITY_DATASET ?? 'production',
     apiVersion: process.env.NEXT_PUBLIC_SANITY_API_VERSION ?? '2024-10-01',
     useCdn: false,
@@ -173,12 +177,72 @@ export async function POST(
       riskLevel?: number | null
       requiredApproval?: boolean | null
       rollbackOfId?: string | null
+      safetyDecision?: string | null
+      policySnapshotVersion?: string | null
+      policyIds?: string[]
+      approvalRecord?: {
+        id?: string
+        requestId?: string
+        actionFingerprint?: string
+        policySnapshotVersion?: string
+        supervisorId?: string
+        grantedAt?: string
+      } | null
+      approvedById?: string | null
     } | null>(
-      `*[_type == "decision" && _id == $id][0]{ _id, _rev, status, selectedAction, kind, riskLevel, requiredApproval, "rollbackOfId": rollbackOf._ref }`,
+      `*[_type == "decision" && _id == $id][0]{ _id, _rev, status, selectedAction, kind, riskLevel, requiredApproval, safetyDecision, policySnapshotVersion, "policyIds": policyChecks[].policy._ref, approvalRecord, "approvedById": approvedBy._ref, "rollbackOfId": rollbackOf._ref }`,
       { id },
     )
     if (!decision) {
       return NextResponse.json({ error: 'Decision not found' }, { status: 404 })
+    }
+
+    if (decision.safetyDecision === 'BLOCK') {
+      return NextResponse.json({ error: 'The NQC Kernel blocked this decision; it cannot execute.' }, { status: 409 })
+    }
+    const policyIds = [...new Set(decision.policyIds ?? [])].sort()
+    const livePolicyVersion = await currentPolicySnapshotVersion(client, policyIds)
+    if (!decision.policySnapshotVersion || livePolicyVersion !== decision.policySnapshotVersion) {
+      return NextResponse.json({ error: 'Policy versions changed or were not recorded for this decision. Request a fresh plan.' }, { status: 409 })
+    }
+
+    const approvalRequired = decision.requiredApproval === true
+      || decision.safetyDecision === 'ESCALATE'
+      || (decision.riskLevel ?? 0) >= 4
+    const actionFingerprint = decisionActionFingerprint({
+      decisionId: decision._id,
+      selectedAction: decision.selectedAction,
+      policySnapshotVersion: decision.policySnapshotVersion,
+      riskLevel: decision.riskLevel ?? 0,
+      requiredApproval: decision.requiredApproval ?? false,
+    })
+    const approval = decision.approvalRecord
+    if (approvalRequired && (
+      !approval?.id
+      || approval.requestId !== decision._id
+      || approval.actionFingerprint !== actionFingerprint
+      || approval.policySnapshotVersion !== decision.policySnapshotVersion
+      || !approval.supervisorId
+      || !approval.grantedAt
+      || decision.approvedById !== approval.supervisorId
+    )) {
+      return NextResponse.json({ error: 'A current supervisor approval for this exact action and policy version is required.' }, { status: 409 })
+    }
+    if (approvalRequired) {
+      const supervisor = await client.fetch<{ _id: string; entityType: string } | null>(
+        '*[_type == "entity" && _id == $id][0]{ _id, entityType }',
+        { id: approval!.supervisorId },
+      )
+      if (supervisor?.entityType !== 'human') {
+        return NextResponse.json({ error: 'The recorded approver is no longer an active human entity.' }, { status: 409 })
+      }
+      const currentPolicies = await client.fetch<Array<{ _id: string; approvalRequirementIds?: string[] }>>(
+        '*[_type == "policy" && _id in $ids]{ _id, "approvalRequirementIds": approvalRequirements[]._ref }',
+        { ids: policyIds },
+      )
+      if (currentPolicies.length !== policyIds.length || currentPolicies.some((policy) => (policy.approvalRequirementIds?.length ?? 0) > 0 && !policy.approvalRequirementIds?.includes(approval!.supervisorId!))) {
+        return NextResponse.json({ error: 'The recorded supervisor is not authorized by the current policies.' }, { status: 409 })
+      }
     }
 
     // ── Process engine path ────────────────────────────────────────────────
@@ -188,6 +252,7 @@ export async function POST(
     }
     if (lifecycle.kind === 'ready') {
       const { definition } = lifecycle
+      const startedAt = new Date().toISOString()
       const outcome = inject ? injectedOutcome(inject) : simulateExecution(decision._id, decision.selectedAction)
       const facts = { ...factsFromDecision(decision), 'execution.success': outcome.success }
       const target = outcome.success ? 'executed' : 'failed'
@@ -195,9 +260,19 @@ export async function POST(
       if (!step.allowed) return NextResponse.json(refusal(step, definition), { status: 409 })
 
       const now = new Date().toISOString()
+      const executionAudit = {
+        ...(approval?.id ? { approvalId: approval.id } : {}),
+        actionFingerprint,
+        policySnapshotVersion: decision.policySnapshotVersion,
+        executorId: EXECUTOR_ACTOR.id,
+        startedAt,
+        completedAt: now,
+        outcome: outcome.success ? 'succeeded' : 'failed',
+      }
       try {
         await commitTransition(client, decision._id, decision._rev, definition, step, EXECUTOR_ACTOR, now, {
           executedAt: now,
+          executionAudit,
           ...(inject ? { faultInjection: inject } : {}),
         })
       } catch (err) {
@@ -247,8 +322,18 @@ export async function POST(
     if (inject) {
       return NextResponse.json({ error: 'Fault injection needs the process engine (QUICKSILVER_PROCESS_ENGINE=on).' }, { status: 409 })
     }
+    const startedAt = new Date().toISOString()
     const outcome = simulateExecution(decision._id, decision.selectedAction)
     const now = new Date().toISOString()
+    const executionAudit = {
+      ...(approval?.id ? { approvalId: approval.id } : {}),
+      actionFingerprint,
+      policySnapshotVersion: decision.policySnapshotVersion,
+      executorId: EXECUTOR_ACTOR.id,
+      startedAt,
+      completedAt: now,
+      outcome: outcome.success ? 'succeeded' : 'failed',
+    }
 
     // Persist the simulated outcome as a metric document.
     // Hyphens, not dots, as separators -- see the matching note in
@@ -266,7 +351,7 @@ export async function POST(
 
     // Update the decision record.
     const newStatus = outcome.success ? 'executed' : 'failed'
-    await client.patch(decision._id).set({ status: newStatus, executedAt: now }).commit()
+    await client.patch(decision._id).ifRevisionId(decision._rev).set({ status: newStatus, executedAt: now, executionAudit }).commit()
 
     return NextResponse.json({
       decisionId: decision._id,

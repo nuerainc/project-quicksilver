@@ -56,7 +56,7 @@ const args = new Set(process.argv.slice(2))
 const CONFIRM = args.has('--confirm')
 const SKIP_BACKUP = args.has('--skip-backup')
 
-const projectId = process.env.NEXT_PUBLIC_SANITY_PROJECT_ID || 'd280bqjc'
+const projectId = process.env.NEXT_PUBLIC_SANITY_PROJECT_ID
 const dataset = process.env.NEXT_PUBLIC_SANITY_DATASET || 'production'
 
 function step(n: number, title: string) {
@@ -72,6 +72,7 @@ function run(cmd: string, cmdArgs: string[], cwd: string): number {
 }
 
 async function main() {
+  if (!projectId || projectId === 'd280bqjc') fail('Set NEXT_PUBLIC_SANITY_PROJECT_ID to the dedicated Nuera Quicksilver Sanity project; legacy challenge history is protected.')
   console.log(`Quicksilver history reset — ${projectId}/${dataset} — ${CONFIRM ? 'LIVE RUN' : 'DRY RUN (add -- --confirm to delete)'}`)
 
   // 1. Preflight

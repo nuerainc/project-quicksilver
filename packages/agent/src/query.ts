@@ -19,7 +19,10 @@ import { generateText, Output, stepCountIs } from 'ai'
 import { z } from 'zod'
 
 import { QUERY_SYSTEM_PROMPT } from './prompts.ts'
-import { isLlmConfigured, modelForRole } from './models.ts'
+import { assertAgentDispatch } from './governance.ts'
+import { getMode, isLlmConfigured, modelForRole, resolveId } from './models.ts'
+import type { EvaluatorToolCall } from '@quicksilver/kernel'
+import type { NueraQuicksilverAgent } from './contracts.ts'
 import {
   closeAll,
   createSanityContextClients,
@@ -62,7 +65,13 @@ export const QueryResultSchema = z.object({
 
 export type QueryResult = z.infer<typeof QueryResultSchema>
 
-export async function queryCompany(question: string): Promise<QueryResult> {
+export interface QueryAgentOutput extends QueryResult {
+  toolCalls: EvaluatorToolCall[]
+  modelId: string
+}
+
+export async function queryCompany(question: string, options: { signal?: AbortSignal } = {}): Promise<QueryAgentOutput> {
+  assertAgentDispatch('nuera-quicksilver:query', 'reasoning', 'moderate')
   if (!isLlmConfigured()) {
     throw new Error(
       'No LLM configured. Set AZURE_API_KEY + AZURE_RESOURCE_NAME (or OPENAI_API_KEY / ANTHROPIC_API_KEY / GOOGLE_GENERATIVE_AI_API_KEY) in .env.',
@@ -73,7 +82,8 @@ export async function queryCompany(question: string): Promise<QueryResult> {
   const clients = await createSanityContextClients(mcpConfigs)
 
   try {
-    const tools = await mergeClientTools(clients)
+    const toolCalls: EvaluatorToolCall[] = []
+    const tools = await mergeClientTools(clients, toolCalls)
 
     // Structured output via `experimental_output` (still supported in AI SDK 6).
     // The tool-call loop runs first — `stopWhen` is required, because the default
@@ -83,6 +93,7 @@ export async function queryCompany(question: string): Promise<QueryResult> {
       model: modelForRole('planner'),
       system: QUERY_SYSTEM_PROMPT,
       prompt: `Question: ${question}`,
+      abortSignal: options.signal,
       tools: tools as unknown as Parameters<typeof generateText>[0]['tools'],
       experimental_output: Output.object({
         schema: QueryResultSchema,
@@ -95,8 +106,24 @@ export async function queryCompany(question: string): Promise<QueryResult> {
     if (!parsed) {
       throw new Error('Model did not return structured output.')
     }
-    return parsed
+    return { ...parsed, toolCalls, modelId: resolveId('planner', getMode()) }
   } finally {
     await closeAll(clients)
   }
+}
+
+/** Standard-contract adapter for the existing read-only query worker. */
+export const queryQuicksilverAgent: NueraQuicksilverAgent<string, QueryAgentOutput> = {
+  id: 'nuera-quicksilver:query',
+  version: 1,
+  tasks: ['reasoning'],
+  async execute(request) {
+    const result = await queryCompany(request.input, { signal: request.signal })
+    return {
+      output: result,
+      modelId: result.modelId,
+      toolCalls: result.toolCalls,
+      evaluationContext: result.supportingContext,
+    }
+  },
 }

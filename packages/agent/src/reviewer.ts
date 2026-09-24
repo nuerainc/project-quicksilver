@@ -19,6 +19,7 @@ import { z } from 'zod'
 import { REVIEWER_SYSTEM_PROMPT } from './prompts.ts'
 import { modelForRole } from './models.ts'
 import type { ProposedAction } from '@quicksilver/kernel'
+import { assertAgentDispatch } from './governance.ts'
 
 // NOTE: no `.default([])` on these array fields. A Zod default marks the field
 // optional in the generated JSON Schema, which fails Azure/OpenAI's strict
@@ -58,6 +59,7 @@ function unreviewed(reason: string): ReviewResult {
 }
 
 export async function reviewProposedAction(input: ReviewInput): Promise<ReviewResult> {
+  assertAgentDispatch('nuera-quicksilver:reviewer', 'evaluation')
   const { action, actor, capability, policies, evidence } = input
 
   const policyList = policies.length

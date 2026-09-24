@@ -60,7 +60,14 @@ async function main() {
     console.log('─'.repeat(60))
     console.log('STEP 1: Discover available tools (merged across endpoints)')
     console.log('─'.repeat(60))
-    const tools = await mergeClientTools(clients)
+    // MCP returns a dynamic tool map. The verification script intentionally
+    // invokes selected tools, so reflect the executable surface at the boundary.
+    const tools = await mergeClientTools(clients) as unknown as Record<string, {
+      execute: (args: unknown, options: unknown) => Promise<unknown>
+      description?: string
+      inputSchema?: unknown
+      parameters?: unknown
+    }>
     const toolNames = Object.keys(tools)
     console.log(`Tools (${toolNames.length}): ${toolNames.join(', ')}\n`)
 

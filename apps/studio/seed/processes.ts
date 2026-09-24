@@ -46,13 +46,18 @@ for (const envPath of findEnvFiles(__dirname)) {
 }
 
 async function main() {
+  const projectId = process.env.NEXT_PUBLIC_SANITY_PROJECT_ID
+  if (!projectId || projectId === 'd280bqjc') {
+    console.error('Set NEXT_PUBLIC_SANITY_PROJECT_ID to the dedicated Nuera Quicksilver Sanity project; legacy challenge writes are blocked.')
+    process.exit(1)
+  }
   const token = process.env.SANITY_AUTH_TOKEN
   if (!token) {
     console.error('SANITY_AUTH_TOKEN is required (write scope). Set it in the root .env.')
     process.exit(1)
   }
   const client = createClient({
-    projectId: process.env.NEXT_PUBLIC_SANITY_PROJECT_ID || 'd280bqjc',
+    projectId,
     dataset: process.env.NEXT_PUBLIC_SANITY_DATASET || 'production',
     apiVersion: '2024-10-01',
     token,

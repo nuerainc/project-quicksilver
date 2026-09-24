@@ -59,13 +59,18 @@ const CLEANUP = process.argv.includes('--cleanup')
 const LIFECYCLE_ID = 'workflow-decision-lifecycle'
 const OBJECTIVE = '[E2E] Schedule preventive maintenance and a diagnostic check on CNC Machine 3 in the next maintenance window.'
 
+const projectId = process.env.NEXT_PUBLIC_SANITY_PROJECT_ID
+if (!projectId || projectId === 'd280bqjc') {
+  console.error('Set NEXT_PUBLIC_SANITY_PROJECT_ID to the dedicated Nuera Quicksilver Sanity project; legacy challenge writes are blocked.')
+  process.exit(1)
+}
 const token = process.env.SANITY_AUTH_TOKEN
 if (!token) {
   console.error('SANITY_AUTH_TOKEN (write scope) is required in the root .env.')
   process.exit(1)
 }
 const sanity = createClient({
-  projectId: process.env.NEXT_PUBLIC_SANITY_PROJECT_ID || 'd280bqjc',
+  projectId,
   dataset: process.env.NEXT_PUBLIC_SANITY_DATASET || 'production',
   apiVersion: '2024-10-01',
   token,

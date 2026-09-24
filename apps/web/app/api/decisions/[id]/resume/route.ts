@@ -14,6 +14,7 @@
  */
 
 import { NextResponse } from 'next/server'
+import { getDedicatedSanityProjectId } from '@/lib/sanity-config'
 import { createClient } from '@sanity/client'
 import { nextAutomaticTransition } from '@quicksilver/kernel'
 import {
@@ -28,7 +29,7 @@ import {
 
 function getSanityClient() {
   return createClient({
-    projectId: process.env.NEXT_PUBLIC_SANITY_PROJECT_ID!,
+    projectId: getDedicatedSanityProjectId(),
     dataset: process.env.NEXT_PUBLIC_SANITY_DATASET ?? 'production',
     apiVersion: process.env.NEXT_PUBLIC_SANITY_API_VERSION ?? '2024-10-01',
     useCdn: false,

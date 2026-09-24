@@ -7,8 +7,8 @@
  *   1. Plan via @quicksilver/agent → candidateActions (ProposedAction-shaped)
  *   2. Resolve each referenced entity/capability/policy/evidence via Sanity
  *   3. Convert to kernel types
- *   4. Run kernel.authorize() on each candidate — this is what actually
- *      authorizes or blocks; it is the only authoritative step
+ *   4. Run Quicksilver Engine evaluation and NQC Kernel governance on each
+ *      candidate. The deterministic kernel is the only authority.
  *   5. Run reviewProposedAction() as an independent second opinion — ADVISORY
  *      ONLY, never changes the kernel's outcome (see packages/agent/src/reviewer.ts)
  *   6. Persist one `decision` document per authorized/rejected candidate
@@ -44,11 +44,13 @@
  */
 
 import { NextResponse } from 'next/server'
+import { getDedicatedSanityProjectId } from '@/lib/sanity-config'
 import { createClient } from '@sanity/client'
 import { z } from 'zod'
+import { policySnapshotVersion } from '@/lib/nqc-approval'
 import { isLlmConfigured, planObjective, reviewProposedAction, type ReviewResult } from '@quicksilver/agent'
 import {
-  authorize,
+  evaluateAndAuthorize,
   nextAutomaticTransition,
   type AuthorizeResult,
   type Facts,
@@ -59,6 +61,7 @@ import {
   type PolicyRef,
   type ProposedAction,
   type RiskLevel,
+  type EvaluationResult,
 } from '@quicksilver/kernel'
 import {
   KERNEL_ACTOR,
@@ -70,7 +73,7 @@ import {
 
 function getSanityClient() {
   return createClient({
-    projectId: process.env.NEXT_PUBLIC_SANITY_PROJECT_ID!,
+    projectId: getDedicatedSanityProjectId(),
     dataset: process.env.NEXT_PUBLIC_SANITY_DATASET ?? 'production',
     apiVersion: process.env.NEXT_PUBLIC_SANITY_API_VERSION ?? '2024-10-01',
     useCdn: false,
@@ -85,6 +88,7 @@ type Resolved = {
   actor: EntityRef | null
   capability: CapabilityRef | null
   policies: PolicyRef[]
+  policySnapshotVersion: string
   evidence: EvidenceRef[]
 }
 
@@ -108,6 +112,7 @@ async function resolveAction(
     client.fetch<
       Array<{
         _id: string
+        _rev: string
         name: string
         scope: string
         priority: number
@@ -117,7 +122,7 @@ async function resolveAction(
         approvalRequirementIds?: string[] | null
       }>
     >(
-      `*[_type == "policy" && _id in $ids]{ _id, name, scope, priority, effectiveDate, expirationDate, "supersedesIds": supersedes[]._ref, "approvalRequirementIds": approvalRequirements[]._ref }`,
+      `*[_type == "policy" && _id in $ids]{ _id, _rev, name, scope, priority, effectiveDate, expirationDate, "supersedesIds": supersedes[]._ref, "approvalRequirementIds": approvalRequirements[]._ref }`,
       { ids: action.applicablePolicyIds },
     ),
     client.fetch<Array<{ _id: string; title: string; confidence: number }>>(
@@ -161,7 +166,8 @@ async function resolveAction(
     confidence: e.confidence,
   }))
 
-  return { actor, capability, policies, evidence }
+  const policyVersion = policySnapshotVersion(policyDocs.map((policy) => ({ id: policy._id, revision: policy._rev })))
+  return { actor, capability, policies, policySnapshotVersion: policyVersion, evidence }
 }
 
 // ── Persistence: kernel result → `decision` document ───────────────────────
@@ -181,10 +187,13 @@ function buildDecisionDoc(args: {
   action: ProposedAction
   refs: Resolved & { actor: EntityRef; capability: CapabilityRef }
   decision: AuthorizeResult
+  evaluation: EvaluationResult
+  safetyDecision: 'ALLOW' | 'BLOCK' | 'ESCALATE'
   review: ReviewResult | null
+  policySnapshotVersion: string
   now: string
 }) {
-  const { id, objective, constraints, reasoning, action, refs, decision, review, now } = args
+  const { id, objective, constraints, reasoning, action, refs, decision, evaluation, safetyDecision, review, policySnapshotVersion: policyVersion, now } = args
 
   // The kernel reports conflicts per shared scope as text; mark every applicable
   // policy in a shared scope as `conflicts` in the per-policy audit rows.
@@ -224,6 +233,20 @@ function buildDecisionDoc(args: {
     }),
     riskLevel: decision.riskLevel,
     requiredApproval: decision.requiresApproval,
+    policySnapshotVersion: policyVersion,
+    safetyDecision,
+    evaluation: {
+      reasoningScore: evaluation.reasoningScore,
+      hallucinationRisk: evaluation.hallucinationRisk,
+      brittleness: evaluation.brittleness,
+      failedToolCount: evaluation.failedToolCount,
+      issues: evaluation.diagnosticReport,
+      corrections: evaluation.correctionSuggestions,
+      failureExemplars: evaluation.failureExemplars,
+      modelId: evaluation.modelId,
+      taskType: evaluation.taskType,
+      evaluatedAt: evaluation.evaluatedAt,
+    },
     reviewerNotes: review
       ? {
           valid: review.valid,
@@ -285,6 +308,8 @@ export async function POST(req: Request) {
       plan.candidateActions.map(async (action, i) => {
         const refs = await resolveAction(client, action as ProposedAction)
         let decision: AuthorizeResult | null = null
+        let evaluation: EvaluationResult | null = null
+        let safetyDecision: 'ALLOW' | 'BLOCK' | 'ESCALATE' | null = null
         let review: ReviewResult | null = null
         let doc: ReturnType<typeof buildDecisionDoc> | null = null
 
@@ -303,13 +328,31 @@ export async function POST(req: Request) {
             operationalImpact: action.operationalImpact as RiskLevel,
             uncertainty: action.uncertainty as RiskLevel,
           }
-          decision = authorize({
+          const governed = evaluateAndAuthorize({
             action: kernelAction,
             actor: refs.actor,
             capabilities: [refs.capability],
             policies: refs.policies,
             evidence: refs.evidence,
+          }, {
+            // Evaluate only the user-facing proposed action and source metadata;
+            // private model reasoning traces are intentionally not collected.
+            agentOutput: kernelAction.description,
+            context: refs.evidence.map((e) => `${e.id}: ${e.title}`),
+            taskType: 'planning',
+            impactLevel: kernelAction.operationalImpact >= 5 ? 'critical'
+              : kernelAction.operationalImpact >= 4 ? 'high'
+                : kernelAction.operationalImpact >= 2 ? 'moderate' : 'low',
+            citedReferences: kernelAction.evidenceIds,
+            availableReferences: refs.evidence.map((e) => e.id),
+            toolCalls: plan.toolCalls,
+            modelId: plan.modelId,
+            uncertainty: kernelAction.uncertainty,
+            stepCount: 1,
           })
+          decision = governed.decision
+          evaluation = governed.evaluation
+          safetyDecision = governed.safetyDecision
 
           // Independent review — advisory only. The kernel above has already
           // authorized/rejected the action; the reviewer never changes that
@@ -336,13 +379,16 @@ export async function POST(req: Request) {
             reasoning: plan.reasoning,
             action: kernelAction,
             refs: { ...refs, actor: refs.actor, capability: refs.capability },
-            decision,
+            decision: governed.decision,
+            evaluation: governed.evaluation,
+            safetyDecision: governed.safetyDecision,
             review,
+            policySnapshotVersion: refs.policySnapshotVersion,
             now,
           })
         }
 
-        return { action: action as ProposedAction, decision, review, refs, doc }
+        return { action: action as ProposedAction, decision, evaluation, safetyDecision, review, refs, doc }
       }),
     )
 
@@ -401,6 +447,8 @@ export async function POST(req: Request) {
     const decisions = results.map((r) => ({
       action: r.action,
       decision: r.decision,
+      evaluation: r.evaluation,
+      safetyDecision: r.safetyDecision,
       review: r.review,
       decisionDocId: r.doc?._id ?? null,
       status: (r.doc as { status?: string } | null)?.status ?? null,

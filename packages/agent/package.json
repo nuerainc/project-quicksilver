@@ -17,6 +17,7 @@
     "typecheck": "tsc --noEmit",
     "verify:mcp": "tsx src/verify-mcp.ts",
     "verify:llm": "tsx src/verify-llm.ts",
+    "benchmark:stress": "tsx src/benchmark-stress.ts",
     "test": "node --experimental-strip-types --no-warnings --test src/models.test.ts"
   },
   "dependencies": {

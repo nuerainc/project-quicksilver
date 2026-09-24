@@ -1,7 +1,7 @@
 /**
  * POST /api/decisions/[id]/action — act on a proposed decision.
  *
- * Body: { action: 'approve' | 'reject' | 'request-evidence', approverId?: string }
+ * Body: { action: 'approve' | 'reject' | 'request-evidence' }
  *
  * Updates the decision document in Sanity with the new status, approver,
  * and (for execute) the executedAt timestamp. Returns the updated decision.
@@ -14,9 +14,12 @@
  */
 
 import { NextResponse } from 'next/server'
+import { getDedicatedSanityProjectId } from '@/lib/sanity-config'
 import { createClient } from '@sanity/client'
+import { randomUUID } from 'node:crypto'
 import { z } from 'zod'
 import { authorizeTransition } from '@quicksilver/kernel'
+import { currentPolicySnapshotVersion, decisionActionFingerprint, verifySupervisorCredential } from '@/lib/nqc-approval'
 import {
   commitTransition,
   factsFromDecision,
@@ -28,9 +31,11 @@ import {
   uiOperator,
 } from '@/lib/process-engine'
 
+export const runtime = 'nodejs'
+
 function getSanityClient() {
   return createClient({
-    projectId: process.env.NEXT_PUBLIC_SANITY_PROJECT_ID!,
+    projectId: getDedicatedSanityProjectId(),
     dataset: process.env.NEXT_PUBLIC_SANITY_DATASET ?? 'production',
     apiVersion: process.env.NEXT_PUBLIC_SANITY_API_VERSION ?? '2024-10-01',
     useCdn: false,
@@ -40,7 +45,6 @@ function getSanityClient() {
 
 const ActionBody = z.object({
   action: z.enum(['approve', 'reject', 'request-evidence']),
-  approverId: z.string().optional(),
   comment: z.string().optional(),
 })
 
@@ -63,7 +67,10 @@ export async function POST(
   if (!parsed.success) {
     return NextResponse.json({ error: 'Validation failed', issues: parsed.error.issues }, { status: 400 })
   }
-  const { action, approverId, comment } = parsed.data
+  const { action, comment } = parsed.data
+
+  const supervisor = verifySupervisorCredential(req)
+  if (!supervisor.ok) return NextResponse.json({ error: supervisor.reason }, { status: supervisor.status })
 
   if (!process.env.NEXT_PUBLIC_SANITY_PROJECT_ID) {
     return NextResponse.json({ error: 'Sanity not configured' }, { status: 500 })
@@ -81,13 +88,63 @@ export async function POST(
       kind?: string | null
       riskLevel?: number | null
       requiredApproval?: boolean | null
+      selectedAction?: string | null
+      safetyDecision?: string | null
+      policySnapshotVersion?: string | null
+      policyIds?: string[]
     } | null>(
-      `*[_type == "decision" && _id == $id][0]{ _id, _rev, status, reasoningSummary, kind, riskLevel, requiredApproval }`,
+      `*[_type == "decision" && _id == $id][0]{ _id, _rev, status, reasoningSummary, kind, riskLevel, requiredApproval, selectedAction, safetyDecision, policySnapshotVersion, "policyIds": policyChecks[].policy._ref }`,
       { id },
     )
     if (!existing) {
       return NextResponse.json({ error: 'Decision not found' }, { status: 404 })
     }
+
+    const supervisorEntity = await client.fetch<{ _id: string; entityType: string } | null>(
+      '*[_type == "entity" && _id == $id][0]{ _id, entityType }',
+      { id: supervisor.supervisorId },
+    )
+    if (supervisorEntity?.entityType !== 'human') {
+      return NextResponse.json({ error: 'Configured supervisor must resolve to a human entity.' }, { status: 403 })
+    }
+    const policyIds = [...new Set(existing.policyIds ?? [])].sort()
+    if (action === 'approve') {
+      const policies = await client.fetch<Array<{ _id: string; approvalRequirementIds?: string[] }>>(
+        '*[_type == "policy" && _id in $ids]{ _id, "approvalRequirementIds": approvalRequirements[]._ref }',
+        { ids: policyIds },
+      )
+      if (policies.length !== policyIds.length) {
+        return NextResponse.json({ error: 'A policy used by this decision is missing; request a fresh plan.' }, { status: 409 })
+      }
+      if (policies.some((policy) => (policy.approvalRequirementIds?.length ?? 0) > 0 && !policy.approvalRequirementIds?.includes(supervisor.supervisorId))) {
+        return NextResponse.json({ error: 'The configured supervisor is not authorized by every applicable policy.' }, { status: 403 })
+      }
+      const livePolicyVersion = await currentPolicySnapshotVersion(client, policyIds)
+      if (!existing.policySnapshotVersion || livePolicyVersion !== existing.policySnapshotVersion) {
+        return NextResponse.json({ error: 'Policy versions changed or were not recorded for this decision. Request a fresh plan.' }, { status: 409 })
+      }
+    }
+    if (action === 'approve' && existing.safetyDecision === 'BLOCK') {
+      return NextResponse.json({ error: 'The NQC Kernel blocked this decision; it cannot be approved.' }, { status: 409 })
+    }
+
+    const grantedAt = new Date().toISOString()
+    const approvalRecord = action === 'approve'
+      ? {
+          id: `approval-${randomUUID()}`,
+          requestId: id,
+          actionFingerprint: decisionActionFingerprint({
+            decisionId: id,
+            selectedAction: existing.selectedAction ?? '',
+            policySnapshotVersion: existing.policySnapshotVersion!,
+            riskLevel: existing.riskLevel ?? 0,
+            requiredApproval: existing.requiredApproval ?? false,
+          }),
+          policySnapshotVersion: existing.policySnapshotVersion,
+          supervisorId: supervisor.supervisorId,
+          grantedAt,
+        }
+      : undefined
 
     // ── Process engine path ────────────────────────────────────────────────
     const lifecycle = await loadDecisionLifecycle(client)
@@ -96,14 +153,17 @@ export async function POST(
     }
     if (lifecycle.kind === 'ready') {
       const { definition } = lifecycle
-      const actor = uiOperator(approverId)
+      const actor = uiOperator(supervisor.supervisorId)
       const facts = factsFromDecision(existing)
       const step = authorizeTransition({ definition, currentState: existing.status, transitionId: action, facts, actor })
       if (!step.allowed) return NextResponse.json(refusal(step, definition), { status: 409 })
 
       const now = new Date().toISOString()
       const extra: Record<string, unknown> = {}
-      if (action === 'approve' && approverId) extra.approvedBy = { _type: 'reference', _ref: approverId }
+      if (action === 'approve') {
+        extra.approvedBy = { _type: 'reference', _ref: supervisor.supervisorId }
+        extra.approvalRecord = approvalRecord
+      }
       if (action === 'request-evidence' && comment) {
         extra.reasoningSummary = `[REQUEST EVIDENCE] ${comment}\n\n-- existing reasoning --\n${existing.reasoningSummary ?? ''}`
       }
@@ -118,7 +178,8 @@ export async function POST(
       return NextResponse.json({
         id,
         status: step.to,
-        approverId,
+        supervisorId: supervisor.supervisorId,
+        approvalId: approvalRecord?.id ?? null,
         comment,
         at: now,
         process: processView(definition, step.to!, facts, step.transition?.id),
@@ -143,7 +204,8 @@ export async function POST(
     switch (action) {
       case 'approve':
         patch.status = 'approved'
-        if (approverId) patch.approvedBy = { _type: 'reference', _ref: approverId }
+        patch.approvedBy = { _type: 'reference', _ref: supervisor.supervisorId }
+        patch.approvalRecord = approvalRecord
         break
       case 'reject':
         patch.status = 'rejected'
@@ -162,15 +224,25 @@ export async function POST(
     // the /execute route stamps it when the action actually runs.
 
     // Persist the patch.
-    const updated = await client
-      .patch(id)
-      .set(patch)
-      .commit()
+    let updated
+    try {
+      updated = await client
+        .patch(id)
+        .ifRevisionId(existing._rev)
+        .set(patch)
+        .commit()
+    } catch (err) {
+      if (isRevisionConflict(err)) {
+        return NextResponse.json({ error: 'This decision changed while you were acting on it. Reload and try again.' }, { status: 409 })
+      }
+      throw err
+    }
 
     return NextResponse.json({
       id: updated._id,
       status: updated.status ?? patch.status,
-      approverId,
+      supervisorId: supervisor.supervisorId,
+      approvalId: approvalRecord?.id ?? null,
       comment,
       at: now,
     })

@@ -16,6 +16,13 @@ import { schemaTypes } from './schemas'
  * Approved/Rejected/Executed as a lightweight editorial view alongside the
  * app's own approve/reject buttons. Path Two bonus feature.
  */
+function dedicatedProjectId(): string {
+  const projectId = process.env.SANITY_STUDIO_PROJECT_ID
+  if (!projectId || projectId === 'd280bqjc') {
+    throw new Error('SANITY_STUDIO_PROJECT_ID must identify the dedicated Nuera Quicksilver Sanity project; legacy challenge access is blocked.')
+  }
+  return projectId
+}
 const decisionWorkflow = workflow({
   schemaTypes: ['decision'],
   states: [
@@ -47,15 +54,10 @@ const decisionWorkflow = workflow({
 })
 
 export default defineConfig({
-  name: 'quicksilver',
-  title: 'Quicksilver — Autonomous Company OS',
+  name: 'nuera-quicksilver',
+  title: 'Nuera Quicksilver',
 
-  // Vite only exposes SANITY_STUDIO_-prefixed env vars to this file (unlike
-  // sanity.cli.ts, which runs in Node and can read anything) -- NEXT_PUBLIC_*
-  // vars are a Next.js convention meaningful in apps/web, not here, so they
-  // resolve to undefined in the Studio bundle. Falls back to the same
-  // non-secret, effectively-fixed project identity hardcoded in sanity.cli.ts.
-  projectId: process.env.SANITY_STUDIO_PROJECT_ID || 'd280bqjc',
+  projectId: dedicatedProjectId(),
   dataset: process.env.SANITY_STUDIO_DATASET || 'production',
 
   plugins: [structureTool(), decisionWorkflow],

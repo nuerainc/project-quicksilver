@@ -238,50 +238,29 @@ function decisionToSanity(s: DecisionSeed) {
 
 async function pushSeed(client: SanityClient) {
   // One big transaction so cross-document references resolve within it.
-  // Sanity needs referenced documents to exist before they're referenced,
-  // but a transaction commits everything atomically so order within it
-  // doesn't matter — only the final commit state does.
   const tx = client.transaction()
   const counts: Record<string, number> = {}
+  type SanitySeedDocument = { _id: string; _type: string; [field: string]: unknown }
 
-  for (const [type, docs] of seedOrder) {
-    let transformer: (s: unknown) => unknown
-    switch (type) {
-      case 'organization':
-        transformer = organizationToSanity
-        break
-      case 'departments':
-        transformer = departmentToSanity
-        break
-      case 'entities':
-        transformer = entityToSanity
-        break
-      case 'capabilities':
-        transformer = capabilityToSanity
-        break
-      case 'policies':
-        transformer = policyToSanity
-        break
-      case 'objectives':
-        transformer = objectiveToSanity
-        break
-      case 'workflows':
-        transformer = workflowToSanity
-        break
-      case 'evidence':
-        transformer = evidenceToSanity
-        break
-      case 'decisions':
-        transformer = decisionToSanity
-        break
-      default:
-        throw new Error(`Unknown seed type: ${type}`)
-    }
-
-    const sanityDocs = (docs as unknown[]).map(transformer)
+  function addBatch<T>(type: string, docs: readonly T[], transform: (seed: T) => SanitySeedDocument) {
+    const sanityDocs = docs.map(transform)
     counts[type] = sanityDocs.length
     for (const doc of sanityDocs) {
-      tx.createOrReplace(doc as Record<string, unknown>)
+      tx.createOrReplace(doc as Parameters<typeof tx.createOrReplace>[0])
+    }
+  }
+
+  for (const entry of seedOrder) {
+    switch (entry[0]) {
+      case 'organization': addBatch(entry[0], entry[1], organizationToSanity); break
+      case 'capabilities': addBatch(entry[0], entry[1], capabilityToSanity); break
+      case 'policies': addBatch(entry[0], entry[1], policyToSanity); break
+      case 'entities': addBatch(entry[0], entry[1], entityToSanity); break
+      case 'departments': addBatch(entry[0], entry[1], departmentToSanity); break
+      case 'objectives': addBatch(entry[0], entry[1], objectiveToSanity); break
+      case 'workflows': addBatch(entry[0], entry[1], workflowToSanity); break
+      case 'evidence': addBatch(entry[0], entry[1], evidenceToSanity); break
+      case 'decisions': addBatch(entry[0], entry[1], decisionToSanity); break
     }
   }
 
@@ -291,11 +270,14 @@ async function pushSeed(client: SanityClient) {
     process.stdout.write(`  ${type}: ${count} docs\n`)
   }
 }
-
 async function main() {
-  const projectId = process.env.NEXT_PUBLIC_SANITY_PROJECT_ID || 'd280bqjc'
+  const projectId = process.env.NEXT_PUBLIC_SANITY_PROJECT_ID
   const dataset = process.env.NEXT_PUBLIC_SANITY_DATASET || 'production'
   const token = process.env.SANITY_AUTH_TOKEN
+  if (!projectId || projectId === 'd280bqjc') {
+    console.error('Set NEXT_PUBLIC_SANITY_PROJECT_ID to the dedicated Nuera Quicksilver Sanity project; legacy challenge writes are blocked.')
+    process.exit(1)
+  }
   if (!token) {
     console.error('SANITY_AUTH_TOKEN is required. Generate one in Manage → API → Tokens with write scope, then re-run.')
     process.exit(1)

@@ -2,7 +2,7 @@
   "name": "@quicksilver/kernel",
   "version": "0.1.0",
   "private": true,
-  "description": "Deterministic authority — capability, authority, risk, approval",
+  "description": "Deterministic authority, NQC Kernel, Quicksilver Engine, workflows, and the durable run runtime",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
   "type": "module",
@@ -14,7 +14,18 @@
     "./approval": "./src/approval.ts",
     "./types": "./src/types.ts",
     "./process": "./src/process.ts",
-    "./process-document": "./src/process-document.ts"
+    "./process-document": "./src/process-document.ts",
+    "./engine": "./src/engine/index.ts",
+    "./nqc": "./src/nqc/index.ts",
+    "./nqc/routing": "./src/nqc/routing.ts",
+    "./nqc/memory": "./src/nqc/memory.ts",
+    "./tools/registry": "./src/tools/registry.ts",
+    "./workflows/graph": "./src/workflows/graph.ts",
+    "./workflows/runtime": "./src/workflows/runtime.ts",
+    "./workflows/condition": "./src/workflows/condition.ts",
+    "./agents": "./src/agents/registry.ts",
+    "./runtime": "./src/runtime/index.ts",
+    "./runtime/file-store": "./src/runtime/file-store.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"

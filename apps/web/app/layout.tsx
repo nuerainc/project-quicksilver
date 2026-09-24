@@ -2,8 +2,8 @@ import './globals.css'
 import type { Metadata } from 'next'
 
 export const metadata: Metadata = {
-  title: 'Quicksilver — Autonomous Company OS',
-  description: 'Structured organizational knowledge. Agent reasoning. Deterministic authority.',
+  title: 'Nuera Quicksilver — Cognitive + Automation Platform',
+  description: 'The NQC Kernel, Quicksilver Engine, governed agents, and enterprise workflows.',
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

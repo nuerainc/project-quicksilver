@@ -7,6 +7,7 @@
 
 import { NextResponse } from 'next/server'
 import { queryCompany } from '@quicksilver/agent'
+import { evaluateNqcRequest } from '@quicksilver/kernel'
 
 export async function POST(req: Request) {
   let body: unknown
@@ -23,7 +24,31 @@ export async function POST(req: Request) {
 
   try {
     const result = await queryCompany(question)
-    return NextResponse.json(result)
+    const governance = evaluateNqcRequest({
+      agentId: 'nuera-quicksilver-reasoning-agent',
+      taskType: 'reasoning',
+      modelId: result.modelId,
+      agentOutput: JSON.stringify({
+        question: result.question,
+        entities: result.entities.map(({ id, name, entityType }) => ({ id, name, entityType })),
+        capabilities: result.capabilities,
+        policies: result.policies,
+      }),
+      context: result.supportingContext,
+      toolCalls: result.toolCalls,
+      impactLevel: 'low',
+    })
+    return NextResponse.json({
+      ...result,
+      nqc: {
+        reasoningScore: governance.reasoningScore,
+        hallucinationRisk: governance.hallucinationRisk,
+        brittleness: governance.brittleness,
+        issues: governance.issues,
+        corrections: governance.corrections,
+        safetyDecision: governance.safetyDecision,
+      },
+    })
   } catch (err) {
     console.error('[/api/query]', err)
     return NextResponse.json(
