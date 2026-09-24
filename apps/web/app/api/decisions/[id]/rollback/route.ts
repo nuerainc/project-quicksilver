@@ -63,7 +63,7 @@ export async function POST(
     return NextResponse.json({ error: 'Validation failed', issues: parsed.error.issues }, { status: 400 })
   }
   const { summary } = parsed.data
-  const supervisor = verifySupervisorCredential(req)
+  const supervisor = verifySupervisorCredential(req, 'decision:rollback')
   if (!supervisor.ok) return NextResponse.json({ error: supervisor.reason }, { status: supervisor.status })
 
   if (!process.env.NEXT_PUBLIC_SANITY_PROJECT_ID) {

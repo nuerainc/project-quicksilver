@@ -52,3 +52,5 @@ export * from './agents/registry.ts'
 export * from './workflows/runtime.ts'
 
 export * from './workflows/condition.ts'
+
+export * from './identity/rbac.ts'

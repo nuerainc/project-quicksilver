@@ -38,7 +38,7 @@ current implementation intentionally refuses the capability.
 
 | Requirement | Current repository evidence | Status / remaining work |
 |---|---|---|
-| Safety engine | Decision approvals require a server-verified supervisor credential, human Sanity entity, current policy snapshot, and action fingerprint; execution verifies approval and appends an outcome record | Foundation; interim single-supervisor credential, no SSO/RBAC, and live effectful workflow tools remain blocked |
+| Safety engine | Decision approvals require a server-verified supervisor credential, human Sanity entity, current policy snapshot, and action fingerprint; execution verifies approval and appends an outcome record | Foundation; per-person hashed supervisor credentials with RBAC are available (single shared token remains as fallback); no SSO, and live effectful workflow tools remain blocked |
 | Routing engine | Route selector and profile update helpers | Foundation; no persisted measurement loop or dispatch integration |
 | Tool-use validator | Versioned contract registry wraps Sanity Context MCP tool calls | Foundation; no persistent provider registry, external approvals, or marketplace permissions |
 | Memory governor | Validates memory proposals and retention metadata | Foundation; no durable tenant/domain-scoped store, retrieval, deletion, or retention worker |
@@ -73,7 +73,7 @@ current implementation intentionally refuses the capability.
 | Plugin and tool schemas | Versioned in-process tool schemas and validation for current MCP path | Foundation; no install lifecycle, isolation, permissions UX, or persistent catalog |
 | Marketplace and publishing | No extension catalog | Missing: versioning, signing, review, approval, publishing, revocation, and tenant trust controls |
 | Secrets vault and OAuth credentials | Environment variables and Sanity tokens | Missing: encryption at rest, scoped access, rotation, OAuth lifecycle, and access audit |
-| Authentication, RBAC, collaboration | No user/team identity or tenant authorization layer | Missing; must precede public hosted execution, shared workflows, and secrets access |
+| Authentication, RBAC, collaboration | Kernel RBAC (`identity/rbac.ts`): principals, built-in and tenant-scoped custom roles, deny-by-default, tenant isolation, agents barred from authority permissions, separation of duties, audited decisions; hashed bearer-token provider; enforced on queue enqueue/cancel/redrive and on web approve/reject/rollback via `QUICKSILVER_PRINCIPALS`. Covered by `identity.test.ts` | Foundation; no SSO/OIDC or browser sessions, persistent principal/role administration, durable access-audit store, or team collaboration features |
 | Logs, metrics, traces, dashboards | Decision/process history exists in the original Sanity baseline; workflow traces are returned in-memory | Foundation; subsystem logs, metrics, distributed traces, dashboards, alerting, and retention are missing |
 | Compliance and data governance | No compliance packs or tenant governance layer | Missing: policy packs, HIPAA/SOC 2/PCI/FedRAMP evidence workflows, retention/deletion controls, and exportable audit reports; compliance claims require legal/security review |
 | Tenant isolation | No tenant model for routing, memory, secrets, workflows, or runs | Missing; define tenant boundaries and isolation tests before shared hosting |

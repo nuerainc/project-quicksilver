@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto'
 
 import { validateWorkflowGraph, type WorkflowGraph } from '../workflows/graph.ts'
+import { AccessDeniedError, isPrincipal, type AccessController, type Permission, type Principal } from '../identity/rbac.ts'
 import type { WorkflowExecutionResult } from '../workflows/runtime.ts'
 import {
   TERMINAL_RUN_STATUSES,
@@ -31,6 +32,11 @@ export interface WorkflowRunQueueOptions {
   leaseMs?: number
   /** Maximum serialized input size in bytes (default 256 KiB). */
   maxInputBytes?: number
+  /**
+   * When set, every enqueue, cancel, and redrive must carry an authenticated
+   * `Principal` authorized for the run's tenant. Bare actor strings are refused.
+   */
+  access?: AccessController
 }
 
 export interface EnqueueWorkflowRunRequest {
@@ -43,11 +49,13 @@ export interface EnqueueWorkflowRunRequest {
   maxAttempts?: number
   /** Delay the first attempt (e.g. a scheduled run). */
   delayMs?: number
+  /** Authenticated caller. Required when the queue has an access controller. */
+  principal?: Principal
 }
 
 export type EnqueueResult =
   | { accepted: true; deduplicated: boolean; run: WorkflowRunRecord }
-  | { accepted: false; code: 'invalid-request' | 'invalid-graph' | 'backpressure'; reasons: string[] }
+  | { accepted: false; code: 'invalid-request' | 'invalid-graph' | 'backpressure' | 'forbidden'; reasons: string[] }
 
 export interface WorkflowQueueStats {
   byStatus: Record<WorkflowRunStatus, number>
@@ -72,6 +80,7 @@ const TRIGGERS = new Set(['manual', 'api', 'webhook', 'schedule', 'event'])
  */
 export class WorkflowRunQueue {
   readonly store: WorkflowRunStore
+  readonly access?: AccessController
   readonly leaseMs: number
   private readonly now: () => number
   private readonly newRunId: () => string
@@ -85,6 +94,7 @@ export class WorkflowRunQueue {
 
   constructor(options: WorkflowRunQueueOptions) {
     this.store = options.store
+    this.access = options.access
     this.now = options.now ?? Date.now
     this.newRunId = options.newRunId ?? (() => `run_${randomUUID()}`)
     this.maxQueued = positiveInt(options.maxQueued, 1_000, 'maxQueued')
@@ -100,6 +110,13 @@ export class WorkflowRunQueue {
   async enqueue(request: EnqueueWorkflowRunRequest): Promise<EnqueueResult> {
     const reasons = this.validateRequest(request)
     if (reasons.length) return { accepted: false, code: 'invalid-request', reasons }
+    if (request.principal !== undefined && !isPrincipal(request.principal)) {
+      return { accepted: false, code: 'invalid-request', reasons: ['principal is malformed.'] }
+    }
+    if (this.access) {
+      const decision = this.access.authorize(request.principal, 'run:enqueue', { tenantId: request.tenantId, kind: 'workflow-run', id: request.graph.id })
+      if (!decision.allowed) return { accepted: false, code: 'forbidden', reasons: decision.reasons }
+    }
 
     if (request.idempotencyKey) {
       const existing = await this.store.findByIdempotencyKey(request.tenantId, request.idempotencyKey)
@@ -144,6 +161,7 @@ export class WorkflowRunQueue {
       createdAt: now,
       updatedAt: now,
       ...(request.idempotencyKey ? { idempotencyKey: request.idempotencyKey } : {}),
+      ...(request.principal ? { requestedBy: request.principal.id } : {}),
     }
     try {
       await this.store.insert(run)
@@ -155,7 +173,7 @@ export class WorkflowRunQueue {
       }
       throw error
     }
-    await this.event(run.runId, 'queued', { detail: `trigger=${run.trigger.kind}${run.trigger.source ? `:${run.trigger.source}` : ''}` })
+    await this.event(run.runId, 'queued', { ...(run.requestedBy ? { actor: run.requestedBy } : {}), detail: `trigger=${run.trigger.kind}${run.trigger.source ? `:${run.trigger.source}` : ''}` })
     return { accepted: true, deduplicated: false, run }
   }
 
@@ -255,11 +273,13 @@ export class WorkflowRunQueue {
    * Request cancellation. A queued run is cancelled immediately; a running run
    * is flagged and its worker aborts at the next heartbeat.
    */
-  async cancel(runId: string, actor: string, reason = 'Cancelled by request.'): Promise<WorkflowRunRecord | undefined> {
-    assertActor(actor)
+  async cancel(runId: string, actorOrPrincipal: string | Principal, reason = 'Cancelled by request.'): Promise<WorkflowRunRecord | undefined> {
+    const actor = this.actorId(actorOrPrincipal)
     for (let attempt = 0; attempt < 5; attempt += 1) {
       const run = await this.store.get(runId)
-      if (!run || TERMINAL_RUN_STATUSES.includes(run.status)) return run
+      if (!run) return run
+      if (attempt === 0) await this.authorizeRunAction(run, actorOrPrincipal, 'run:cancel')
+      if (TERMINAL_RUN_STATUSES.includes(run.status)) return run
       const now = this.now()
       const cancelRequest = { actor, reason, at: now }
       const next: WorkflowRunRecord = run.status === 'queued'
@@ -299,11 +319,12 @@ export class WorkflowRunQueue {
   }
 
   /** Manually return a dead-lettered run to the queue with a fresh attempt budget. */
-  async redrive(runId: string, actor: string, reason: string): Promise<WorkflowRunRecord> {
-    assertActor(actor)
+  async redrive(runId: string, actorOrPrincipal: string | Principal, reason: string): Promise<WorkflowRunRecord> {
+    const actor = this.actorId(actorOrPrincipal)
     if (typeof reason !== 'string' || !reason.trim()) throw new Error('A redrive reason is required for the audit trail.')
     const run = await this.store.get(runId)
     if (!run) throw new Error(`Unknown workflow run "${runId}".`)
+    await this.authorizeRunAction(run, actorOrPrincipal, 'run:redrive')
     if (run.status !== 'dead-lettered') throw new Error(`Only dead-lettered runs can be redriven (run is ${run.status}).`)
     const now = this.now()
     const next: WorkflowRunRecord = { ...run, revision: run.revision + 1, status: 'queued', attempt: 0, availableAt: now, updatedAt: now }
@@ -336,6 +357,27 @@ export class WorkflowRunQueue {
   /** Deterministic exponential backoff for the given completed attempt number (1-based). */
   backoff(attempt: number): number {
     return Math.min(this.retryMaxDelayMs, this.retryBaseDelayMs * 2 ** Math.max(0, attempt - 1))
+  }
+
+  /** Resolve the audit actor; with access control on, only a real principal is accepted. */
+  private actorId(actorOrPrincipal: string | Principal): string {
+    if (typeof actorOrPrincipal === 'string') {
+      if (this.access) throw new Error('This queue requires an authenticated principal, not an actor name.')
+      assertActor(actorOrPrincipal)
+      return actorOrPrincipal
+    }
+    if (!isPrincipal(actorOrPrincipal)) throw new Error('A valid principal is required.')
+    return actorOrPrincipal.id
+  }
+
+  private async authorizeRunAction(run: WorkflowRunRecord, actorOrPrincipal: string | Principal, permission: Permission): Promise<void> {
+    if (!this.access) return
+    const principal = typeof actorOrPrincipal === 'string' ? undefined : actorOrPrincipal
+    const decision = this.access.authorize(principal, permission, { tenantId: run.tenantId, id: run.runId, kind: 'workflow-run', ...(run.requestedBy ? { requestedBy: run.requestedBy } : {}) })
+    if (!decision.allowed) {
+      await this.event(run.runId, 'access-denied', { actor: decision.principalId, detail: `${permission}: ${decision.reasons.join(' ')}` })
+      throw new AccessDeniedError(decision)
+    }
   }
 
   private async event(runId: string, type: WorkflowRunEventType, extra: { actor?: string; detail?: string } = {}) {

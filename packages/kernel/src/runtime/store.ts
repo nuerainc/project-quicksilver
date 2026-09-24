@@ -58,6 +58,8 @@ export interface WorkflowRunRecord {
   createdAt: number
   updatedAt: number
   idempotencyKey?: string
+  /** Verified principal that enqueued the run, when an access controller is configured. */
+  requestedBy?: string
   lease?: WorkflowRunLease
   cancelRequest?: { actor: string; reason: string; at: number }
   result?: WorkflowExecutionResult
@@ -77,6 +79,7 @@ export type WorkflowRunEventType =
   | 'cancelled'
   | 'lease-expired'
   | 'redriven'
+  | 'access-denied'
 
 export interface WorkflowRunEvent {
   runId: string

@@ -10,7 +10,7 @@
 ![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript&logoColor=white)
 ![Sanity](https://img.shields.io/badge/Sanity-Content_Lake_%2B_Context_MCP-F03E2F?logo=sanity&logoColor=white)
 ![AI SDK 6](https://img.shields.io/badge/AI_SDK-6-000000?logo=vercel&logoColor=white)
-![Kernel tests](https://img.shields.io/badge/kernel_tests-133%2F133-2EA043)
+![Kernel tests](https://img.shields.io/badge/kernel_tests-148%2F148-2EA043)
 ![Agent tests](https://img.shields.io/badge/agent_tests-13%2F13-2EA043)
 ![License: MIT](https://img.shields.io/badge/license-MIT-blue)
 
@@ -31,7 +31,7 @@
 > | **[nuerainc/quicksilver-sanity-challenge](https://github.com/nuerainc/quicksilver-sanity-challenge)** | **Quicksilver**, our Sanity Challenge 2026 submission. It holds the live demo, the challenge Studio, and the DEV posts, and it stays as it was submitted. |
 >
 > Project Quicksilver was inspired by our Sanity Challenge submission and started from its codebase. See [Origins](#origins).
-> **Current build status:** Nuera Quicksilver keeps the tested decision-governance foundation it inherited from the challenge build as its regression baseline. NQC evaluation and governance, tool contracts, a draft workflow builder, and an in-process graph runner are implemented foundations. Quicksilver Engine also provides a bounded, provider-neutral final-answer stress harness for multi-step arithmetic and logic traps; it does not request or retain private chain-of-thought. The editor visualizes graph connections and exposes agent retry and handler timeout settings. The runner supports opt-in bounded concurrency for independent low/moderate-impact agent steps; the read-only query route caps this at three. The read-only query worker uses a shared governed-agent contract and returns its full NQC evaluation response. Workflow drafts autosave locally, support validated JSON import/export, and can run an opt-in read-only query-agent path through NQC evaluation. Workflow tools remain blocked. A durable run queue and worker (`@quicksilver/kernel/runtime`) now provide idempotent admission, backpressure, leases, cancellation, retries, and a dead-letter queue in a single process; shared storage and multi-host hosted execution are not implemented. An internal TypeScript SDK and a dependency-free Python SDK/CLI foundation now cover workflow validation, safe preview, and opt-in read-only runs; neither is published as a stable public API. Accounts/RBAC, secrets vault, multi-host hosted execution, triggers, Go SDK, observability, and marketplace remain unimplemented.
+> **Current build status:** Nuera Quicksilver keeps the tested decision-governance foundation it inherited from the challenge build as its regression baseline. NQC evaluation and governance, tool contracts, a draft workflow builder, and an in-process graph runner are implemented foundations. Quicksilver Engine also provides a bounded, provider-neutral final-answer stress harness for multi-step arithmetic and logic traps; it does not request or retain private chain-of-thought. The editor visualizes graph connections and exposes agent retry and handler timeout settings. The runner supports opt-in bounded concurrency for independent low/moderate-impact agent steps; the read-only query route caps this at three. The read-only query worker uses a shared governed-agent contract and returns its full NQC evaluation response. Workflow drafts autosave locally, support validated JSON import/export, and can run an opt-in read-only query-agent path through NQC evaluation. Workflow tools remain blocked. A durable run queue and worker (`@quicksilver/kernel/runtime`) now provide idempotent admission, backpressure, leases, cancellation, retries, and a dead-letter queue in a single process; shared storage and multi-host hosted execution are not implemented. Kernel RBAC (tenant isolation, deny-by-default roles, no authority for agents, separation of duties) now guards queue operations and, when configured, per-person supervisor credentials. An internal TypeScript SDK and a dependency-free Python SDK/CLI foundation now cover workflow validation, safe preview, and opt-in read-only runs; neither is published as a stable public API. SSO/accounts UI, secrets vault, multi-host hosted execution, triggers, Go SDK, observability, and marketplace remain unimplemented.
 >
 > Canonical product docs: [Documentation index](./docs/README.md) · [NQC Kernel](./docs/nqc/README.md) · [Platform](./docs/platform/README.md) · [Spec coverage](./docs/NUERA-QUICKSILVER-SPEC-COVERAGE.md) · [Roadmap](./docs/NUERA-QUICKSILVER-ROADMAP.md)
 
@@ -141,7 +141,7 @@ at quicksilver-seven.vercel.app belongs to the
 
 | Check | Result |
 |---|---|
-| Kernel suites (`npm run kernel:test`): authorization, risk, process engine, workflow graphs and runtime, Quicksilver Engine, NQC, routing, memory, registries, durable run queue | **133 / 133** |
+| Kernel suites (`npm run kernel:test`): authorization, risk, process engine, workflow graphs and runtime, Quicksilver Engine, NQC, routing, memory, registries, durable run queue, identity/RBAC | **148 / 148** |
 | Agent tests: model config, strict-schema guards for every model schema | **13 / 13** |
 
 Inherited from the challenge build, and run against that build's live

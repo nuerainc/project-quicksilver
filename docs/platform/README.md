@@ -7,6 +7,7 @@ the [roadmap](../NUERA-QUICKSILVER-ROADMAP.md).
 
 - [Workflow graph contract](workflow-graphs.md)
 - [Durable workflow runs: queue, worker, dead letters](durable-runs.md)
+- [Identity and RBAC](identity-rbac.md)
 - [Tool registry](tool-registry.md)
 - [Supervisor approval gate](supervisor-approval.md)
 - [TypeScript SDK foundation](sdk-typescript.md)

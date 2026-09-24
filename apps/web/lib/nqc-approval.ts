@@ -1,5 +1,7 @@
 import { createHash, timingSafeEqual } from 'node:crypto'
 import type { SanityClient } from '@sanity/client'
+import { AccessController, type Permission } from '@quicksilver/kernel'
+import { StaticTokenIdentityProvider, principalsFromJson } from '@quicksilver/kernel/identity/tokens'
 
 export interface PolicyRevision {
   id: string
@@ -49,10 +51,51 @@ export function decisionActionFingerprint(binding: DecisionActionBinding): strin
 
 export type SupervisorCredentialResult =
   | { ok: true; supervisorId: string }
-  | { ok: false; reason: string; status: 401 | 503 }
+  | { ok: false; reason: string; status: 401 | 403 | 503 }
 
-/** Verify a server-to-server supervisor credential; never trust a body-supplied actor id. */
-export function verifySupervisorCredential(request: Request): SupervisorCredentialResult {
+let principalRegistry: { source: string; provider: StaticTokenIdentityProvider } | undefined
+const accessController = new AccessController({
+  audit: (decision) => {
+    if (!decision.allowed) console.warn('[nqc-access] denied', JSON.stringify({ principal: decision.principalId, permission: decision.permission, tenant: decision.tenantId, reasons: decision.reasons }))
+  },
+})
+
+function principalProvider(): StaticTokenIdentityProvider | null {
+  const source = process.env.QUICKSILVER_PRINCIPALS
+  if (!source?.trim()) return null
+  if (principalRegistry?.source !== source) {
+    principalRegistry = { source, provider: new StaticTokenIdentityProvider(principalsFromJson(source)) }
+  }
+  return principalRegistry.provider
+}
+
+/**
+ * Verify a server-to-server supervisor credential; never trust a body-supplied actor id.
+ *
+ * When `QUICKSILVER_PRINCIPALS` is set, the bearer token is matched against
+ * hashed per-person tokens and the principal must hold `permission` for
+ * `QUICKSILVER_TENANT_ID` under NQC RBAC. The principal id must be the Sanity
+ * entity id of that human supervisor. Otherwise the interim single
+ * `NQC_SUPERVISOR_TOKEN` credential is used.
+ */
+export function verifySupervisorCredential(request: Request, permission: Permission = 'decision:approve'): SupervisorCredentialResult {
+  let provider: StaticTokenIdentityProvider | null
+  try {
+    provider = principalProvider()
+  } catch {
+    return { ok: false, status: 503, reason: 'Supervisor principals are misconfigured.' }
+  }
+  if (provider) {
+    const principal = provider.authenticateHeader(request.headers.get('authorization'))
+    if (!principal) return { ok: false, status: 401, reason: 'A valid supervisor credential is required.' }
+    const tenantId = process.env.QUICKSILVER_TENANT_ID?.trim() || 'default'
+    const decision = accessController.authorize(principal, permission, { tenantId, kind: 'decision' })
+    if (!decision.allowed || principal.kind !== 'human') {
+      return { ok: false, status: 403, reason: 'This credential is not permitted to perform this supervisor action.' }
+    }
+    return { ok: true, supervisorId: principal.id }
+  }
+
   const expected = process.env.NQC_SUPERVISOR_TOKEN
   const supervisorId = process.env.NQC_SUPERVISOR_ID
   if (!expected || expected.length < 32 || !supervisorId) {
