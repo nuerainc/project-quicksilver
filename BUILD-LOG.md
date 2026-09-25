@@ -953,6 +953,12 @@ specification) became the canonical product target for this repository.
 - M1 → 0.2, M2 → 0.3, M3 → 0.4, M4 → 0.5, M5 → 0.6, M6 → 0.7. 0.9 is the release candidate (all modes pass the gate in testing). 1.0 requires operational evidence for every mode.
 - Recorded in the product definition (8.1), the roadmap's product target and the README. Documentation only.
 
+## 2026-09-25 — Nuera RDL versioning standard  *(Claude, via Cowork)*
+
+- The lab adopted one versioning standard for all projects: three-part versions (MAJOR.MINOR.PATCH), 0.1.0 at charter, a minor bump per milestone, 0.9.0 as the release candidate, and 1.0.0 only with operational evidence plus a stable interface.
+- Quicksilver's versions are rewritten in three-part form: 0.1.0 now, M1–M6 → 0.2.0–0.7.0. The meaning is unchanged. `package.json` was already `0.1.0`.
+- Documentation only.
+
 ## Errors encountered (chronological, all environments)
 
 | Day / Env | Error | Resolution |

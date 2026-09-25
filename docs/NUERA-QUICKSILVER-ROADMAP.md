@@ -19,16 +19,16 @@ and 3.
 
 | Milestone | Version | Delivers | Layer | Depends on |
 |---|---|---|---|---|
-| M1: Governance foundation | 0.2 | Kernel, evaluation, approval binding, RBAC, durable runs, triggers (the build sequence below, steps 1–3) | Foundation, 1 | In progress |
-| M2: Hosted platform | 0.3 | Packaged runtime, secrets vault, SSO, observability, tenant isolation (steps 4–6) | Foundation | M1; dedicated Sanity project unblocked |
-| M3: Intent layer | 0.4 | Decision graph, provenance tags, impact scoring for open unknowns, the intent entry point, belief updates through the memory governor | 2 | M1; Aura |
-| M4: Playbooks and Onboard pilot | 0.5 | `playbook` type (process definition plus stage graphs), Onboard playbook, connectors, backtest and shadow mode, a pilot with 1–3 businesses | 3 | M2, M3 |
-| M5: Genesis demonstration | 0.6 | Economic playbook, `experiment` and `ledgerEntry` types, WAES review in the kernel path, a small-budget spend risk scale; a $500, 30-day digital-only run | 3 | M3, M4 |
-| M6: Operate | 0.7 | Steady-state operations, reinvestment, and bounded Genesis experiments inside a running business | 3 | M4, M5 |
+| M1: Governance foundation | 0.2.0 | Kernel, evaluation, approval binding, RBAC, durable runs, triggers (the build sequence below, steps 1–3) | Foundation, 1 | In progress |
+| M2: Hosted platform | 0.3.0 | Packaged runtime, secrets vault, SSO, observability, tenant isolation (steps 4–6) | Foundation | M1; dedicated Sanity project unblocked |
+| M3: Intent layer | 0.4.0 | Decision graph, provenance tags, impact scoring for open unknowns, the intent entry point, belief updates through the memory governor | 2 | M1; Aura |
+| M4: Playbooks and Onboard pilot | 0.5.0 | `playbook` type (process definition plus stage graphs), Onboard playbook, connectors, backtest and shadow mode, a pilot with 1–3 businesses | 3 | M2, M3 |
+| M5: Genesis demonstration | 0.6.0 | Economic playbook, `experiment` and `ledgerEntry` types, WAES review in the kernel path, a small-budget spend risk scale; a $500, 30-day digital-only run | 3 | M3, M4 |
+| M6: Operate | 0.7.0 | Steady-state operations, reinvestment, and bounded Genesis experiments inside a running business | 3 | M4, M5 |
 
-**Versioning:** the current version is 0.1. Each milestone raises the minor version.
-0.9 is the release candidate, when all three modes pass the parity gate in
-testing. **1.0 requires all three modes (Genesis, Onboard, Operate) to pass the
+**Versioning:** the current version is 0.1.0 (Nuera RDL versioning standard). Each milestone raises the minor version.
+0.9.0 is the release candidate, when all three modes pass the parity gate in
+testing. **1.0.0 requires all three modes (Genesis, Onboard, Operate) to pass the
 parity gate with operational evidence.** See the
 [product definition](NUERA-QUICKSILVER-PRODUCT.md#81-versioning).
 

@@ -88,9 +88,9 @@ Kernel, and recorded.
 7. **Wellbeing alignment,** with WAES review of every offer, claim and outbound message.
 8. **Platform baseline parity,** proven by a pass/fail test for each baseline item.
 
-**Version:** 0.1. Nuera Quicksilver stays on 0.x until all three modes pass the
-parity gate; each milestone raises the minor version (M1 → 0.2 … M6 → 0.7), and
-1.0 requires operational evidence for every mode.
+**Version:** 0.1.0. Following the Nuera RDL versioning standard, Nuera Quicksilver stays on 0.x until all three modes pass the
+parity gate; each milestone raises the minor version (M1 → 0.2.0 … M6 → 0.7.0), and
+1.0.0 requires operational evidence for every mode.
 
 Milestones M1–M6, the versioning table and the success metrics are in the
 [product definition](./docs/NUERA-QUICKSILVER-PRODUCT.md#8-goals). What
