@@ -28,12 +28,16 @@
     "./runtime": "./src/runtime/index.ts",
     "./runtime/file-store": "./src/runtime/file-store.ts",
     "./identity": "./src/identity/index.ts",
-    "./identity/tokens": "./src/identity/tokens.ts"
+    "./identity/tokens": "./src/identity/tokens.ts",
+    "./triggers": "./src/triggers/index.ts",
+    "./triggers/cron": "./src/triggers/cron.ts",
+    "./runtime/postgres": "./src/runtime/postgres-store.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
-    "typescript": "^5.6.3"
+    "typescript": "^5.6.3",
+    "@electric-sql/pglite": "^0.5.8"
   }
 }

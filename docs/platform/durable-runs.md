@@ -16,6 +16,7 @@ re-exported from the kernel root, so browser bundles never include them.
 |---|---|
 | `store.ts` | `WorkflowRunRecord` v1 contract, append-only `WorkflowRunEvent` log, `WorkflowRunStore` port, `InMemoryWorkflowRunStore` |
 | `file-store.ts` | `FileWorkflowRunStore`: fsync'd JSONL journal replayed on open; drops a torn final line, refuses mid-file corruption, supports atomic compaction |
+| `postgres-store.ts` | `PostgresWorkflowRunStore` (`@quicksilver/kernel/runtime/postgres`): multi-host store over any `query(text, params)` client (node-postgres `Pool`, PGlite); idempotent `migrate()`, revision-guarded single-statement updates, unique idempotency index, retried event sequencing |
 | `queue.ts` | `WorkflowRunQueue`: admission, idempotency, backpressure, priority claiming, leases, retries, dead letters, cancellation, redrive, stats |
 | `worker.ts` | `WorkflowRunWorker`: claims runs, resolves handlers per run (tenant scope), heartbeats, propagates cancellation, graceful `start()`/`stop()` |
 
@@ -47,7 +48,10 @@ audit trail.
   `code: 'backpressure'`, so the queue doesn't grow without bound.
 - **Fairness:** runs are claimed by priority (0–9), then availability, then
   age. `maxRunningPerTenant` (default 4) stops a single tenant from taking
-  every worker.
+  every worker. Claims made through one queue instance are serialized, so the
+  limit is exact there. When several processes share a store, a claim that
+  pushes a tenant over the limit hands itself back. The earliest claims win,
+  and the hand-back doesn't use up an attempt.
 - **`blocked` is final.** A governance stop (evaluator BLOCK, denied approval,
   missing validator) is never retried.
 - **Tools are never repeated automatically.** A failed attempt in which any
@@ -110,12 +114,12 @@ activated steps. `workflows.test.ts` covers this.
 
 ## Not yet built
 
-- A transactional multi-host store (Postgres or similar) behind the same
-  `WorkflowRunStore` port. The file journal assumes a single writer process.
-- Trigger adapters (webhook receiver, cron scheduler, event bus) that call
-  `enqueue`. The `trigger` field and `delayMs` are the hooks for them.
-- Authentication and RBAC on enqueue, cancel, and redrive. The actor strings
-  are recorded, but nothing verifies them yet.
+- ~~Multi-host store~~: `PostgresWorkflowRunStore`. ~~Triggers~~: see
+  [triggers](triggers.md). ~~RBAC on queue operations~~: see
+  [identity and RBAC](identity-rbac.md).
+- An indexed `claimNext` fast path for Postgres (`FOR UPDATE SKIP LOCKED`).
+  Claims currently list the queued runs and use compare-and-set, which is
+  correct but reads more rows than needed at high volume.
 - Metrics and dashboards over `stats()` and the event log. Retention and
   compaction policy.
 - Isolated execution (containers, resource limits) for untrusted tools.

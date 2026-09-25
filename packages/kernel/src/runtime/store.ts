@@ -31,6 +31,8 @@ export interface WorkflowRunTrigger {
 export interface WorkflowRunLease {
   workerId: string
   expiresAt: number
+  /** When this attempt was claimed; stable across heartbeats. Orders runs for per-tenant limits. */
+  claimedAt?: number
 }
 
 export interface WorkflowRunRecord {

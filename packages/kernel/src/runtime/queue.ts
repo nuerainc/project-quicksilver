@@ -81,6 +81,7 @@ const TRIGGERS = new Set(['manual', 'api', 'webhook', 'schedule', 'event'])
 export class WorkflowRunQueue {
   readonly store: WorkflowRunStore
   readonly access?: AccessController
+  private claimChain: Promise<void> = Promise.resolve()
   readonly leaseMs: number
   private readonly now: () => number
   private readonly newRunId: () => string
@@ -183,6 +184,20 @@ export class WorkflowRunQueue {
    */
   async claim(workerId: string): Promise<WorkflowRunRecord | undefined> {
     assertWorkerId(workerId)
+    // Serialize claims from this queue instance so its per-tenant limit is exact;
+    // claims from other processes are reconciled after the compare-and-set below.
+    const previous = this.claimChain
+    let release!: () => void
+    this.claimChain = new Promise<void>((resolve) => { release = resolve })
+    await previous
+    try {
+      return await this.claimUnlocked(workerId)
+    } finally {
+      release()
+    }
+  }
+
+  private async claimUnlocked(workerId: string): Promise<WorkflowRunRecord | undefined> {
     const now = this.now()
     const running = await this.store.list({ status: 'running' })
     const runningByTenant = countBy(running, (run) => run.tenantId)
@@ -190,20 +205,31 @@ export class WorkflowRunQueue {
       .filter((run) => run.availableAt <= now && !run.cancelRequest)
       .sort((a, b) => b.priority - a.priority || a.availableAt - b.availableAt || a.createdAt - b.createdAt || a.runId.localeCompare(b.runId))
 
+    const fullTenants = new Set<string>()
     for (const candidate of candidates) {
-      if ((runningByTenant.get(candidate.tenantId) ?? 0) >= this.maxRunningPerTenant) continue
+      if (fullTenants.has(candidate.tenantId) || (runningByTenant.get(candidate.tenantId) ?? 0) >= this.maxRunningPerTenant) continue
       const next: WorkflowRunRecord = {
         ...candidate,
         revision: candidate.revision + 1,
         status: 'running',
         attempt: candidate.attempt + 1,
-        lease: { workerId, expiresAt: now + this.leaseMs },
+        lease: { workerId, expiresAt: now + this.leaseMs, claimedAt: now },
         updatedAt: now,
       }
-      if (await this.store.compareAndSet(next, candidate.revision)) {
-        await this.event(next.runId, 'claimed', { actor: workerId, detail: `attempt ${next.attempt}/${next.maxAttempts}` })
-        return next
+      if (!(await this.store.compareAndSet(next, candidate.revision))) continue
+      // Another process may have claimed for the same tenant concurrently. Keep the
+      // earliest claims within the limit and hand this one back if it is over.
+      const tenantRunning = (await this.store.list({ status: 'running', tenantId: candidate.tenantId }))
+        .sort((a, b) => (a.lease?.claimedAt ?? a.updatedAt) - (b.lease?.claimedAt ?? b.updatedAt) || a.runId.localeCompare(b.runId))
+      if (tenantRunning.findIndex((run) => run.runId === next.runId) >= this.maxRunningPerTenant) {
+        const yielded: WorkflowRunRecord = { ...next, revision: next.revision + 1, status: 'queued', attempt: candidate.attempt, updatedAt: now }
+        delete yielded.lease
+        await this.store.compareAndSet(yielded, next.revision)
+        fullTenants.add(candidate.tenantId)
+        continue
       }
+      await this.event(next.runId, 'claimed', { actor: workerId, detail: `attempt ${next.attempt}/${next.maxAttempts}` })
+      return next
     }
     return undefined
   }
@@ -213,7 +239,7 @@ export class WorkflowRunQueue {
     const run = await this.store.get(runId)
     if (!run || run.status !== 'running' || run.lease?.workerId !== workerId) return undefined
     const now = this.now()
-    const next = { ...run, revision: run.revision + 1, lease: { workerId, expiresAt: now + this.leaseMs }, updatedAt: now }
+    const next = { ...run, revision: run.revision + 1, lease: { ...run.lease, workerId, expiresAt: now + this.leaseMs }, updatedAt: now }
     return (await this.store.compareAndSet(next, run.revision)) ? next : undefined
   }
 
