@@ -60,6 +60,12 @@ async function buildAgentRunner(log: Logger): Promise<AgentRunner | undefined> {
     return undefined
   }
   const agent = await import('@quicksilver/agent')
+  try {
+    agent.readEnvMcpConfig()
+  } catch (error) {
+    log.error('Context MCP configuration refused; agent steps will fail closed', { error: (error as Error).message })
+    return undefined
+  }
   if (!agent.isLlmConfigured()) {
     log.warn('no model provider is configured; agent steps will fail closed')
     return undefined

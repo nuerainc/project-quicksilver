@@ -29,13 +29,29 @@ After the dataset and token are configured:
    "Unauthorized - Session not found" means the token was revoked or rotated
    and the `.env` value is stale.
 
-**Context MCP endpoints must belong to this project.** The challenge build
-used `…/mcp/quicksilver-agent` and `…/mcp/quicksilver-knowledge-base`. If
-those agent contexts live in the challenge project, agents read challenge data
-while decisions and evaluations are written here. Create agent contexts (and a
-knowledge base) inside `f87t11g1` under new names, for example
-`nuera-quicksilver-agent` and `nuera-quicksilver-kb`, and point the
-`SANITY_CONTEXT_*` variables at them.
+**Context MCP endpoints must belong to this project.** On 2026-09-25 a query
+confirmed `f87t11g1` held no agent contexts: the endpoints in use
+(`…/mcp/quicksilver-agent`, `…/mcp/quicksilver-knowledge-base`, knowledge base
+`kbxQPcFbgi6f`) read the challenge project. The agent package now refuses
+those names and that knowledge base id, the same way the app refuses project
+`d280bqjc`.
+
+To create this project's own endpoints (Sanity Dashboard → Context):
+
+1. Deploy the schema first (step 4). An endpoint with a dataset source needs
+   a deployed schema.
+2. **GROQ-mode endpoint:** new MCP named `nuera-quicksilver-agent`, source
+   dataset `f87t11g1` / `production`. Names can't be changed later.
+3. **Knowledge base:** new knowledge base (for example "Nuera Quicksilver
+   evidence and policy"), source dataset `f87t11g1` / `production`, limited to
+   `evidence` and `policy` documents. Build entries, wait for "Entries up to
+   date", and review **Issues** (the seeded contradictions are expected).
+4. **KB-mode endpoint:** new MCP named `nuera-quicksilver-kb` with that
+   knowledge base as its only source (or `?mode=knowledge_base&knowledgeBases=<kb…id>`).
+5. Update the root `.env`: `SANITY_CONTEXT_MCP_URL`,
+   `SANITY_CONTEXT_KB_MCP_URL` and `SANITY_KNOWLEDGE_BASE_ID`. The existing
+   org-level Context Viewer token (`SANITY_CONTEXT_TOKEN`) still works.
+6. Run `npm run verify:mcp`. It must show the new knowledge base id.
 
 The app and Studio are pointed at the dedicated project locally. The reviewed
 starter seed has been written to the new private dataset: 53 documents across

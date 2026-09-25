@@ -1011,6 +1011,19 @@ a single tenant.
 Version stays 0.1.0 until the founder's checks pass: 0.2.0 after the live
 Sanity check, 0.3.0 after the first host deployment.
 
+## 2026-09-25 — Sanity isolation: schema deploy credential and Context MCP guard  *(Claude, via Cowork)*
+
+- The founder's `verify:mcp` passed, but a CLI query showed `f87t11g1` had no
+  agent contexts: the configured Context MCP endpoints read the challenge
+  project. `packages/agent/src/mcp.ts` now refuses the challenge endpoint
+  names and knowledge base id (`assertNotLegacyContextEndpoint`); the host
+  logs the refusal at startup and fails agent steps closed.
+- `schema:deploy` failed with "Session not found" (stale content token). The
+  wrapper now uses `SANITY_DEPLOY_TOKEN` or `--login`, and reports which file
+  supplied the token.
+- Setup steps for this project's own endpoints are in
+  `docs/platform/sanity-isolation.md`. Agent tests 18/18.
+
 ## Errors encountered (chronological, all environments)
 
 | Day / Env | Error | Resolution |

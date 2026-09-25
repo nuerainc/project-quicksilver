@@ -50,6 +50,36 @@ export interface NamedMcpClient {
   client: SanityMcpClient
 }
 
+/**
+ * Context MCP endpoints and the knowledge base that belong to the paused
+ * Sanity Challenge project. The Nuera instance must never read them: they
+ * serve the challenge dataset, while this instance writes decisions and
+ * evaluations to its own project. Same rule as the blocked project id.
+ */
+const LEGACY_CHALLENGE_ENDPOINT_NAMES = ['quicksilver-agent', 'quicksilver-knowledge-base'] as const
+const LEGACY_CHALLENGE_KNOWLEDGE_BASE_IDS = ['kbxQPcFbgi6f'] as const
+
+/** Throws when a Context MCP URL points at the challenge project's endpoints or knowledge base. */
+export function assertNotLegacyContextEndpoint(url: string): void {
+  let parsed: URL
+  try {
+    parsed = new URL(url)
+  } catch {
+    throw new Error('Context MCP URL is not a valid URL.')
+  }
+  const name = parsed.pathname.replace(/\/+$/, '').split('/').at(-1) ?? ''
+  const kbIds = (parsed.searchParams.get('knowledgeBases') ?? '').split(',').map((id) => id.trim())
+  if ((LEGACY_CHALLENGE_ENDPOINT_NAMES as readonly string[]).includes(name)) {
+    throw new Error(
+      `Context MCP endpoint "${name}" belongs to the paused Sanity Challenge project and is blocked. ` +
+        'Create endpoints in the dedicated Nuera Quicksilver project (see docs/platform/sanity-isolation.md).',
+    )
+  }
+  if (kbIds.some((id) => (LEGACY_CHALLENGE_KNOWLEDGE_BASE_IDS as readonly string[]).includes(id))) {
+    throw new Error('The challenge knowledge base is blocked. Build a knowledge base in the dedicated Nuera Quicksilver project.')
+  }
+}
+
 /** Single-endpoint config, kept for callers that only ever talk GROQ-mode. */
 export function readEnvMcpConfig(): SanityMCPConfig {
   const url = process.env.SANITY_CONTEXT_MCP_URL
@@ -59,6 +89,7 @@ export function readEnvMcpConfig(): SanityMCPConfig {
       'SANITY_CONTEXT_MCP_URL and SANITY_CONTEXT_TOKEN must be set. See .env.example.',
     )
   }
+  assertNotLegacyContextEndpoint(url)
   return { endpointUrl: url, token }
 }
 
@@ -75,6 +106,7 @@ export function readEnvMcpConfigs(): NamedMcpConfig[] {
 
   const kbUrl = process.env.SANITY_CONTEXT_KB_MCP_URL
   if (kbUrl) {
+    assertNotLegacyContextEndpoint(kbUrl)
     const kbToken = process.env.SANITY_CONTEXT_KB_TOKEN || groq.token
     configs.push({ endpointUrl: kbUrl, token: kbToken, label: 'kb' })
   }
