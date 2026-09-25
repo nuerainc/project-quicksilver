@@ -48,6 +48,13 @@ export default defineType({
       of: [{ type: 'string' }],
     }),
     defineField({
+      name: 'policyResolutions',
+      type: 'array',
+      of: [{ type: 'string' }],
+      description: 'Policy disagreements the kernel resolved deterministically by priority.',
+      readOnly: true,
+    }),
+    defineField({
       name: 'policyChecks',
       type: 'array',
       of: [

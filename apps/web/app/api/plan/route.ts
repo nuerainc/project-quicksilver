@@ -51,6 +51,7 @@ import { policySnapshotVersion } from '@/lib/nqc-approval'
 import { isLlmConfigured, planObjective, reviewProposedAction, type ReviewResult } from '@quicksilver/agent'
 import {
   evaluateAndAuthorize,
+  conditionFromSanity,
   nextAutomaticTransition,
   type AuthorizeResult,
   type Facts,
@@ -58,8 +59,10 @@ import {
   type EntityRef,
   type EntityType,
   type EvidenceRef,
+  type PolicyEffect,
   type PolicyRef,
   type ProposedAction,
+  type SanityGuardCondition,
   type RiskLevel,
   type EvaluationResult,
 } from '@quicksilver/kernel'
@@ -120,9 +123,12 @@ async function resolveAction(
         expirationDate?: string | null
         supersedesIds?: string[] | null
         approvalRequirementIds?: string[] | null
+        effect?: PolicyEffect | null
+        maxRiskLevel?: number | null
+        whenAll?: SanityGuardCondition[] | null
       }>
     >(
-      `*[_type == "policy" && _id in $ids]{ _id, _rev, name, scope, priority, effectiveDate, expirationDate, "supersedesIds": supersedes[]._ref, "approvalRequirementIds": approvalRequirements[]._ref }`,
+      `*[_type == "policy" && _id in $ids]{ _id, _rev, name, scope, priority, effectiveDate, expirationDate, "supersedesIds": supersedes[]._ref, "approvalRequirementIds": approvalRequirements[]._ref, effect, maxRiskLevel, whenAll }`,
       { ids: action.applicablePolicyIds },
     ),
     client.fetch<Array<{ _id: string; title: string; confidence: number }>>(
@@ -158,6 +164,9 @@ async function resolveAction(
     expirationDate: p.expirationDate ?? undefined,
     supersedesIds: p.supersedesIds ?? [],
     approvalRequirementIds: p.approvalRequirementIds ?? [],
+    effect: p.effect ?? null,
+    maxRiskLevel: typeof p.maxRiskLevel === 'number' ? (p.maxRiskLevel as RiskLevel) : null,
+    when: p.whenAll?.length ? { all: p.whenAll.map(conditionFromSanity) } : null,
   }))
 
   const evidence: EvidenceRef[] = evidenceDocs.map((e) => ({
@@ -223,7 +232,13 @@ function buildDecisionDoc(args: {
     constraints,
     policyChecks: decision.policyChecks.map((c) => {
       const scope = refs.policies.find((p) => p.id === c.policyId)?.scope
-      const conflicted = c.result === 'applies' && scope !== undefined && (scopeCount.get(scope) ?? 0) > 1
+      // A shared scope is only a conflict when the kernel reported one for it;
+      // structured policies that agree, or that priority resolved, are not conflicts.
+      const conflicted =
+        c.result === 'applies' &&
+        scope !== undefined &&
+        (scopeCount.get(scope) ?? 0) > 1 &&
+        decision.policyConflicts.some((msg) => msg.includes(`"${scope}"`))
       return {
         _key: c.policyId,
         policy: { _type: 'reference' as const, _ref: c.policyId },
@@ -231,6 +246,7 @@ function buildDecisionDoc(args: {
         reason: conflicted ? `${c.reason} Shares this scope with another applicable policy.` : c.reason,
       }
     }),
+    policyResolutions: decision.policyResolutions ?? [],
     riskLevel: decision.riskLevel,
     requiredApproval: decision.requiresApproval,
     policySnapshotVersion: policyVersion,

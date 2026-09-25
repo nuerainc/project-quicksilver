@@ -1,4 +1,5 @@
 import { defineType, defineField } from 'sanity'
+import { guardCondition } from './workflow'
 
 export default defineType({
   name: 'policy',
@@ -21,6 +22,27 @@ export default defineType({
       name: 'rules',
       type: 'array',
       of: [{ type: 'text' }],
+    }),
+    defineField({
+      name: 'effect',
+      type: 'string',
+      description:
+        'Optional structured effect. Leave empty to keep free-text behavior (same-scope policies go to a human).',
+      options: { list: ['allow', 'require-approval', 'deny'], layout: 'radio' },
+    }),
+    defineField({
+      name: 'maxRiskLevel',
+      type: 'number',
+      description: 'For "allow": the highest kernel risk (0-5) it permits. Above this, it requires approval.',
+      validation: (r) => r.min(0).max(5).integer(),
+    }),
+    defineField({
+      name: 'whenAll',
+      title: 'Applies when (all conditions)',
+      type: 'array',
+      of: [guardCondition],
+      description:
+        'Conditions over facts. Permissive policies need every fact present; restrictive ones still apply when a fact is missing.',
     }),
     defineField({ name: 'effectiveDate', type: 'date' }),
     defineField({ name: 'expirationDate', type: 'date' }),

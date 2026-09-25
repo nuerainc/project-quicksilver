@@ -1,6 +1,7 @@
 export * from './types.ts'
 export { checkCapability } from './capability.ts'
 export { checkAuthority } from './authority.ts'
+export type { AuthorityOptions, AuthorityResult } from './authority.ts'
 export { computeRisk, averageEvidenceConfidence } from './risk.ts'
 export { authorize } from './approval.ts'
 export type { AuthorizeArgs, AuthorizeResult } from './approval.ts'
@@ -30,7 +31,7 @@ export type {
   TransitionDecision,
   ValidationResult,
 } from './process.ts'
-export { processFromSanity, processToSanityFields } from './process-document.ts'
+export { processFromSanity, processToSanityFields, conditionFromSanity } from './process-document.ts'
 export type { SanityProcessDocument, SanityGuardCondition } from './process-document.ts'
 export { evaluateAgentOutput, validateToolRequest } from './engine/index.ts'
 export { generateReasoningStressChallenge, scoreReasoningStressAnswer, runReasoningStressSuite } from './engine/index.ts'

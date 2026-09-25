@@ -36,6 +36,8 @@ export interface AuthorizeArgs {
   capabilities: CapabilityRef[]
   policies: PolicyRef[]
   evidence: EvidenceRef[]
+  /** Facts for structured policy conditions (see authority.ts). */
+  facts?: import('./process.ts').Facts
   thresholds?: {
     autoMax?: RiskLevel     // risk ≤ this → autonomous
     review?: RiskLevel      // risk ≤ this → additional validation, no human needed
@@ -51,6 +53,8 @@ export interface AuthorizeResult {
   policyConflicts: string[]
   /** Per-policy audit rows (applies / superseded / inapplicable) for the decision record. */
   policyChecks: PolicyCheck[]
+  /** Policy disagreements resolved deterministically by priority. */
+  policyResolutions: string[]
   averageEvidenceConfidence: number
   recommendation: 'execute-autonomously' | 'request-approval' | 'reject'
 }
@@ -62,6 +66,7 @@ export function authorize(args: AuthorizeArgs): AuthorizeResult {
     capabilities,
     policies,
     evidence,
+    facts,
     thresholds = {},
   } = args
 
@@ -70,20 +75,25 @@ export function authorize(args: AuthorizeArgs): AuthorizeResult {
 
   const capability = capabilities.find((c) => c.id === action.capabilityId)
   const capabilityCheck = checkCapability(actor, action, capabilities)
-  const authority = checkAuthority(action, policies)
 
   // Filter the evidence pool to only what the action actually cites.
   const actionEvidence = evidence.filter((e) => action.evidenceIds.includes(e.id))
   const riskLevel = computeRisk(action, capability, actionEvidence)
+  const authority = checkAuthority(action, policies, {
+    riskLevel,
+    facts: { 'action.riskLevel': riskLevel, 'action.reversible': action.reversible, ...(facts ?? {}) },
+  })
   const evidenceConf = averageEvidenceConfidence(actionEvidence)
 
   // Hard blocks: the actor fundamentally cannot do this.
   const blockingReasons: string[] = []
   if (!capabilityCheck.allowed) blockingReasons.push(capabilityCheck.reason)
+  blockingReasons.push(...authority.blockingReasons)
 
   // Soft concerns: the actor can attempt this, but humans should review.
   const concerns: string[] = []
   if (authority.conflicts.length > 0) concerns.push(...authority.conflicts)
+  concerns.push(...authority.approvalReasons)
   if (actionEvidence.length === 0) {
     blockingReasons.push('No evidence supports this action.')
   } else if (evidenceConf < 0.5) {
@@ -125,6 +135,7 @@ export function authorize(args: AuthorizeArgs): AuthorizeResult {
     concerns,
     policyConflicts: authority.conflicts,
     policyChecks: authority.checks,
+    policyResolutions: authority.resolutions,
     averageEvidenceConfidence: evidenceConf,
     recommendation,
   }

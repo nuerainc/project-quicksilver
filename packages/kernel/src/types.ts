@@ -9,6 +9,9 @@ export type EntityType = 'human' | 'agent' | 'robot' | 'service' | 'contractor' 
 
 export type RiskLevel = 0 | 1 | 2 | 3 | 4 | 5
 
+/** Structured policy effect, from least to most restrictive. */
+export type PolicyEffect = 'allow' | 'require-approval' | 'deny'
+
 /** A candidate action proposed by the planner model. */
 export interface ProposedAction {
   description: string
@@ -49,6 +52,15 @@ export interface PolicyRef {
   expirationDate?: string | null
   supersedesIds: string[]
   approvalRequirementIds: string[]
+  /**
+   * Optional structured effect. Policies without one keep the original
+   * behavior (free-text rules; same-scope conflicts go to a human).
+   */
+  effect?: PolicyEffect | null
+  /** For `allow`: the highest risk it permits; above this it requires approval. */
+  maxRiskLevel?: RiskLevel | null
+  /** Conditions over facts, in the process-guard format. */
+  when?: import('./process.ts').Guard | null
 }
 
 /** A policy check result — one row in the decision record. */

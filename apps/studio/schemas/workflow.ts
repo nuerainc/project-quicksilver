@@ -26,7 +26,7 @@ const GUARD_OPS = [
   { title: 'exists', value: 'exists' },
 ]
 
-const guardCondition = defineArrayMember({
+export const guardCondition = defineArrayMember({
   type: 'object',
   name: 'guardCondition',
   title: 'Condition',

@@ -49,7 +49,7 @@ function conditionToSanity(c: GuardCondition, i: number): SanityGuardCondition {
   return out
 }
 
-function conditionFromSanity(c: SanityGuardCondition): GuardCondition {
+export function conditionFromSanity(c: SanityGuardCondition): GuardCondition {
   let value: GuardValue | undefined
   if (Array.isArray(c.valueList)) value = c.valueList
   else if (typeof c.valueString === 'string') value = c.valueString
