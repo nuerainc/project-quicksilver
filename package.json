@@ -14,7 +14,7 @@
     "dev:studio": "npm run dev --workspace=@quicksilver/studio",
     "host": "npm run start --workspace=@quicksilver/host --",
     "build": "npm run build --workspaces --if-present",
-    "schema:deploy": "npm run schema:deploy --workspace=@quicksilver/studio",
+    "schema:deploy": "npm run schema:deploy --workspace=@quicksilver/studio --",
     "smoke": "npm run smoke --workspace=@quicksilver/studio",
     "seed": "npm run seed --workspace=@quicksilver/studio",
     "seed:processes": "npm run seed:processes --workspace=@quicksilver/studio",
