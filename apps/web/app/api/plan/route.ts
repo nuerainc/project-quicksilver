@@ -47,9 +47,16 @@ import { NextResponse } from 'next/server'
 import { getDedicatedSanityProjectId } from '@/lib/sanity-config'
 import { createClient } from '@sanity/client'
 import { z } from 'zod'
-import { policySnapshotVersion } from '@/lib/nqc-approval'
-import { isLlmConfigured, planObjective, reviewProposedAction, type ReviewResult } from '@quicksilver/agent'
+import { identifyRequester, policySnapshotVersion } from '@/lib/nqc-approval'
 import {
+  executeGovernedAgent,
+  isLlmConfigured,
+  plannerQuicksilverAgent,
+  reviewerQuicksilverAgent,
+  type ReviewResult,
+} from '@quicksilver/agent'
+import {
+  applyUpstreamEscalation,
   evaluateAndAuthorize,
   conditionFromSanity,
   nextAutomaticTransition,
@@ -205,9 +212,10 @@ function buildDecisionDoc(args: {
   safetyDecision: 'ALLOW' | 'BLOCK' | 'ESCALATE'
   review: ReviewResult | null
   policySnapshotVersion: string
+  requestedBy: string
   now: string
 }) {
-  const { id, objective, constraints, reasoning, action, refs, decision, evaluation, safetyDecision, review, policySnapshotVersion: policyVersion, now } = args
+  const { id, objective, constraints, reasoning, action, refs, decision, evaluation, safetyDecision, review, policySnapshotVersion: policyVersion, requestedBy, now } = args
 
   // The kernel reports conflicts per shared scope as text; mark every applicable
   // policy in a shared scope as `conflicts` in the per-policy audit rows.
@@ -278,6 +286,9 @@ function buildDecisionDoc(args: {
         }
       : undefined,
     status: decision.recommendation === 'reject' ? ('rejected' as const) : ('awaiting-approval' as const),
+    // Separation of duties: who asked, and which agent proposed this action.
+    requestedBy,
+    proposedBy: 'nuera-quicksilver:planner',
     createdAt: now,
   }
 }
@@ -302,6 +313,9 @@ export async function POST(req: Request) {
   }
   const { objective } = parsed.data
 
+  const requester = identifyRequester(req)
+  if (!requester.ok) return NextResponse.json({ error: requester.reason }, { status: requester.status })
+
   if (!isLlmConfigured()) {
     return NextResponse.json(
       {
@@ -320,7 +334,16 @@ export async function POST(req: Request) {
 
   try {
     const client = getSanityClient()
-    const plan = await planObjective({ objective })
+    // The planner runs on the standard agent contract, so its output is evaluated
+    // by the Quicksilver Engine before any candidate action reaches the kernel.
+    const plannerRun = await executeGovernedAgent(plannerQuicksilverAgent, {
+      agentId: plannerQuicksilverAgent.id,
+      taskType: 'planning',
+      input: { objective },
+      impactLevel: 'moderate',
+      signal: req.signal,
+    })
+    const plan = plannerRun.output
     const now = new Date().toISOString()
     const runId = Date.now().toString(36)
 
@@ -349,7 +372,7 @@ export async function POST(req: Request) {
             operationalImpact: action.operationalImpact as RiskLevel,
             uncertainty: action.uncertainty as RiskLevel,
           }
-          const governed = evaluateAndAuthorize({
+          const perAction = evaluateAndAuthorize({
             action: kernelAction,
             actor: refs.actor,
             capabilities: [refs.capability],
@@ -371,6 +394,8 @@ export async function POST(req: Request) {
             uncertainty: kernelAction.uncertainty,
             stepCount: 1,
           })
+          // A planner run the engine escalated can only tighten each action's outcome.
+          const governed = applyUpstreamEscalation(perAction, plannerRun.evaluation, 'The planner run')
           decision = governed.decision
           evaluation = governed.evaluation
           safetyDecision = governed.safetyDecision
@@ -381,7 +406,11 @@ export async function POST(req: Request) {
           // see. A reviewer failure (bad output, provider error) must not
           // block the plan response, so reviewProposedAction() always
           // resolves (see its own fallback) rather than throwing.
-          review = await reviewProposedAction({
+          review = (await executeGovernedAgent(reviewerQuicksilverAgent, {
+            agentId: reviewerQuicksilverAgent.id,
+            taskType: 'evaluation',
+            impactLevel: 'low',
+            input: {
             action: kernelAction,
             actor: { id: refs.actor.id, name: refs.actor.name, entityType: refs.actor.entityType },
             capability: {
@@ -391,7 +420,8 @@ export async function POST(req: Request) {
             },
             policies: refs.policies.map((p) => ({ id: p.id, name: p.name, scope: p.scope, priority: p.priority })),
             evidence: refs.evidence,
-          })
+            },
+          })).output
 
           doc = buildDecisionDoc({
             id: `decision-plan-${runId}-${i}`,
@@ -405,6 +435,7 @@ export async function POST(req: Request) {
             safetyDecision: governed.safetyDecision,
             review,
             policySnapshotVersion: refs.policySnapshotVersion,
+            requestedBy: requester.requestedBy,
             now,
           })
         }

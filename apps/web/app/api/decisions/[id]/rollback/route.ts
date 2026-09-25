@@ -140,6 +140,9 @@ export async function POST(
         _id: rollbackId,
         _type: 'decision',
         kind: 'rollback',
+        // Separation of duties: the supervisor who proposes a rollback may not approve it alone.
+        requestedBy: supervisor.supervisorId,
+        proposedBy: supervisor.supervisorId,
         rollbackOf: { _type: 'reference', _ref: original._id },
         question: `Roll back: ${original.selectedAction}`,
         context: [{ _type: 'reference', _ref: original._id, _key: original._id }],

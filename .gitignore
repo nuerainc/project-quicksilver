@@ -15,3 +15,8 @@ coverage
 sanity-cli.json
 .sanity/
 apps/studio/backups/
+
+# Hosted runtime: local config and data (vault file, file store)
+quicksilver.host.json
+deploy/quicksilver.host.json
+data/

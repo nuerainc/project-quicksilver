@@ -18,8 +18,8 @@ import { getDedicatedSanityProjectId } from '@/lib/sanity-config'
 import { createClient } from '@sanity/client'
 import { randomUUID } from 'node:crypto'
 import { z } from 'zod'
-import { authorizeTransition } from '@quicksilver/kernel'
-import { currentPolicySnapshotVersion, decisionActionFingerprint, verifySupervisorCredential } from '@/lib/nqc-approval'
+import { authorizeTransition, checkSeparationOfDuties } from '@quicksilver/kernel'
+import { currentPolicySnapshotVersion, decisionActionFingerprint, soleOperatorId, verifySupervisorCredential } from '@/lib/nqc-approval'
 import {
   commitTransition,
   factsFromDecision,
@@ -92,8 +92,11 @@ export async function POST(
       safetyDecision?: string | null
       policySnapshotVersion?: string | null
       policyIds?: string[]
+      requestedBy?: string | null
+      proposedBy?: string | null
+      actorId?: string | null
     } | null>(
-      `*[_type == "decision" && _id == $id][0]{ _id, _rev, status, reasoningSummary, kind, riskLevel, requiredApproval, selectedAction, safetyDecision, policySnapshotVersion, "policyIds": policyChecks[].policy._ref }`,
+      `*[_type == "decision" && _id == $id][0]{ _id, _rev, status, reasoningSummary, kind, riskLevel, requiredApproval, selectedAction, safetyDecision, policySnapshotVersion, "policyIds": policyChecks[].policy._ref, requestedBy, proposedBy, "actorId": candidateActions[0].actor._ref }`,
       { id },
     )
     if (!existing) {
@@ -124,6 +127,21 @@ export async function POST(
         return NextResponse.json({ error: 'Policy versions changed or were not recorded for this decision. Request a fresh plan.' }, { status: 409 })
       }
     }
+    // Separation of duties: nobody approves what they requested, proposed, or would carry out,
+    // unless they are the configured sole operator and give a written justification.
+    const separation = action === 'approve'
+      ? checkSeparationOfDuties({
+          approverId: supervisor.supervisorId,
+          requestedBy: existing.requestedBy,
+          proposedBy: existing.proposedBy,
+          actorId: existing.actorId,
+          soleOperatorId: soleOperatorId(),
+          justification: comment,
+        })
+      : null
+    if (separation && !separation.allowed) {
+      return NextResponse.json({ error: 'Separation of duties', reasons: separation.reasons }, { status: 403 })
+    }
     if (action === 'approve' && existing.safetyDecision === 'BLOCK') {
       return NextResponse.json({ error: 'The NQC Kernel blocked this decision; it cannot be approved.' }, { status: 409 })
     }
@@ -143,6 +161,10 @@ export async function POST(
           policySnapshotVersion: existing.policySnapshotVersion,
           supervisorId: supervisor.supervisorId,
           grantedAt,
+          soleOperatorOverride: separation?.soleOperatorOverride ?? false,
+          ...(separation?.soleOperatorOverride
+            ? { waivedConflicts: separation.conflicts, justification: comment?.trim() ?? '' }
+            : {}),
         }
       : undefined
 

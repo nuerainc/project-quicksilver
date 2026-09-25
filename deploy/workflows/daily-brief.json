@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "id": "daily-brief",
+  "version": 1,
+  "entryNodeId": "start",
+  "nodes": [
+    { "id": "start", "kind": "trigger", "label": "Schedule or request" },
+    { "id": "ask", "kind": "agent", "label": "Read-only company query", "config": { "agentId": "query", "impact": "low", "evaluationRequired": true, "maxAttempts": 2, "timeoutMs": 120000 } },
+    { "id": "done", "kind": "output", "label": "Brief" }
+  ],
+  "edges": [
+    { "id": "e1", "from": "start", "to": "ask" },
+    { "id": "e2", "from": "ask", "to": "done" }
+  ]
+}

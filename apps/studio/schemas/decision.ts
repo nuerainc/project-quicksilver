@@ -94,6 +94,9 @@ export default defineType({
         { name: 'policySnapshotVersion', type: 'string' },
         { name: 'supervisorId', type: 'string' },
         { name: 'grantedAt', type: 'datetime' },
+        { name: 'soleOperatorOverride', type: 'boolean', description: 'True when the sole operator approved despite a separation-of-duties conflict.' },
+        { name: 'waivedConflicts', type: 'array', of: [{ type: 'string' }] },
+        { name: 'justification', type: 'text', description: 'Required written reason for a sole-operator override.' },
       ],
     }),
     defineField({
@@ -235,6 +238,8 @@ export default defineType({
         },
       ],
     }),
+    defineField({ name: 'requestedBy', type: 'string', readOnly: true, description: 'Principal that submitted the objective or requested the change (separation of duties).' }),
+    defineField({ name: 'proposedBy', type: 'string', readOnly: true, description: 'Agent or principal that proposed this action (separation of duties).' }),
     defineField({ name: 'createdAt', type: 'datetime' }),
     defineField({
       name: 'approvedBy',

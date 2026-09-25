@@ -1,0 +1,14 @@
+node_modules
+**/node_modules
+.git
+.next
+**/.next
+.env
+.env.*
+!.env.example
+*.log
+coverage
+apps/studio/backups
+deploy/quicksilver.host.json
+data
+CONVERSATION-EXPORT.jsonl

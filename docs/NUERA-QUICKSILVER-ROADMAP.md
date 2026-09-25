@@ -19,14 +19,15 @@ and 3.
 
 | Milestone | Version | Delivers | Layer | Depends on |
 |---|---|---|---|---|
-| M1: Governance foundation | 0.2.0 | Kernel, evaluation, approval binding, RBAC, durable runs, triggers (the build sequence below, steps 1–3) | Foundation, 1 | In progress |
-| M2: Hosted platform | 0.3.0 | Packaged runtime, secrets vault, SSO, observability, tenant isolation (steps 4–6) | Foundation | M1; dedicated Sanity project unblocked |
+| M1: Governance foundation | 0.2.0 | Kernel, evaluation, approval binding, RBAC, durable runs, triggers, separation of duties, persisted evaluations | Foundation, 1 | Code complete; live Sanity check pending (target ~Oct 9) |
+| M2: Single-tenant hosted platform | 0.3.0 | Host process, management API, secrets vault, structured logs and metrics, deploy config ([hosted runtime](platform/hosted-runtime.md)) | Foundation | Code complete; first deployment pending (target ~Oct 30). SSO and multi-tenancy move before 0.9.0 |
 | M3: Intent layer | 0.4.0 | Decision graph, provenance tags, impact scoring for open unknowns, the intent entry point, belief updates through the memory governor | 2 | M1; Aura |
 | M4: Playbooks and Onboard pilot | 0.5.0 | `playbook` type (process definition plus stage graphs), Onboard playbook, connectors, backtest and shadow mode, a pilot with 1–3 businesses | 3 | M2, M3 |
 | M5: Genesis demonstration | 0.6.0 | Economic playbook, `experiment` and `ledgerEntry` types, WAES review in the kernel path, a small-budget spend risk scale; a $500, 30-day digital-only run | 3 | M3, M4 |
 | M6: Operate | 0.7.0 | Steady-state operations, reinvestment, and bounded Genesis experiments inside a running business | 3 | M4, M5 |
 
 **Versioning:** the current version is 0.1.0 (Nuera RDL versioning standard). Each milestone raises the minor version.
+M1 and M2 are code complete. The version moves to 0.2.0 after the live Sanity check (M1 exit item 7) passes, and to 0.3.0 after the host runs its first deployment.
 0.9.0 is the release candidate, when all three modes pass the parity gate in
 testing. **1.0.0 requires all three modes (Genesis, Onboard, Operate) to pass the
 parity gate with operational evidence.** See the
@@ -68,7 +69,10 @@ grant agents authority to approve or execute actions.
 The agent package now defines a shared versioned worker request/result
 contract. The existing read-only query worker is adapted to it and runs through
 Quicksilver Engine/NQC evaluation before returning to the live workflow runner.
-Planner and reviewer calls still use their earlier specialized interfaces.
+Planner and reviewer calls now run through the same contract
+(`plannerQuicksilverAgent`, `reviewerQuicksilverAgent`), so each call is
+evaluated. A planner evaluation that is not ALLOW sends every proposed action
+to a human (`applyUpstreamEscalation`).
 
 The workflow package also includes an in-process DAG runner with injected
 agent/tool/evaluator/approval handlers. Configured agent attempts retry with
@@ -89,8 +93,9 @@ Memory decisions are policy helpers and proposals; a persistent memory store,
 retrieval path, retention job, and domain isolation are still needed. Tool
 validation now wraps the existing Sanity Context MCP execution path, but
 multi-step dependencies and verified approval for effectful integrations still
-need to be connected. Query evaluation is returned to the caller; it is not yet
-stored as a durable run record.
+need to be connected. Query and workflow evaluations are stored as
+`evaluationRecord` documents, and responses report whether the audit write
+succeeded.
 
 ## Gap analysis against the enterprise specification
 
@@ -111,9 +116,9 @@ readiness claims.
 | Memory and learning | Memory-write governance proposal and retention metadata helpers | No tenant/domain-scoped persistent store, retrieval, provenance lifecycle, deletion, feedback loop, or validated improvement evidence | Not operational |
 | Tool/plugin ecosystem | Versioned in-process tool contracts validate the current Sanity MCP path | No persistent catalog, general plugin install/permission system, hosted tool runtime, marketplace, or externally verifiable approvals | Partial foundation |
 | SDK and developer experience | Internal TypeScript client and Python client/CLI cover validate, preview, and gated read-only run | No stable/published API, Go SDK, agent creation API, docs portal, or compatibility guarantees | Partial foundation |
-| Hosted runtime and triggers | Durable run records; in-memory, journaled-file, and PostgreSQL stores; governed priority queue (idempotency, backpressure, cross-process per-tenant limits, leases, retries with rate-limit hints, cancellation, dead letters, audited redrive, RBAC); worker; cron scheduler and signed-webhook trigger | Packaged host process and management API, isolated execution, shared replay cache, metrics | Partial foundation |
-| Identity, tenancy, and secrets | Kernel RBAC with tenant isolation, agent-authority bar, separation of duties, and audited decisions; hashed per-person bearer tokens; enforced on the run queue and web supervisor routes | SSO/OIDC, sessions, persistent principal/role admin, secrets vault and rotation, durable access-audit store | Partial foundation |
-| Monitoring and audit | Existing decision/process history in Sanity; live workflow response contains an in-memory step trace | No durable workflow run records, structured platform logs, metrics, traces, model/cost dashboards, or alerting | Partial foundation |
+| Hosted runtime and triggers | Durable run records; in-memory, journaled-file, and PostgreSQL stores; governed priority queue; worker; cron and signed webhooks; single-tenant host process with management API, graceful shutdown, Docker and Compose config | Isolated execution per job, shared replay cache for replicas, multi-tenant hosting | Single-tenant foundation |
+| Identity, tenancy, and secrets | Kernel RBAC with tenant isolation, agent-authority bar and audited decisions; hashed per-person bearer tokens on the queue, web and host; separation of duties in decision approvals with an audited sole-operator override; encrypted secrets vault with RBAC, rotation and audit | SSO/OIDC, sessions, persistent principal/role admin, durable access-audit store | Partial foundation |
+| Monitoring and audit | Decision and process history, durable run records and evaluation records; structured JSON logs with secret redaction; Prometheus metrics for runs, queue, webhooks, schedules, evaluations, vault and HTTP | Traces, model/cost dashboards, alerting | Partial foundation |
 | Enterprise deployment and extensions | Separate Studio schemas are prepared; canonical docs and roadmap are separated from challenge history | Dedicated Sanity project ID and Context MCP endpoints are pending; compliance packs, identity-provider integration, team collaboration, and governed extension releases are absent | Blocked / not built |
 | Domain kernels | Task labels and shared kernel contracts provide extension points | Repo, hydraulic, compliance, security, and finance domain rules, evidence sources, and domain-specific evaluation are not implemented | Not built |
 
@@ -144,12 +149,12 @@ readiness claims.
 | Platform capability | Current state |
 |---|---|
 | Workflow execution | Drafts autosave locally; safe preview is available; opt-in live path supports read-only query-agent nodes through NQC evaluation. Bounded request-local concurrency for independent low/moderate agent steps, agent-handler retries, and abortable handler timeouts are supported; tools are blocked in the live route and never auto-retried. Shared storage/hosted execution/run history remain unbuilt |
-| Agent runtime | Planner, reviewer, and query calls use registered versioned manifests; still request-scoped Next.js execution with no isolated hosted worker pool or job queue |
+| Agent runtime | Planner, reviewer, and query calls use registered versioned manifests and the standard agent contract; the host runs query agents in a worker pool over the durable queue; tools stay blocked |
 | Tools and integrations | Versioned per-request tool registry wired to Sanity Context MCP; no persistent plugin catalog or marketplace |
 | Developer experience | Internal TypeScript SDK plus dependency-free Python SDK and `qs` CLI for workflow validation, safe preview, and opt-in read-only runs; neither is published as a stable API. No Go SDK or agent creation API |
-| Identity and secrets | NQC RBAC and hashed per-person tokens (`QUICKSILVER_PRINCIPALS`) for supervisor actions and queue operations; no SSO, team UI, or credential vault |
-| Monitoring | Decision log and process history; no metrics, traces, or operations dashboard |
-| Triggers and resilience | Cron schedules and signed webhooks enqueue through the governed queue (backpressure, retries, cancellation, dead letters); no packaged host process yet, and no event-bus trigger |
+| Identity and secrets | NQC RBAC and hashed per-person tokens (`QUICKSILVER_PRINCIPALS`) for supervisor actions, queue operations and the host API; encrypted secrets vault; no SSO or team UI |
+| Monitoring | Decision log, process history, structured logs and Prometheus metrics on the host; no traces or operations dashboard |
+| Triggers and resilience | Cron schedules and signed webhooks run in the host process from configuration, enqueue through the governed queue, and rotate secrets without a restart; no event-bus trigger |
 | Collaboration and release | Git/process versions exist; no team workspace, approval roles, or workflow deployment pipeline |
 
 ## Build sequence

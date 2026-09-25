@@ -1,0 +1,46 @@
+# Single-tenant Nuera Quicksilver deployment: Postgres run store + host.
+# The web console (apps/web) deploys separately (for example on Vercel) and
+# shares the same Sanity project and principals.
+#
+#   cp deploy/quicksilver.host.example.json deploy/quicksilver.host.json   # edit
+#   cp .env.example .env                                                    # fill in
+#   docker compose -f deploy/docker-compose.yml up -d --build
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: quicksilver
+      POSTGRES_USER: quicksilver
+      POSTGRES_PASSWORD: ${QUICKSILVER_DB_PASSWORD:?set QUICKSILVER_DB_PASSWORD in .env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U quicksilver -d quicksilver"]
+      interval: 10s
+      retries: 5
+
+  host:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.host
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file: ../.env
+    environment:
+      DATABASE_URL: postgres://quicksilver:${QUICKSILVER_DB_PASSWORD}@postgres:5432/quicksilver
+      QUICKSILVER_HOST_CONFIG: /config/quicksilver.host.json
+    volumes:
+      - ./quicksilver.host.json:/config/quicksilver.host.json:ro
+      - ./workflows:/config/workflows:ro
+      - hostdata:/data
+    ports:
+      # Bind to localhost; put a TLS reverse proxy in front for public webhooks.
+      - "127.0.0.1:8787:8787"
+    stop_grace_period: 70s
+
+volumes:
+  pgdata:
+  hostdata:

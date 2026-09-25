@@ -1,0 +1,32 @@
+{
+  "name": "@quicksilver/host",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT",
+  "description": "Single-tenant hosted runtime: worker, schedules, signed webhooks, management API, secrets vault, logs and metrics",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./vault": "./src/vault.ts",
+    "./log": "./src/log.ts",
+    "./metrics": "./src/metrics.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "start": "tsx src/main.ts"
+  },
+  "dependencies": {
+    "@quicksilver/agent": "*",
+    "@quicksilver/kernel": "*",
+    "@sanity/client": "^6.22.5",
+    "pg": "^8.13.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.9.0",
+    "@types/pg": "^8.11.10",
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.3"
+  }
+}

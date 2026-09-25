@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { executeWorkflowGraph, validateWorkflowGraph, type NqcEvaluationResponse, type WorkflowGraph } from '@quicksilver/kernel'
+import { persistEvaluations } from '@/lib/evaluation-store'
+import { identifyRequester } from '@/lib/nqc-approval'
 import { executeGovernedAgent, isLlmConfigured, queryQuicksilverAgent, type GovernedNueraAgentResult, type QueryAgentOutput } from '@quicksilver/agent'
 
 const requestSchema = z.object({
@@ -43,6 +45,9 @@ export async function POST(request: Request) {
   const highImpactAgents = agentNodes.filter((node) => node.config?.impact === 'high' || node.config?.impact === 'critical')
   if (highImpactAgents.length) return NextResponse.json({ error: 'Live read-only query steps cannot be marked high or critical impact.', nodes: highImpactAgents.map((node) => node.id) }, { status: 422 })
 
+  const requester = identifyRequester(request)
+  if (!requester.ok) return NextResponse.json({ error: requester.reason }, { status: requester.status })
+
   const agentResults = new Map<string, GovernedNueraAgentResult<QueryAgentOutput>>()
   const evaluations: Record<string, NqcEvaluationResponse> = {}
   const result = await executeWorkflowGraph(graph, parsed.data.input, {
@@ -78,5 +83,20 @@ export async function POST(request: Request) {
     },
   }, { maxConcurrentAgents: MAX_QUERY_AGENT_STEPS, signal: request.signal })
 
-  return NextResponse.json({ mode: 'live-read-only', externalEffectsEnabled: false, ...result, evaluations })
+  const runId = `workflow-${Date.now().toString(36)}`
+  const audit = await persistEvaluations(
+    Object.entries(evaluations).map(([nodeId, evaluation]) => ({
+      source: 'workflow-run' as const,
+      agentId: queryQuicksilverAgent.id,
+      taskType: 'reasoning',
+      modelId: agentResults.get(nodeId)?.modelId ?? null,
+      subject: parsed.data.input,
+      requestedBy: requester.requestedBy,
+      evaluation,
+      runId,
+      nodeId,
+    })),
+  )
+
+  return NextResponse.json({ mode: 'live-read-only', externalEffectsEnabled: false, ...result, evaluations, audit: { persisted: audit.persisted, evaluationRecordIds: audit.ids, ...(audit.error ? { error: audit.error } : {}) } })
 }

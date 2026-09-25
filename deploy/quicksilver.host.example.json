@@ -1,0 +1,35 @@
+{
+  "tenantId": "nuera",
+  "http": { "host": "0.0.0.0", "port": 8787, "metricsPublic": false },
+  "store": { "kind": "postgres", "urlEnv": "DATABASE_URL" },
+  "vault": { "path": "/data/vault.json", "keyEnv": "QUICKSILVER_VAULT_KEY" },
+  "worker": { "id": "host-1", "concurrency": 2, "pollIntervalMs": 1000 },
+  "queue": { "defaultMaxAttempts": 3, "maxRunningPerTenant": 4 },
+  "execution": { "maxAgentSteps": 3, "allowedAgents": ["query"] },
+  "workflows": {
+    "daily-brief": { "file": "workflows/daily-brief.json" }
+  },
+  "services": [
+    { "id": "svc:scheduler", "roles": ["trigger"] },
+    { "id": "svc:inbound-webhook", "roles": ["trigger"] }
+  ],
+  "schedules": [
+    {
+      "id": "morning-brief",
+      "workflow": "daily-brief",
+      "cron": "0 13 * * 1-5",
+      "principal": "svc:scheduler",
+      "input": { "question": "What changed in the company model since yesterday, and which decisions are waiting for approval?" }
+    }
+  ],
+  "webhooks": [
+    {
+      "id": "inbound",
+      "workflow": "daily-brief",
+      "secret": "vault:inbound-webhook",
+      "principal": "svc:inbound-webhook",
+      "enabled": false
+    }
+  ],
+  "log": { "level": "info" }
+}

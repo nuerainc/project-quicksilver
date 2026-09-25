@@ -24,6 +24,8 @@ import {
   type GovernedMemoryEntry,
   type ModelPerformanceProfile,
 } from '../index.ts'
+import { buildEvaluationRecord as _buildEvaluationRecord, MAX_EVALUATION_SUBJECT_CHARS as _MAX } from '../index.ts'
+import { applyUpstreamEscalation as _applyUpstream, evaluateNqcRequest as _evaluate } from './index.ts'
 
 // ── Quicksilver Engine ────────────────────────────────────────────────────
 
@@ -347,4 +349,39 @@ test('Stress: suite scores provider answers, counts provider failures, and honou
   const cancelled = await runReasoningStressSuite(async () => 'x', { seed: 0, count: 5, signal: controller.signal })
   assert.equal(cancelled.completedCount, 0)
   await assert.rejects(runReasoningStressSuite(async () => 'x', { seed: 0, count: 51 }))
+})
+
+// ── M1 item 5: durable evaluation records ─────────────────────────────────
+
+test('Evaluation record: captures scores and safety decision without private reasoning', () => {
+  const evaluation = _evaluate({ agentId: 'nuera-quicksilver:query', taskType: 'reasoning', agentOutput: 'answer', context: ['doc-1'], impactLevel: 'low' })
+  const r = _buildEvaluationRecord({ id: 'evaluation-query-1', now: '2026-09-25T00:00:00Z', source: 'query', agentId: 'nuera-quicksilver:query', taskType: 'reasoning', subject: 'Who approves parameter changes?', requestedBy: 'console:anonymous', evaluation })
+  assert.equal(r._type, 'evaluationRecord')
+  assert.equal(r.safetyDecision, evaluation.safetyDecision)
+  assert.equal(r.reasoningScore, evaluation.reasoningScore)
+  assert.equal('agentOutput' in r, false, 'the raw output is not stored')
+})
+
+test('Evaluation record: long subjects are truncated and odd ids refused', () => {
+  const evaluation = _evaluate({ agentId: 'nuera-quicksilver:query', taskType: 'reasoning', agentOutput: 'x', impactLevel: 'low' })
+  const r = _buildEvaluationRecord({ id: 'evaluation-query-2', now: 'n', source: 'query', agentId: 'a', taskType: 't', subject: 'q'.repeat(_MAX + 50), requestedBy: 'r', evaluation })
+  assert.equal(r.subject.length, _MAX + 1)
+  assert.throws(() => _buildEvaluationRecord({ id: 'bad id/../x', now: 'n', source: 'query', agentId: 'a', taskType: 't', subject: 's', requestedBy: 'r', evaluation }))
+})
+
+// ── M1 item 6: planner escalation tightens per-action decisions ───────────
+
+test('Upstream escalation: an escalated planner turns ALLOW into human review', () => {
+  const allow = { decision: { authorized: true, riskLevel: 1, requiresApproval: false, blockingReasons: [], concerns: [], policyConflicts: [], policyChecks: [], policyResolutions: [], uncitedPolicyIds: [], averageEvidenceConfidence: 1, recommendation: 'execute-autonomously' }, evaluation: {} as never, escalationReasons: [], safetyDecision: 'ALLOW' } as never
+  const r = _applyUpstream(allow, { safetyDecision: 'ESCALATE', issues: ['2 tool call(s) failed.'] }, 'The planner run')
+  assert.equal(r.safetyDecision, 'ESCALATE')
+  assert.equal(r.decision.recommendation, 'request-approval')
+  assert.match(r.decision.concerns.at(-1)!, /planner run was escalated/i)
+})
+
+test('Upstream escalation: never loosens a block and ignores an ALLOW upstream', () => {
+  const blocked = { decision: { authorized: false, recommendation: 'reject', concerns: [] }, escalationReasons: [], safetyDecision: 'BLOCK' } as never
+  assert.equal(_applyUpstream(blocked, { safetyDecision: 'ESCALATE', issues: [] }, 'x'), blocked)
+  const allow = { decision: { authorized: true, recommendation: 'execute-autonomously', concerns: [] }, escalationReasons: [], safetyDecision: 'ALLOW' } as never
+  assert.equal(_applyUpstream(allow, { safetyDecision: 'ALLOW', issues: [] }, 'x'), allow)
 })

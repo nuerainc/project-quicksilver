@@ -22,6 +22,7 @@ import {
 } from './mcp.ts'
 import type { EvaluatorToolCall, ProposedAction } from '@quicksilver/kernel'
 import { assertAgentDispatch } from './governance.ts'
+import type { NueraQuicksilverAgent } from './contracts.ts'
 
 export interface PlannerInput {
   objective: string
@@ -126,4 +127,25 @@ The kernel will compute risk and authorization from your candidate actions. Be s
   } finally {
     await closeAll(clients)
   }
+}
+
+/**
+ * The planner on the standard Nuera Quicksilver Agent contract. Run it through
+ * `executeGovernedAgent` so its output is evaluated by the Quicksilver Engine
+ * before any candidate action reaches the kernel.
+ */
+export const plannerQuicksilverAgent: NueraQuicksilverAgent<PlannerInput, PlannerOutput> = {
+  id: 'nuera-quicksilver:planner',
+  version: 1,
+  tasks: ['planning'],
+  async execute(request) {
+    const plan = await planObjective(request.input)
+    return {
+      output: plan,
+      modelId: plan.modelId,
+      toolCalls: plan.toolCalls,
+      // Grounding context: the retrieval tools that actually returned results.
+      evaluationContext: plan.toolCalls.filter((c) => c.succeeded).map((c) => `tool:${c.name}`),
+    }
+  },
 }

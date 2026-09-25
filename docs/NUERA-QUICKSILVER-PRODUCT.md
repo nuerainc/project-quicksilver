@@ -243,14 +243,23 @@ it runs a company. Current status is tracked in
 
 ### Milestones
 
-| Milestone | Version | Delivers | Depends on |
-|---|---|---|---|
-| M1: Governance foundation | 0.2.0 | Kernel, evaluation, approval binding, RBAC, durable runs, triggers | Current work; see roadmap |
-| M2: Hosted platform | 0.3.0 | Packaged runtime, secrets vault, SSO, observability, tenant isolation | M1; dedicated Sanity project unblocked |
-| M3: Intent layer | 0.4.0 | Decision graph, provenance, impact scoring, the intent entry point | M1; Aura |
-| M4: Playbooks and Onboard pilot | 0.5.0 | Playbook type, Onboard playbook, connectors, shadow mode with 1–3 businesses | M2, M3 |
-| M5: Genesis demonstration | 0.6.0 | Economic playbook, experiments, ledger, WAES review; a $500, 30-day digital-only run | M3, M4 |
-| M6: Operate | 0.7.0 | Steady-state operations and reinvestment | M4, M5 |
+| Milestone | Version | Delivers | Depends on | Target (option C) |
+|---|---|---|---|---|
+| M1: Governance foundation | 0.2.0 | Kernel, evaluation, approval binding, RBAC, durable runs, triggers, separation of duties, persisted evaluations | Code complete; the live Sanity check is pending | ~Oct 9, 2026 |
+| M2: Single-tenant hosted platform | 0.3.0 | Packaged host process, management API, secrets vault, structured logs and metrics, deploy config | M1 | ~Oct 30, 2026 |
+| M3: Intent layer | 0.4.0 | Decision graph, provenance, impact scoring, the intent entry point | M1; Aura | ~Nov 25, 2026 |
+| M4: Playbooks and Onboard pilot | 0.5.0 | Playbook type, Onboard playbook, connectors, shadow mode on Nuera | M2, M3 | Build ~Dec 15; pilot Jan–Feb 2027 |
+| M5: Genesis demonstration | 0.6.0 | Economic playbook, experiments, ledger, WAES review; a $500, 30-day digital-only run | M3, M4 | Feb–Mar 2027 |
+| M6: Operate | 0.7.0 | Steady-state operations and reinvestment | M4, M5 | Mar–Apr 2027 |
+
+M2 is deliberately single-tenant. SSO and multi-tenant hosting come before
+the 0.9.0 release candidate.
+
+**Pilots.** Two founder-owned businesses, with no outside recruiting: Nuera
+itself (Onboard) and the Genesis microbusiness (the $500, 30-day run). Nuera
+starts using this repository's instance read-only at 0.3.0, and the Onboard
+pilot runs at 0.5.0. Because both pilots are founder-owned, the 1.0.0
+evidence includes the published audit trail.
 
 ### 8.1 Versioning
 
@@ -294,7 +303,11 @@ it decides:
 
 - The [challenge repository](https://github.com/nuerainc/quicksilver-sanity-challenge)
   stays synthetic and unchanged as the regression baseline.
-- A Nuera operational instance of Quicksilver is planned but paused. Don't
-  connect real company data until it is resumed.
+- Two separate instances. The **Sanity Challenge instance** (the challenge
+  repository and its deployment) stays paused, synthetic and unchanged, and is
+  never connected to company data. The **Nuera instance** is this repository
+  (nuerainc/project-quicksilver), which Nuera starts using read-only at 0.3.0.
+- AMP patent materials stay out of Quicksilver connectors until the
+  provisional application is filed.
 - Don't claim product readiness or parity with another product without
   operational evidence (see the roadmap's completion standard).

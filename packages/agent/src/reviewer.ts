@@ -17,9 +17,10 @@ import { generateText, Output } from 'ai'
 import { z } from 'zod'
 
 import { REVIEWER_SYSTEM_PROMPT } from './prompts.ts'
-import { modelForRole } from './models.ts'
+import { getMode, modelForRole, resolveId } from './models.ts'
 import type { ProposedAction } from '@quicksilver/kernel'
 import { assertAgentDispatch } from './governance.ts'
+import type { NueraQuicksilverAgent } from './contracts.ts'
 
 // NOTE: no `.default([])` on these array fields. A Zod default marks the field
 // optional in the generated JSON Schema, which fails Azure/OpenAI's strict
@@ -99,4 +100,22 @@ Review this proposed action independently. Flag any policy conflicts, missing ev
   } catch (err) {
     return unreviewed((err as Error).message)
   }
+}
+
+/**
+ * The independent reviewer on the standard Nuera Quicksilver Agent contract.
+ * Advisory only: its output never gates a decision.
+ */
+export const reviewerQuicksilverAgent: NueraQuicksilverAgent<ReviewInput, ReviewResult> = {
+  id: 'nuera-quicksilver:reviewer',
+  version: 1,
+  tasks: ['evaluation'],
+  async execute(request) {
+    const review = await reviewProposedAction(request.input)
+    return {
+      output: review,
+      modelId: resolveId('reviewer', getMode()),
+      evaluationContext: request.input.evidence.map((e) => `${e.id}: ${e.title}`),
+    }
+  },
 }

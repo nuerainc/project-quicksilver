@@ -15,6 +15,13 @@ documents resolved when the plan is evaluated.
    policy's approval requirements.
 3. The API verifies the policy snapshot is still current and the NQC Kernel
    did not return `BLOCK`.
+3a. **Separation of duties.** The approver may not be the decision's
+   requester (`requestedBy`), its proposer (`proposedBy`), or the entity that
+   would carry out the action. A configured sole operator
+   (`QUICKSILVER_SOLE_OPERATOR_ID`) may approve anyway only with a written
+   justification of 20+ characters, which is stored on the approval record
+   with `soleOperatorOverride: true` and the waived conflicts. See
+   [identity and RBAC](identity-rbac.md#separation-of-duties-in-decisions).
 4. The API stores an approval record on the decision, bound to the decision
    id, exact selected action, risk value, and policy snapshot digest. Status
    changes still pass through the existing process lifecycle when enabled.

@@ -114,6 +114,24 @@ export class WebhookTrigger {
     this.endpoints.set(endpoint.id, { ...endpoint, secrets: [...endpoint.secrets] })
   }
 
+  /**
+   * Replace an endpoint's secrets (rotation). Pass the new secret plus any
+   * earlier ones that senders may still use. Same length rules as `addEndpoint`.
+   */
+  setSecrets(endpointId: string, secrets: readonly string[]): void {
+    const endpoint = this.endpoints.get(endpointId)
+    if (!endpoint) throw new Error(`Webhook endpoint "${endpointId}" does not exist.`)
+    if (!Array.isArray(secrets) || secrets.length === 0 || secrets.some((s) => typeof s !== 'string' || s.length < MIN_WEBHOOK_SECRET_LENGTH)) {
+      throw new Error(`Webhook endpoint "${endpointId}" needs at least one secret of ${MIN_WEBHOOK_SECRET_LENGTH}+ characters.`)
+    }
+    this.endpoints.set(endpointId, { ...endpoint, secrets: [...secrets] })
+  }
+
+  /** Endpoint metadata without secrets. */
+  list(): Array<{ id: string; tenantId: string; workflowId: string; enabled: boolean; secretCount: number }> {
+    return [...this.endpoints.values()].map((e) => ({ id: e.id, tenantId: e.tenantId, workflowId: e.graph.id, enabled: e.enabled !== false, secretCount: e.secrets.length }))
+  }
+
   /** Framework-neutral core: verify and enqueue one delivery. */
   async receive(endpointId: string, headers: { get(name: string): string | null }, rawBody: string): Promise<WebhookOutcome> {
     const endpoint = this.endpoints.get(endpointId)

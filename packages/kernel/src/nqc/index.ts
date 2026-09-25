@@ -126,3 +126,31 @@ export function evaluateAndAuthorize(
     safetyDecision: 'ESCALATE',
   }
 }
+
+/**
+ * Apply an escalation from an upstream governed step (for example, the planner
+ * run that produced this action) to a per-action NQC decision.
+ *
+ * Tightens only: an upstream ESCALATE turns an autonomous ALLOW into human
+ * review; it never loosens a BLOCK, a rejection, or an existing escalation.
+ */
+export function applyUpstreamEscalation(
+  result: NqcDecision,
+  upstream: { safetyDecision: SafetyDecision; issues: string[] },
+  label: string,
+): NqcDecision {
+  if (upstream.safetyDecision === 'ALLOW') return result
+  if (result.safetyDecision === 'BLOCK' || !result.decision.authorized) return result
+  const reason = `${label} was escalated by the Quicksilver Engine${upstream.issues.length ? `: ${upstream.issues.join(' ')}` : '.'}`
+  return {
+    ...result,
+    decision: {
+      ...result.decision,
+      recommendation: 'request-approval',
+      requiresApproval: true,
+      concerns: [...result.decision.concerns, reason],
+    },
+    escalationReasons: [...result.escalationReasons, reason],
+    safetyDecision: 'ESCALATE',
+  }
+}

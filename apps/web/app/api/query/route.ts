@@ -8,6 +8,8 @@
 import { NextResponse } from 'next/server'
 import { queryCompany } from '@quicksilver/agent'
 import { evaluateNqcRequest } from '@quicksilver/kernel'
+import { persistEvaluations } from '@/lib/evaluation-store'
+import { identifyRequester } from '@/lib/nqc-approval'
 
 export async function POST(req: Request) {
   let body: unknown
@@ -22,10 +24,13 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Missing required field: question' }, { status: 400 })
   }
 
+  const requester = identifyRequester(req)
+  if (!requester.ok) return NextResponse.json({ error: requester.reason }, { status: requester.status })
+
   try {
     const result = await queryCompany(question)
     const governance = evaluateNqcRequest({
-      agentId: 'nuera-quicksilver-reasoning-agent',
+      agentId: 'nuera-quicksilver:query',
       taskType: 'reasoning',
       modelId: result.modelId,
       agentOutput: JSON.stringify({
@@ -38,8 +43,20 @@ export async function POST(req: Request) {
       toolCalls: result.toolCalls,
       impactLevel: 'low',
     })
+    const audit = await persistEvaluations([
+      {
+        source: 'query',
+        agentId: 'nuera-quicksilver:query',
+        taskType: 'reasoning',
+        modelId: result.modelId,
+        subject: question,
+        requestedBy: requester.requestedBy,
+        evaluation: governance,
+      },
+    ])
     return NextResponse.json({
       ...result,
+      audit: { persisted: audit.persisted, evaluationRecordIds: audit.ids, ...(audit.error ? { error: audit.error } : {}) },
       nqc: {
         reasoningScore: governance.reasoningScore,
         hallucinationRisk: governance.hallucinationRisk,

@@ -283,3 +283,19 @@ test('ReplayCache: entries expire and the cache stays bounded', () => {
   cache.remember('c', 300)
   assert.equal(cache.remember('c', 300), false)
 })
+
+test('Webhook: setSecrets rotates secrets in place and list() never exposes them', async () => {
+  const { trigger, now } = webhooks()
+  const next = generateWebhookSecret()
+  assert.throws(() => trigger.setSecrets('erp-orders', ['short']), /32\+ characters/)
+  assert.throws(() => trigger.setSecrets('missing', [next]), /does not exist/)
+  trigger.setSecrets('erp-orders', [next, secret])
+  const body = '{"rotated":true}'
+  assert.equal((await trigger.receive('erp-orders', signedHeaders(body, now.t, { secret: next, delivery: 'r1' }), body)).status, 202)
+  assert.equal((await trigger.receive('erp-orders', signedHeaders(body, now.t, { delivery: 'r2' }), body)).status, 202)
+  trigger.setSecrets('erp-orders', [next])
+  assert.equal((await trigger.receive('erp-orders', signedHeaders(body, now.t, { delivery: 'r3' }), body)).status, 401)
+  const listed = trigger.list()
+  assert.deepEqual(listed, [{ id: 'erp-orders', tenantId: 'acme', workflowId: 'wf-intake', enabled: true, secretCount: 1 }])
+  assert.ok(!JSON.stringify(listed).includes(next))
+})

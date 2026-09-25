@@ -69,6 +69,35 @@ function principalProvider(): StaticTokenIdentityProvider | null {
   return principalRegistry.provider
 }
 
+export type RequesterResult = { ok: true; requestedBy: string } | { ok: false; reason: string; status: 401 | 503 }
+
+/**
+ * Identify who is submitting an objective, for separation of duties.
+ *
+ * With per-person principals configured, a bearer token identifies the
+ * requester; an invalid token is refused rather than silently downgraded.
+ * Without a token the request is recorded as coming from the console.
+ */
+export function identifyRequester(request: Request): RequesterResult {
+  const header = request.headers.get('authorization')
+  if (!header) return { ok: true, requestedBy: 'console:anonymous' }
+  let provider: StaticTokenIdentityProvider | null
+  try {
+    provider = principalProvider()
+  } catch {
+    return { ok: false, status: 503, reason: 'Principals are misconfigured.' }
+  }
+  if (!provider) return { ok: true, requestedBy: 'console:anonymous' }
+  const principal = provider.authenticateHeader(header)
+  if (!principal) return { ok: false, status: 401, reason: 'The supplied credential is not valid.' }
+  return { ok: true, requestedBy: principal.id }
+}
+
+/** The configured sole operator for single-human organizations, or null. */
+export function soleOperatorId(): string | null {
+  return process.env.QUICKSILVER_SOLE_OPERATOR_ID?.trim() || null
+}
+
 /**
  * Verify a server-to-server supervisor credential; never trust a body-supplied actor id.
  *

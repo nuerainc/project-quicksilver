@@ -13,6 +13,7 @@ that every operating mode depends on.
 - [Durable workflow runs: queue, worker, dead letters](durable-runs.md)
 - [Identity and RBAC](identity-rbac.md)
 - [Triggers: cron schedules and signed webhooks](triggers.md)
+- [Hosted runtime: host process, management API, secrets vault, logs and metrics](hosted-runtime.md)
 - [Tool registry](tool-registry.md)
 - [Supervisor approval gate](supervisor-approval.md)
 - [TypeScript SDK foundation](sdk-typescript.md)

@@ -959,6 +959,58 @@ specification) became the canonical product target for this repository.
 - Quicksilver's versions are rewritten in three-part form: 0.1.0 now, M1–M6 → 0.2.0–0.7.0. The meaning is unchanged. `package.json` was already `0.1.0`.
 - Documentation only.
 
+## 2026-09-25 — M1 items 4–6 and M2 single-tenant hosted platform  *(Claude, via Cowork)*
+
+Founder request: "Complete work through M2." Schedule option C; M2 trimmed to
+a single tenant.
+
+**M1 (governance foundation), items 4–6:**
+- Separation of duties: `identity/separation.ts` (`checkSeparationOfDuties`).
+  Decisions now record `requestedBy` (verified caller of `/api/plan`) and
+  `proposedBy`. Approval by the requester, proposer or acting entity returns
+  403. An opt-in sole operator (`QUICKSILVER_SOLE_OPERATOR_ID`) may approve
+  with a 20+ character justification; the approval record stores
+  `soleOperatorOverride`, `waivedConflicts` and `justification`. 7 tests.
+- Durable evaluations: `nqc/record.ts` (`buildEvaluationRecord`), new
+  `evaluationRecord` Studio type, `apps/web/lib/evaluation-store.ts`. The query
+  and workflow routes store every evaluation and report `audit.persisted`.
+  The query route's agent id was fixed to the registered
+  `nuera-quicksilver:query`.
+- Planner and reviewer on the standard agent contract
+  (`plannerQuicksilverAgent`, `reviewerQuicksilverAgent`). A planner
+  evaluation that isn't ALLOW escalates every proposed action
+  (`applyUpstreamEscalation`). Contract tests in `contracts.test.ts`.
+- Item 7 (live Sanity check on f87t11g1) needs the founder: `verify:mcp`,
+  `schema:deploy`, `smoke`.
+
+**M2 (single-tenant hosted platform):** new workspace `packages/host`.
+- `host.ts`: one process runs the worker pool, cron schedules, signed
+  webhooks and a management API (runs, cancel, redrive, dead letters, stats,
+  schedules, webhooks, workflows, secrets). Every `/api` route needs a bearer
+  token and the matching RBAC permission. It serves one tenant and refuses
+  principals from any other.
+- `config.ts`: strict startup validation. Secrets are references only,
+  trigger identities hold only the `trigger` role, and workflows must satisfy
+  the execution policy (read-only query agents; tool steps blocked at run
+  time).
+- `vault.ts`: AES-256-GCM secrets vault with RBAC, rotation grace periods and
+  audit. Kernel `WebhookTrigger.setSecrets()` rotates endpoint secrets without
+  a restart.
+- `log.ts` / `metrics.ts`: JSON logs with secret redaction; Prometheus
+  metrics.
+- `main.ts`: process entry (`npm run host`, `check`, `vault keygen|list|put|disable`),
+  Postgres or file store, Sanity evaluation sink, graceful SIGTERM.
+- `deploy/`: Dockerfile, Compose with Postgres, example config and workflow.
+- Docs: `docs/platform/hosted-runtime.md`; identity, approval, triggers,
+  roadmap, spec coverage and product docs updated.
+- Verified: kernel 213/213, agent 17/17, host 29/29; typecheck clean for
+  kernel, host, web and studio; the host started in the sandbox, answered
+  `/healthz` and `/readyz`, refused an unauthenticated API call, opened the
+  vault and shut down cleanly on SIGTERM.
+
+Version stays 0.1.0 until the founder's checks pass: 0.2.0 after the live
+Sanity check, 0.3.0 after the first host deployment.
+
 ## Errors encountered (chronological, all environments)
 
 | Day / Env | Error | Resolution |
@@ -1177,10 +1229,11 @@ still exists in old git history but no longer grants access.
 ## Test commands
 
 ```bash
-npm run kernel:test         # kernel tests — 39/39 (authorization + tier-quirk regression + risk calibration + process engine)
+npm run kernel:test         # kernel tests — 213/213 (authorization, policy, process, workflows, NQC, runtime, identity, triggers, stores)
+npm run host:test           # host tests — 29/29 (API, auth, worker, webhooks, vault, logs, metrics, config)
 npm run e2e:live            # live e2e vs. a deployment with fault injection on (44/44 on Sep 23); -- --cleanup removes its data
 npm run reset:history       # dry run; add -- --confirm to back up, wipe decisions/metrics, re-seed, verify
-npm run agent:test          # agent tests — 13/13 (model routing + strict structured-output guard for all 3 schemas)
+npm run agent:test          # agent tests — 17/17 (model routing, structured-output guard, agent contracts)
 npm run smoke               # dataset integrity (counts, conflict pair, capability chain)
 npm run verify:mcp          # both Context MCP endpoints (GROQ mode + Knowledge Base mode), incl. a real knowledge_base_read call
 npm run verify:llm          # each model role responds; planner/reviewer exercise structured output

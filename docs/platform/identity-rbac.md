@@ -53,7 +53,31 @@ The token is shown once. The printed JSON entry holds only the digest.
 | Path | Enforcement |
 |---|---|
 | `WorkflowRunQueue` (`access` option) | `enqueue` needs `run:enqueue` for the request's tenant. `cancel` needs `run:cancel` and `redrive` needs `run:redrive` for the run's tenant, and both reject plain actor strings. The run stores `requestedBy`. Denials are added to the run's event log as `access-denied`. |
-| Web decision routes | When `QUICKSILVER_PRINCIPALS` is set, approve/reject needs `decision:approve` and rollback needs `decision:rollback`, from a **human** principal in `QUICKSILVER_TENANT_ID`. Each supervisor has their own token, and the principal id is that supervisor's Sanity entity id. If the variable is unset, the interim single `NQC_SUPERVISOR_TOKEN` still works. |
+| Web decision routes | When `QUICKSILVER_PRINCIPALS` is set, approve/reject needs `decision:approve` and rollback needs `decision:rollback`, from a **human** principal in `QUICKSILVER_TENANT_ID`. Each supervisor has their own token, and the principal id is that supervisor's Sanity entity id. If the variable is unset, the interim single `NQC_SUPERVISOR_TOKEN` still works. Approvals also pass the separation-of-duties check below. |
+| Plan, query and workflow routes | A bearer token, when sent, must be valid (401 otherwise). The verified principal is recorded as the decision's `requestedBy` or the evaluation record's requester. Without a token the requester is `console:anonymous`. |
+| Hosted runtime | Every `/api` route on the host needs a bearer token and the matching permission; see [hosted runtime](hosted-runtime.md). The host refuses principals from any other tenant. |
+| Secrets vault | `secret:use`, `secret:read` and `secret:write`, checked on every vault operation. |
+
+## Separation of duties in decisions
+
+`checkSeparationOfDuties` (`identity/separation.ts`) runs on every decision
+approval. Each decision records `requestedBy` (the verified caller of
+`/api/plan`) and `proposedBy` (`nuera-quicksilver:planner`, or the supervisor
+for a rollback proposal). The approver may not be:
+
+- the principal that requested the decision,
+- the principal or agent that proposed the action, or
+- the entity that would carry out the action.
+
+A conflict returns 403 with the reasons.
+
+**Sole-operator mode.** A one-person organization can set
+`QUICKSILVER_SOLE_OPERATOR_ID` to that person's principal id. That person may
+then approve despite a conflict, but only with a written justification of at
+least 20 characters in the approval comment. The approval record is stamped
+`soleOperatorOverride: true` with `waivedConflicts` and the `justification`,
+so the audit trail shows exactly when separation of duties was waived and why.
+Without the variable, the rule is strict.
 
 Without an `access` option the queue still accepts named actors, which keeps
 local development and the existing tests simple. Configure `access` for any
@@ -65,8 +89,7 @@ shared deployment.
   port.
 - Persistent principal and role administration, including a UI and an
   audited `tenant:admin` API.
-- The secrets vault that will use the `secret:*` permissions.
-- Durable storage for the access-audit sink. Today web denials go to the
-  server log.
-- Separation-of-duties enforcement in the decision routes, which needs a
-  recorded proposer.
+- Durable storage for the access-audit sink. Today denials go to the web
+  server log and to the host's structured logs.
+- ~~Secrets vault~~: see [hosted runtime](hosted-runtime.md#secrets-vault).
+  ~~Separation of duties in the decision routes~~: done (above).

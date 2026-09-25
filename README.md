@@ -34,7 +34,7 @@
 > | **[nuerainc/quicksilver-sanity-challenge](https://github.com/nuerainc/quicksilver-sanity-challenge)** | **Quicksilver**, our Sanity Challenge 2026 submission. It holds the live demo, the challenge Studio, and the DEV posts, and it stays as it was submitted. |
 >
 > Project Quicksilver was inspired by our Sanity Challenge submission and started from its codebase. See [Origins](#origins).
-> **Current build status:** Nuera Quicksilver keeps the tested decision-governance foundation it inherited from the challenge build as its regression baseline. NQC evaluation and governance, tool contracts, a draft workflow builder, and an in-process graph runner are implemented foundations. Quicksilver Engine also provides a bounded, provider-neutral final-answer stress harness for multi-step arithmetic and logic traps; it does not request or retain private chain-of-thought. The editor visualizes graph connections and exposes agent retry and handler timeout settings. The runner supports opt-in bounded concurrency for independent low/moderate-impact agent steps; the read-only query route caps this at three. The read-only query worker uses a shared governed-agent contract and returns its full NQC evaluation response. Workflow drafts autosave locally, support validated JSON import/export, and can run an opt-in read-only query-agent path through NQC evaluation. Workflow tools remain blocked. A durable run queue and worker (`@quicksilver/kernel/runtime`) now provide idempotent admission, backpressure, leases, cancellation, retries, and a dead-letter queue, with in-memory, journaled-file, or PostgreSQL storage; cron schedules and signed webhooks can start runs. A packaged hosted runtime is not implemented yet. Kernel RBAC (tenant isolation, deny-by-default roles, no authority for agents, separation of duties) now guards queue operations and, when configured, per-person supervisor credentials. An internal TypeScript SDK and a dependency-free Python SDK/CLI foundation now cover workflow validation, safe preview, and opt-in read-only runs; neither is published as a stable public API. SSO/accounts UI, secrets vault, a packaged hosted runtime, Go SDK, observability, and marketplace remain unimplemented.
+> **Current build status:** Nuera Quicksilver keeps the tested decision-governance foundation it inherited from the challenge build as its regression baseline. NQC evaluation and governance, tool contracts, a draft workflow builder, and an in-process graph runner are implemented foundations. Quicksilver Engine also provides a bounded, provider-neutral final-answer stress harness for multi-step arithmetic and logic traps; it does not request or retain private chain-of-thought. The editor visualizes graph connections and exposes agent retry and handler timeout settings. The runner supports opt-in bounded concurrency for independent low/moderate-impact agent steps; the read-only query route caps this at three. The read-only query worker uses a shared governed-agent contract and returns its full NQC evaluation response. Workflow drafts autosave locally, support validated JSON import/export, and can run an opt-in read-only query-agent path through NQC evaluation. Workflow tools remain blocked. A durable run queue and worker (`@quicksilver/kernel/runtime`) now provide idempotent admission, backpressure, leases, cancellation, retries, and a dead-letter queue, with in-memory, journaled-file, or PostgreSQL storage; cron schedules and signed webhooks can start runs. A single-tenant host process (`@quicksilver/host`) now runs the worker pool, schedules and signed webhooks from configuration, with a bearer-token management API, an encrypted secrets vault, structured logs and Prometheus metrics. Kernel RBAC (tenant isolation, deny-by-default roles, no authority for agents) guards queue operations, the host API and, when configured, per-person supervisor credentials. Decision approvals enforce separation of duties, with an audited sole-operator override, and every query and workflow evaluation is stored as an `evaluationRecord`. An internal TypeScript SDK and a dependency-free Python SDK/CLI foundation now cover workflow validation, safe preview, and opt-in read-only runs; neither is published as a stable public API. SSO/accounts UI, multi-tenant hosting, traces and dashboards, a Go SDK, and a marketplace remain unimplemented.
 >
 > Canonical product docs: [Product definition](./docs/NUERA-QUICKSILVER-PRODUCT.md) · [Documentation index](./docs/README.md) · [NQC Kernel](./docs/nqc/README.md) · [Platform](./docs/platform/README.md) · [Spec coverage](./docs/NUERA-QUICKSILVER-SPEC-COVERAGE.md) · [Roadmap](./docs/NUERA-QUICKSILVER-ROADMAP.md)
 
@@ -191,8 +191,9 @@ at quicksilver-seven.vercel.app belongs to the
 
 | Check | Result |
 |---|---|
-| Kernel suites (`npm run kernel:test`): authorization, risk, process engine, workflow graphs and runtime, Quicksilver Engine, NQC, routing, memory, registries, durable run queue, identity/RBAC, triggers, run-store contract (memory, file, Postgres) | **185 / 185** |
-| Agent tests: model config, strict-schema guards for every model schema | **13 / 13** |
+| Kernel suites (`npm run kernel:test`): authorization, risk, process engine, workflow graphs and runtime, Quicksilver Engine, NQC, routing, memory, registries, durable run queue, identity/RBAC, triggers, run-store contract (memory, file, Postgres) | **213 / 213** |
+| Agent tests: model config, strict-schema guards for every model schema, agent contracts | **17 / 17** |
+| Host tests (`npm run host:test`): management API and auth, worker, blocked tools, webhooks, vault and rotation, logs, metrics, config validation | **29 / 29** |
 
 Inherited from the challenge build, and run against that build's live
 environment rather than this repository: a live governance stress test (lanes,
@@ -219,6 +220,7 @@ The challenge-era stress test found real bugs: a risk formula that scored nearly
 | Python SDK/CLI | Internal Python client and `qs` CLI for validation, safe preview, and gated read-only runs; not published |
 | Run runtime | `@quicksilver/kernel/runtime`: durable run records, in-memory / journaled-file / PostgreSQL stores, governed priority queue with dead letters, and a worker ([details](./docs/platform/durable-runs.md)) |
 | Triggers | `@quicksilver/kernel/triggers`: UTC cron scheduler and HMAC-signed webhooks, enqueued under the `trigger` role ([details](./docs/platform/triggers.md)) |
+| Hosted runtime | `@quicksilver/host`: single-tenant process with management API, secrets vault, JSON logs and Prometheus metrics; Docker and Compose in `deploy/` ([details](./docs/platform/hosted-runtime.md)) |
 
 ## Repository layout
 
@@ -231,8 +233,10 @@ project-quicksilver/
 ├── packages/
 │   ├── kernel/         Deterministic authority, NQC, workflows, run runtime (no LLM)
 │   ├── agent/          Planner, reviewer, query agent, MCP bindings, model roles
+│   ├── host/           Single-tenant host: worker, schedules, webhooks, API, vault, logs, metrics
 │   ├── sdk/            Internal TypeScript API client
 │   └── sdk-python/     Internal Python SDK and `qs` CLI foundation
+├── deploy/             Dockerfile, Compose (Postgres + host), example host config
 ├── docs/               Canonical NQC/platform docs plus historical challenge writeups (marked as such)
 ├── ARCHITECTURE.md     Design and data model
 ├── SUBMISSION.md       Historical: the Sanity Challenge submission record
@@ -255,6 +259,16 @@ it. Schema deployment and seed writes remain pending until a new project-scoped 
 deployed. Set
 `QUICKSILVER_PROCESS_ENGINE=on` to run the existing Decision Lifecycle process
 engine from the configured project.
+
+To run the hosted runtime (worker, schedules, webhooks, management API), see
+[hosted runtime](./docs/platform/hosted-runtime.md):
+
+```bash
+cp deploy/quicksilver.host.example.json quicksilver.host.json
+npm run host -- vault keygen    # set QUICKSILVER_VAULT_KEY
+npm run host -- check
+npm run host
+```
 ## Origins
 
 Project Quicksilver was inspired by **Quicksilver**, our submission to the

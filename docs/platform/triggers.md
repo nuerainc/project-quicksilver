@@ -88,9 +88,9 @@ sender to retry. Invalid workflow graph → 422.
 
 ## Not yet built
 
-- A hosted process that runs the scheduler, webhook routes and workers from
-  configuration, plus a management API for schedules and endpoints.
-- Storing endpoint secrets in a secrets vault (for now they come from
-  environment variables).
-- A shared replay cache backed by Postgres or Redis.
+- ~~Hosted process and management API~~ and ~~vault-backed endpoint
+  secrets~~: see [hosted runtime](hosted-runtime.md). `setSecrets` rotates an
+  endpoint's secrets in place, and `list()` returns endpoints without secrets.
+- A shared replay cache backed by Postgres or Redis (needed only for several
+  host replicas).
 - Event-bus and filesystem triggers.
