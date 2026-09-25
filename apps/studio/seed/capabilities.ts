@@ -11,6 +11,7 @@ import type { CapabilitySeed } from './types'
 export const capabilities: CapabilitySeed[] = [
   {
     _id: 'cap-process-param',
+    policyScopes: ['production.parameter_changes'],
     name: 'Process Parameter Modification',
     description: 'Modify operating parameters on production equipment (CNC controllers, PLCs, etc.).',
     requiredSkills: ['Process Engineering', 'CNC Operation'],
@@ -29,6 +30,7 @@ export const capabilities: CapabilitySeed[] = [
   },
   {
     _id: 'cap-maintenance-scheduling',
+    policyScopes: ['maintenance.scheduling'],
     name: 'Maintenance Scheduling',
     description: 'Schedule and adjust maintenance windows.',
     requiredSkills: ['Maintenance Planning'],
@@ -38,6 +40,7 @@ export const capabilities: CapabilitySeed[] = [
   },
   {
     _id: 'cap-quality-inspection',
+    policyScopes: ['quality.inspection'],
     name: 'Quality Inspection',
     description: 'Inspect finished parts against specification.',
     requiredSkills: ['Quality Engineering'],
@@ -56,6 +59,7 @@ export const capabilities: CapabilitySeed[] = [
   },
   {
     _id: 'cap-line-adjustment',
+    policyScopes: ['production.parameter_changes'],
     name: 'Production Line Adjustment',
     description: 'Adjust production line configuration (assignment, schedule).',
     requiredSkills: ['Operations'],
@@ -65,6 +69,7 @@ export const capabilities: CapabilitySeed[] = [
   },
   {
     _id: 'cap-emergency-override',
+    policyScopes: ['production.parameter_changes'],
     name: 'Emergency Override',
     description: 'Override standard policies under declared emergency.',
     requiredSkills: ['Executive Authority'],
@@ -74,6 +79,7 @@ export const capabilities: CapabilitySeed[] = [
   },
   {
     _id: 'cap-budget-reallocation',
+    policyScopes: ['finance.expenditure'],
     name: 'Budget Reallocation',
     description: 'Reallocate budget between departments or line items.',
     requiredSkills: ['Finance'],

@@ -50,6 +50,8 @@ export interface CapabilitySeed {
   riskLevel: RiskLevel
   authorizedEntityIds: string[]
   requiredTools: string[]
+  /** Policy scopes that govern this capability (the kernel applies them even if uncited). */
+  policyScopes?: string[]
 }
 
 export interface ObjectiveSeed {

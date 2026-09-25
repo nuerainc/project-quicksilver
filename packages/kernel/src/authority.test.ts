@@ -87,3 +87,55 @@ test('Legacy: free-text policies sharing a scope still go to a human', () => {
   const r = checkAuthority(act(['x', 'y']), [P({ id: 'x' }), P({ id: 'y' })], { now: NOW })
   assert.equal(r.conflicts.length, 1)
 })
+
+// ── M1 item 3: the kernel finds governing policies itself ─────────────────
+
+test('Scope lookup: an uncited policy in a governing scope still applies', () => {
+  const r = checkAuthority(act([]), [P({ id: 'strict', effect: 'require-approval' })], {
+    now: NOW,
+    governingScopes: ['production.parameter_changes'],
+  })
+  assert.deepEqual(r.uncitedPolicyIds, ['strict'])
+  assert.equal(r.checks[0]!.result, 'applies')
+  assert.match(r.checks[0]!.reason, /Added by the kernel/)
+  assert.equal(r.approvalReasons.length, 1)
+})
+
+test('Scope lookup: an uncited deny cannot be dodged by omitting it', () => {
+  const actor: EntityRef = { id: 'agent', name: 'Agent', entityType: 'agent', capabilityIds: ['cap'] }
+  const caps: CapabilityRef[] = [
+    { id: 'cap', name: 'Cap', baseRiskLevel: 0, authorizedEntityIds: ['agent'], policyScopes: ['production.parameter_changes'] },
+  ]
+  const ev: EvidenceRef[] = [{ id: 'ev', title: 'E', confidence: 0.9 }]
+  const r = authorize({ action: act([]), actor, capabilities: caps, policies: [P({ id: 'd', effect: 'deny', effectiveDate: '2020-01-01' })], evidence: ev })
+  assert.equal(r.recommendation, 'reject')
+  assert.deepEqual(r.uncitedPolicyIds, ['d'])
+})
+
+test('Scope lookup: a policy naming the actor applies even outside the governing scopes', () => {
+  const r = checkAuthority(act([]), [P({ id: 'named', scope: 'finance.expenditure', appliesToEntityIds: ['agent'] })], {
+    now: NOW,
+    actorId: 'agent',
+  })
+  assert.deepEqual(r.uncitedPolicyIds, ['named'])
+  assert.match(r.approvalReasons[0]!, /not cited by the planner/)
+})
+
+test('Scope lookup: policies outside the governing scopes and not naming the actor are ignored', () => {
+  const r = checkAuthority(act([]), [P({ id: 'other', scope: 'finance.expenditure' })], {
+    now: NOW,
+    governingScopes: ['production.parameter_changes'],
+    actorId: 'agent',
+  })
+  assert.deepEqual(r.checks, [])
+  assert.deepEqual(r.uncitedPolicyIds, [])
+})
+
+test('Scope lookup: an uncited but expired policy does not force review', () => {
+  const r = checkAuthority(act([]), [P({ id: 'old', expirationDate: '2025-01-01' })], {
+    now: NOW,
+    governingScopes: ['production.parameter_changes'],
+  })
+  assert.equal(r.checks[0]!.result, 'inapplicable')
+  assert.deepEqual(r.approvalReasons, [])
+})

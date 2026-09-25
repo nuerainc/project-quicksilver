@@ -39,6 +39,11 @@ export interface CapabilityRef {
   name: string
   baseRiskLevel: RiskLevel
   authorizedEntityIds: string[]
+  /**
+   * Policy scopes that govern this capability. The kernel applies every live
+   * policy in these scopes, whether or not the planner cited it.
+   */
+  policyScopes?: string[] | null
 }
 
 /** A policy reference. */
@@ -52,6 +57,8 @@ export interface PolicyRef {
   expirationDate?: string | null
   supersedesIds: string[]
   approvalRequirementIds: string[]
+  /** Entities this policy governs directly; the kernel applies it to their actions even if uncited. */
+  appliesToEntityIds?: string[] | null
   /**
    * Optional structured effect. Policies without one keep the original
    * behavior (free-text rules; same-scope conflicts go to a human).

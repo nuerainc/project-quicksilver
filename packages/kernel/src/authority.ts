@@ -32,6 +32,10 @@ export interface AuthorityOptions {
   riskLevel?: RiskLevel
   /** Clock override for tests. */
   now?: Date
+  /** Scopes that govern the action's capability (from the company model, not the planner). */
+  governingScopes?: string[] | null
+  /** The acting entity, for policies that name it in `appliesToEntityIds`. */
+  actorId?: string
 }
 
 export interface AuthorityResult {
@@ -44,6 +48,8 @@ export interface AuthorityResult {
   approvalReasons: string[]
   /** Disagreements resolved deterministically by priority. */
   resolutions: string[]
+  /** Policies that govern the action but that the planner did not cite. */
+  uncitedPolicyIds: string[]
 }
 
 const RESTRICTIVENESS: Record<PolicyEffect, number> = { allow: 0, 'require-approval': 1, deny: 2 }
@@ -72,7 +78,16 @@ export function checkAuthority(
   const approvalReasons: string[] = []
   const resolutions: string[] = []
 
-  const candidates = policies.filter((p) => action.applicablePolicyIds.includes(p.id))
+  // The planner's citations are advisory. The kernel also applies every policy
+  // in the capability's governing scopes and every policy that names the actor,
+  // so an omitted policy can't be avoided by not citing it.
+  const scopes = new Set(options.governingScopes ?? [])
+  const cited = new Set(action.applicablePolicyIds)
+  const governs = (p: PolicyRef) =>
+    scopes.has(p.scope) || (options.actorId !== undefined && (p.appliesToEntityIds ?? []).includes(options.actorId))
+  const candidates = policies.filter((p) => cited.has(p.id) || governs(p))
+  const uncitedPolicyIds = candidates.filter((p) => !cited.has(p.id)).map((p) => p.id)
+  const uncited = new Set(uncitedPolicyIds)
 
   // Structured policies that survive their own conditions, with their effective effect.
   const effective = new Map<string, PolicyEffect>()
@@ -201,5 +216,17 @@ export function checkAuthority(
     }
   }
 
-  return { checks, conflicts, applicablePolicyIds, blockingReasons, approvalReasons, resolutions }
+  // A governing policy the planner left out applies with its full effect; when it
+  // is free-text (no structured effect) a human must confirm it was honored.
+  for (const id of applicablePolicyIds) {
+    if (uncited.has(id) && !effective.has(id)) {
+      const p = policies.find((x) => x.id === id)!
+      approvalReasons.push(`${p.name} governs this action but was not cited by the planner; a human must confirm it is satisfied.`)
+    }
+  }
+  for (const c of checks) {
+    if (uncited.has(c.policyId)) c.reason = `Added by the kernel (not cited by the planner). ${c.reason}`
+  }
+
+  return { checks, conflicts, applicablePolicyIds, blockingReasons, approvalReasons, resolutions, uncitedPolicyIds }
 }

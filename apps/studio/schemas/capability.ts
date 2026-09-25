@@ -25,6 +25,14 @@ export default defineType({
       of: [{ type: 'reference', to: [{ type: 'entity' }] }],
     }),
     defineField({
+      name: 'policyScopes',
+      title: 'Governing policy scopes',
+      type: 'array',
+      of: [{ type: 'string' }],
+      description:
+        'Policy scopes that govern this capability, e.g. "production.parameter_changes". The kernel applies every live policy in these scopes, even ones the planner did not cite.',
+    }),
+    defineField({
       name: 'requiredTools',
       type: 'array',
       of: [{ type: 'string' }],

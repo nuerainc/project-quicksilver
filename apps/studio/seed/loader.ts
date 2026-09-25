@@ -126,6 +126,7 @@ function capabilityToSanity(s: CapabilitySeed) {
     riskLevel: s.riskLevel,
     authorizedEntities: refArray(s.authorizedEntityIds),
     requiredTools: s.requiredTools,
+    policyScopes: s.policyScopes ?? [],
   }
 }
 

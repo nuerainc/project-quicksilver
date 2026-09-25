@@ -108,8 +108,8 @@ async function resolveAction(
       `*[_type == "entity" && _id == $id][0]{ _id, name, entityType, "capabilityIds": capabilities[]._ref }`,
       { id: action.actorId },
     ),
-    client.fetch<{ _id: string; name: string; riskLevel?: number | null; authorizedEntityIds?: string[] | null } | null>(
-      `*[_type == "capability" && _id == $id][0]{ _id, name, riskLevel, "authorizedEntityIds": authorizedEntities[]._ref }`,
+    client.fetch<{ _id: string; name: string; riskLevel?: number | null; authorizedEntityIds?: string[] | null; policyScopes?: string[] | null } | null>(
+      `*[_type == "capability" && _id == $id][0]{ _id, name, riskLevel, "authorizedEntityIds": authorizedEntities[]._ref, policyScopes }`,
       { id: action.capabilityId },
     ),
     client.fetch<
@@ -123,13 +123,16 @@ async function resolveAction(
         expirationDate?: string | null
         supersedesIds?: string[] | null
         approvalRequirementIds?: string[] | null
+        appliesToEntityIds?: string[] | null
         effect?: PolicyEffect | null
         maxRiskLevel?: number | null
         whenAll?: SanityGuardCondition[] | null
       }>
     >(
-      `*[_type == "policy" && _id in $ids]{ _id, _rev, name, scope, priority, effectiveDate, expirationDate, "supersedesIds": supersedes[]._ref, "approvalRequirementIds": approvalRequirements[]._ref, effect, maxRiskLevel, whenAll }`,
-      { ids: action.applicablePolicyIds },
+      // Cited policies PLUS every policy in the capability's governing scopes and
+      // every policy naming the actor: the kernel decides what governs, not the planner.
+      `*[_type == "policy" && (_id in $ids || scope in coalesce(*[_type == "capability" && _id == $capabilityId][0].policyScopes, []) || $actorId in appliesTo[]._ref)]{ _id, _rev, name, scope, priority, "appliesToEntityIds": appliesTo[]._ref, effectiveDate, expirationDate, "supersedesIds": supersedes[]._ref, "approvalRequirementIds": approvalRequirements[]._ref, effect, maxRiskLevel, whenAll }`,
+      { ids: action.applicablePolicyIds, capabilityId: action.capabilityId, actorId: action.actorId },
     ),
     client.fetch<Array<{ _id: string; title: string; confidence: number }>>(
       `*[_type == "evidence" && _id in $ids]{ _id, title, confidence }`,
@@ -152,6 +155,7 @@ async function resolveAction(
         name: capabilityDoc.name,
         baseRiskLevel: (capabilityDoc.riskLevel ?? 2) as RiskLevel,
         authorizedEntityIds: capabilityDoc.authorizedEntityIds ?? [],
+        policyScopes: capabilityDoc.policyScopes ?? [],
       }
     : null
 
@@ -164,6 +168,7 @@ async function resolveAction(
     expirationDate: p.expirationDate ?? undefined,
     supersedesIds: p.supersedesIds ?? [],
     approvalRequirementIds: p.approvalRequirementIds ?? [],
+    appliesToEntityIds: p.appliesToEntityIds ?? [],
     effect: p.effect ?? null,
     maxRiskLevel: typeof p.maxRiskLevel === 'number' ? (p.maxRiskLevel as RiskLevel) : null,
     when: p.whenAll?.length ? { all: p.whenAll.map(conditionFromSanity) } : null,

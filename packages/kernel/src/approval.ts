@@ -55,6 +55,8 @@ export interface AuthorizeResult {
   policyChecks: PolicyCheck[]
   /** Policy disagreements resolved deterministically by priority. */
   policyResolutions: string[]
+  /** Governing policies the kernel applied that the planner did not cite. */
+  uncitedPolicyIds: string[]
   averageEvidenceConfidence: number
   recommendation: 'execute-autonomously' | 'request-approval' | 'reject'
 }
@@ -81,6 +83,8 @@ export function authorize(args: AuthorizeArgs): AuthorizeResult {
   const riskLevel = computeRisk(action, capability, actionEvidence)
   const authority = checkAuthority(action, policies, {
     riskLevel,
+    governingScopes: capability?.policyScopes ?? [],
+    actorId: actor.id,
     facts: { 'action.riskLevel': riskLevel, 'action.reversible': action.reversible, ...(facts ?? {}) },
   })
   const evidenceConf = averageEvidenceConfidence(actionEvidence)
@@ -136,6 +140,7 @@ export function authorize(args: AuthorizeArgs): AuthorizeResult {
     policyConflicts: authority.conflicts,
     policyChecks: authority.checks,
     policyResolutions: authority.resolutions,
+    uncitedPolicyIds: authority.uncitedPolicyIds,
     averageEvidenceConfidence: evidenceConf,
     recommendation,
   }
