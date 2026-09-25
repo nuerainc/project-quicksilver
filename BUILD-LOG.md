@@ -947,6 +947,12 @@ specification) became the canonical product target for this repository.
 - Naming, platform and NQC indexes: each now maps to its product layer. The docs index and `package.json` description were updated to match.
 - No code changed. The kernel authorization core was checked against the challenge baseline and is unchanged.
 
+## 2026-09-25 — Versioning scheme  *(Claude, via Cowork)*
+
+- Nuera Quicksilver stays on 0.x until **all three modes** (Genesis, Onboard, Operate) pass the parity gate. The current version is 0.1.
+- M1 → 0.2, M2 → 0.3, M3 → 0.4, M4 → 0.5, M5 → 0.6, M6 → 0.7. 0.9 is the release candidate (all modes pass the gate in testing). 1.0 requires operational evidence for every mode.
+- Recorded in the product definition (8.1), the roadmap's product target and the README. Documentation only.
+
 ## Errors encountered (chronological, all environments)
 
 | Day / Env | Error | Resolution |

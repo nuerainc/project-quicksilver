@@ -206,8 +206,9 @@ against a revenue optimizer drifting toward exaggeration and spam.
 
 ## 7. Platform feature baseline (Foundation / New)
 
-Quicksilver's runtime must provide every baseline capability below before any
-mode is called v1-ready. The right-hand column is what Quicksilver adds because
+Quicksilver's runtime must provide every baseline capability below before
+version 1.0 (section 8.1). Because 1.0 requires all three modes, the parity gate
+covers the whole baseline. The right-hand column is what Quicksilver adds because
 it runs a company. Current status is tracked in
 [spec coverage](NUERA-QUICKSILVER-SPEC-COVERAGE.md).
 
@@ -242,14 +243,33 @@ it runs a company. Current status is tracked in
 
 ### Milestones
 
-| Milestone | Delivers | Depends on |
-|---|---|---|
-| M1: Governance foundation | Kernel, evaluation, approval binding, RBAC, durable runs, triggers | Current work; see roadmap |
-| M2: Hosted platform | Packaged runtime, secrets vault, SSO, observability, tenant isolation | M1; dedicated Sanity project unblocked |
-| M3: Intent layer | Decision graph, provenance, impact scoring, the intent entry point | M1; Aura |
-| M4: Playbooks and Onboard pilot | Playbook type, Onboard playbook, connectors, shadow mode with 1–3 businesses | M2, M3 |
-| M5: Genesis demonstration | Economic playbook, experiments, ledger, WAES review; a $500, 30-day digital-only run | M3, M4 |
-| M6: Operate | Steady-state operations and reinvestment | M4, M5 |
+| Milestone | Version | Delivers | Depends on |
+|---|---|---|---|
+| M1: Governance foundation | 0.2 | Kernel, evaluation, approval binding, RBAC, durable runs, triggers | Current work; see roadmap |
+| M2: Hosted platform | 0.3 | Packaged runtime, secrets vault, SSO, observability, tenant isolation | M1; dedicated Sanity project unblocked |
+| M3: Intent layer | 0.4 | Decision graph, provenance, impact scoring, the intent entry point | M1; Aura |
+| M4: Playbooks and Onboard pilot | 0.5 | Playbook type, Onboard playbook, connectors, shadow mode with 1–3 businesses | M2, M3 |
+| M5: Genesis demonstration | 0.6 | Economic playbook, experiments, ledger, WAES review; a $500, 30-day digital-only run | M3, M4 |
+| M6: Operate | 0.7 | Steady-state operations and reinvestment | M4, M5 |
+
+### 8.1 Versioning
+
+Nuera Quicksilver is versioned independently of the Nuera RDL lab architecture.
+It stays on 0.x until **all three modes** pass the parity gate. Each milestone
+raises the minor version. Pilot businesses may run on 0.x, but the API isn't
+promised to be stable until 1.0.
+
+| Version | Reached when |
+|---|---|
+| **0.1** (current) | The kernel works; the platform foundation is in progress |
+| 0.2 | M1 governance foundation complete |
+| 0.3 | M2 hosted platform |
+| 0.4 | M3 intent layer |
+| 0.5 | M4 playbooks and Onboard pilot |
+| 0.6 | M5 Genesis demonstration |
+| 0.7 | M6 Operate |
+| 0.9 | Release candidate: all three modes pass the parity gate in testing |
+| **1.0** | All three modes pass the parity gate with operational evidence (pilot and demo results, not only tests) |
 
 ## 9. How success is measured
 
