@@ -928,6 +928,25 @@ README was rewritten for the public repo.
 
 ---
 
+## 2026-09-25 — Product definition and documentation grounding  *(Claude, via Cowork)*
+
+Nuera RDL's Quicksilver deep dive (an architecture doc plus a technical
+specification) became the canonical product target for this repository.
+
+- Added `docs/NUERA-QUICKSILVER-PRODUCT.md`. It covers:
+  - the product (an intent-driven company operating system) and its system layers (Foundation; Layer 1, the NQC Kernel; Layer 2, intent; Layer 3, playbooks)
+  - the three operating modes (Genesis, Onboard, Operate)
+  - the playbook format and the economic playbook
+  - governance and WAES
+  - the platform feature baseline
+  - goals and milestones M1–M6, and success metrics
+- README: added a tagline, a product-definition link, and a "What Nuera Quicksilver is building" section (layers with status, modes, goals). Corrected an outdated line that said there was no login; per-person supervisor credentials and RBAC now apply when configured.
+- ARCHITECTURE.md: added 1b (product layers mapped to code), 8c (NQC and platform additions since the challenge build) and 8d (target intent and playbook layers, and the new document types). The schema intro now counts `automationWorkflow`.
+- Roadmap: added a product target with milestones M1–M6 and product-track rules.
+- Spec coverage: added a product-layers table with 15 requirements, all marked with current evidence. Most are Missing.
+- Naming, platform and NQC indexes: each now maps to its product layer. The docs index and `package.json` description were updated to match.
+- No code changed. The kernel authorization core was checked against the challenge baseline and is unchanged.
+
 ## Errors encountered (chronological, all environments)
 
 | Day / Env | Error | Resolution |

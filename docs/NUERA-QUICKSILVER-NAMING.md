@@ -37,3 +37,15 @@ it cannot reverse a kernel rejection.
 Routing optimization, governed long-term memory, domain-specific kernels, and
 additional worker agents remain planned layers. They must remain subordinate to
 NQC Kernel policy and must not independently authorize execution.
+
+## Product layers
+
+The [product definition](NUERA-QUICKSILVER-PRODUCT.md) arranges these
+components in layers:
+
+| Layer | Components |
+|---|---|
+| Foundation: platform runtime | Durable runs, triggers, tool and agent registries, governed memory, routing, SDKs |
+| Layer 1: NQC Kernel loop | NQC Kernel, Quicksilver Engine, Decision Lifecycle, supervisor approval, RBAC |
+| Layer 2: intent loop | Intent resolution and the decision graph (planned) |
+| Layer 3: playbook loops | Playbooks built from process definitions and workflow graphs, run by Nuera Quicksilver Agents (planned) |

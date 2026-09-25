@@ -12,6 +12,23 @@ Quicksilver Agents**, and its deterministic evaluation core is the **Quicksilver
 Engine**. The current code mapping and implementation boundaries are recorded
 in [NUERA-QUICKSILVER-NAMING.md](./docs/NUERA-QUICKSILVER-NAMING.md).
 
+## 1b. Product layers
+
+The target product is set by the
+[product definition](./docs/NUERA-QUICKSILVER-PRODUCT.md): an intent-driven
+company operating system. This document describes the architecture that exists
+today and how the planned layers plug into it.
+
+| Layer | Role | Where it lives | Status |
+|---|---|---|---|
+| Foundation: platform runtime | Durable runs, triggers, registries, governed memory, routing, SDKs | `packages/kernel/src/{runtime,triggers,agents,tools,nqc}`, `packages/sdk*` | Foundation |
+| Layer 1: NQC Kernel loop | Propose → evaluate → authorize → route → supervisor approval → execute and log | `packages/kernel` (sections 4–8b below) | Built / Foundation |
+| Layer 2: intent loop | Turns an objective into a provenance-tagged decision graph | Planned (section 8d) | Not built |
+| Layer 3: playbook loops | Business playbooks stored as content: process stages that run workflow graphs | Planned (section 8d) | Building blocks exist |
+
+The layers stay separate. Layers 2 and 3 never gain authority: everything they
+want done arrives at the kernel as a proposal.
+
 ## 2. The model
 
 A company is not a document. It is a graph of **entities** (humans, agents, systems, services) bound by **policies**, **capabilities**, **permissions**, and **evidence**, pursuing **objectives** through **workflows**, producing and consuming **state**.
@@ -20,7 +37,7 @@ Nuera Quicksilver's job is to make that graph **machine-queryable**, **reason-ov
 
 ## 3. The schema (locked Day 1, refined Days 2–5)
 
-Ten document types. Enough to express the company; few enough to keep authoring manageable.
+Ten core document types, plus `automationWorkflow` for versioned workflow graphs (section 8c). Enough to express the company; few enough to keep authoring manageable. The product layers add seven more types (section 8d).
 
 | Type | Purpose | Status |
 |---|---|---|
@@ -300,6 +317,65 @@ dataset, the routes fall back to their built-in checks. If it's present
 but invalid, the decision routes return 409 and move nothing, and
 `/api/plan` still records the plan but holds every decision in `proposed`
 (resumable once the definition is fixed).
+
+## 8c. NQC and platform additions since the challenge build
+
+These are built on the challenge-era kernel without changing its authorization
+core (`approval.ts`, `risk.ts`, `authority.ts` and `capability.ts` are
+unchanged). Details are in the linked docs.
+
+- **Quicksilver Engine evaluation** (`engine/`, `nqc/`): deterministic
+  grounding, tool-failure, uncertainty and brittleness signals. The NQC safety
+  decision is `ALLOW`, `ESCALATE` or `BLOCK`. Evaluation can escalate an
+  authorized action to a human; it can never reverse a kernel rejection. See
+  [NQC Kernel](./docs/nqc/README.md).
+- **Supervisor approval binding:** an approval is tied to the exact action,
+  its risk, and a SHA-256 snapshot of the policy revisions in force. Execution
+  re-checks both. See [supervisor approval](./docs/platform/supervisor-approval.md).
+- **Identity and RBAC** (`identity/`): deny by default, isolated per tenant,
+  agents barred from authority, separation of duties. See
+  [identity and RBAC](./docs/platform/identity-rbac.md).
+- **Agent manifests and the standard agent contract** (`agents/`,
+  `packages/agent/src/contracts.ts`): every agent call is registered,
+  versioned and evaluated before its result can continue.
+- **Workflow graphs** (`workflows/`): an acyclic graph of trigger, agent, tool,
+  condition and output nodes. Side-effect and high-impact nodes need
+  evaluation plus supervisor approval, and tools are never auto-retried. See
+  [workflow graphs](./docs/platform/workflow-graphs.md).
+- **Durable runs and triggers** (`runtime/`, `triggers/`): governed queue,
+  worker, dead letters, cron and signed webhooks. See
+  [durable runs](./docs/platform/durable-runs.md) and
+  [triggers](./docs/platform/triggers.md).
+- **Governed memory and routing** (`nqc/memory.ts`, `nqc/routing.ts`):
+  fail-closed memory writes and role-based model selection. Neither is
+  connected to persistent storage yet.
+
+## 8d. Target: intent and playbook layers
+
+Planned, per the [product definition](./docs/NUERA-QUICKSILVER-PRODUCT.md).
+Nothing in this section exists in code yet.
+
+- **Intent layer (Layer 2):** a new `intent` document holds the human's
+  statement, the parsed objective, constraints, autonomy depth and mode.
+  `graphVariable` documents hold each business variable with a provenance tag
+  (`HUMAN_SPECIFIED`, `OBSERVED`, `AGENT_INFERRED`, `SYSTEM_CONSTRAINT`),
+  confidence, evidence and dependents. Belief updates can only change
+  `AGENT_INFERRED` values and go through the memory governor.
+- **Playbooks (Layer 3):** a `playbook` document joins a process definition
+  (business stages; can loop; human-only transitions) to the workflow graph
+  each stage runs. The graph's output becomes the facts that guard the next
+  stage transition. The economic playbook is the Genesis default, one of
+  several.
+- **Supporting types:** `experiment` (hypothesis, thresholds set before start,
+  budget, results), `ledgerEntry` (spend and revenue, including compute),
+  `connector` (the source of `OBSERVED` values in Onboard mode) and
+  `wellbeingReview` (WAES results; a failure is a hard block).
+- **Kernel changes:** a spend risk scale suited to small budgets, and a
+  passing WAES review as required evidence for customer-facing proposals.
+
+The layer contracts (intent → playbook → kernel → executor, and back) are
+listed in the product definition and tracked in
+[spec coverage](./docs/NUERA-QUICKSILVER-SPEC-COVERAGE.md#product-layers-intent-and-playbooks).
 
 ## 9. Out of scope for the original challenge build
 

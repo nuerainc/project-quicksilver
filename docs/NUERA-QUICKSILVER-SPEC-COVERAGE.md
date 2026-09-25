@@ -59,9 +59,9 @@ current implementation intentionally refuses the capability.
 | Versioning and debugging | Graph has schema/version fields; preview and step outcome responses exist | Foundation; no diff/release history, breakpoints, replay, or durable trace inspection |
 | Agent → evaluator → kernel → supervisor → action pipeline | Planning/API paths use agent, evaluation, deterministic governance, and human approval controls; live workflow route is read-only | Partial; no general workflow action execution path, Supervisor Agent, or unified observability/memory feedback path |
 | Retry and timeout | Agent-handler attempts and per-handler timeout are configured in graph; run-level `AbortSignal` cancels at step boundaries and aborts in-flight handlers; run-level retries with exponential backoff honour provider `retryAfterMs` hints; the live route cancels on client disconnect | Foundation; providers must honor cancellation; tool retries are intentionally rejected, and failed runs with dispatched tools are dead-lettered instead |
-| Event-driven triggers | Trigger node exists as a graph shape; run records carry a typed `trigger` (manual/api/webhook/schedule/event) and `delayMs` for scheduled starts | Missing: webhook receiver, cron scheduler, event bus, filesystem, and internal-system adapters that call `enqueue` |
-| Queues and resilience | `@quicksilver/kernel/runtime`: durable run records with an append-only event log; fsync'd JSONL journal store; priority queue with idempotency keys, global/per-tenant backpressure, per-tenant running limits, leases with heartbeat and expiry recovery, cancellation, dead-letter queue, and audited redrive; worker with concurrency and graceful shutdown. Covered by `runtime.test.ts` | Foundation; single-writer store only — needs a transactional multi-host adapter, auth on enqueue/cancel/redrive, and metrics over queue state |
-| Hosted and scalable runtime | Request-scoped Next.js execution; a queue-backed `WorkflowRunWorker` can run in a long-lived Node process with per-run handler resolution | Partial: no isolated containers, multi-host scaling, autoscaling, resource limits, or model/agent-aware capacity |
+| Event-driven triggers | `@quicksilver/kernel/triggers`: UTC cron parser and `CronScheduler` (per-slot idempotency, replica-safe, bounded catch-up) and `WebhookTrigger` (HMAC-SHA256 signatures with rotation, ±5 min timestamp tolerance, replay cache, delivery-id idempotency, Fetch-standard handler); both enqueue as `trigger`-role service principals. Covered by `triggers.test.ts` | Foundation; no hosted trigger process or management API, secrets come from env (no vault), no shared replay cache, event-bus/filesystem triggers missing |
+| Queues and resilience | `@quicksilver/kernel/runtime`: durable run records with an append-only event log; in-memory, fsync'd JSONL, and PostgreSQL stores held to one contract test (`store-contract.test.ts`, Postgres via embedded PGlite); priority queue with idempotency keys, global/per-tenant backpressure, per-tenant running limits that hold across processes, leases with heartbeat and expiry recovery, cancellation, dead-letter queue, audited redrive, RBAC on enqueue/cancel/redrive; worker with concurrency and graceful shutdown | Foundation; no `SKIP LOCKED` claim fast path, queue metrics dashboard, or retention policy |
+| Hosted and scalable runtime | Queue-backed `WorkflowRunWorker` processes can share a PostgreSQL run store across hosts, with per-run handler resolution | Partial: no packaged host process, isolated containers, autoscaling, resource limits, or model/agent-aware capacity |
 
 ## Developer ecosystem and enterprise layer
 
@@ -78,6 +78,28 @@ current implementation intentionally refuses the capability.
 | Compliance and data governance | No compliance packs or tenant governance layer | Missing: policy packs, HIPAA/SOC 2/PCI/FedRAMP evidence workflows, retention/deletion controls, and exportable audit reports; compliance claims require legal/security review |
 | Tenant isolation | No tenant model for routing, memory, secrets, workflows, or runs | Missing; define tenant boundaries and isolation tests before shared hosting |
 | Separate Sanity environment | New dedicated project `f87t11g1` created; its production dataset is private; local app and Studio project IDs point to it; schemas remain separate from challenge history | Blocked pending a new project-scoped server token and Context MCP endpoints; no deploy or seed has run |
+
+## Product layers (intent and playbooks)
+
+These requirements come from the [product definition](NUERA-QUICKSILVER-PRODUCT.md).
+
+| Requirement | Current repository evidence | Status / remaining work |
+|---|---|---|
+| Intent entry point | CEO objective console sends a plain objective to the planner | Foundation; no parsing into objective, constraints, autonomy depth and mode |
+| Decision graph | None | Missing; `intent` and `graphVariable` types, storage, impact scoring for open unknowns |
+| Provenance tags | None; evidence documents carry confidence | Missing; `HUMAN_SPECIFIED` / `OBSERVED` / `AGENT_INFERRED` / `SYSTEM_CONSTRAINT` on every variable, write rules enforced by the kernel |
+| Confidence calibration | Evaluator scores are uncalibrated | Missing; calibration method and labeled outcomes |
+| Playbook type | Process definitions and workflow graphs exist separately | Missing; `playbook` document joining stages to stage graphs, with modes, budget, metrics and thresholds |
+| Bounded loops | Graph cycles are rejected | Missing in graphs; playbook iteration runs at the process level until a bounded-loop node exists |
+| Genesis mode and economic playbook | None | Missing; `experiment` type, thresholds set before start, paid-signal experiments |
+| Onboard mode | None | Missing; connectors, owner interview, backtest, shadow mode, per-department autonomy graduation |
+| Operate mode | None | Missing; reinvestment and bounded experiments inside a running business |
+| Finance layer | Decisions record financial exposure | Missing; `ledgerEntry`, CAC, margin, cash forecast, compute billed as capital |
+| Connectors | Sanity Context MCP only | Missing; ledger, CRM, payments and email connectors that write `OBSERVED` values |
+| WAES review | None | Missing; `wellbeingReview` type, review contract, hard block on failure |
+| Small-budget spend risk | Financial tiers start at $1,000 | Missing; a lower tier scale for Genesis runs |
+| Business agent family | Planner, reviewer and query manifests | Missing; research, offer, content, outreach, sales, fulfillment and finance agents, each defined by a manifest |
+| Platform feature baseline | See the tables above | Partial; a pass/fail test list for each baseline item is still to be written |
 
 ## Regression coverage
 

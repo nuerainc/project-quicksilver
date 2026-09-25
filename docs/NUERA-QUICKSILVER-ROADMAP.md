@@ -9,6 +9,28 @@ closed-loop learning, domain intelligence, multi-model optimization, developer
 experience, workflow orchestration, hosted runtime reliability, secrets and
 RBAC security, observability, and an extensible SDK/plugin ecosystem.
 
+## Product target
+
+The destination is set by the [product definition](NUERA-QUICKSILVER-PRODUCT.md):
+an intent-driven company operating system with a platform foundation and three
+loop layers, running in three modes (Genesis, Onboard, Operate). The platform
+work below builds the Foundation and Layer 1. The product track adds Layers 2
+and 3.
+
+| Milestone | Delivers | Layer | Depends on |
+|---|---|---|---|
+| M1: Governance foundation | Kernel, evaluation, approval binding, RBAC, durable runs, triggers (the build sequence below, steps 1–3) | Foundation, 1 | In progress |
+| M2: Hosted platform | Packaged runtime, secrets vault, SSO, observability, tenant isolation (steps 4–6) | Foundation | M1; dedicated Sanity project unblocked |
+| M3: Intent layer | Decision graph, provenance tags, impact scoring for open unknowns, the intent entry point, belief updates through the memory governor | 2 | M1; Aura |
+| M4: Playbooks and Onboard pilot | `playbook` type (process definition plus stage graphs), Onboard playbook, connectors, backtest and shadow mode, a pilot with 1–3 businesses | 3 | M2, M3 |
+| M5: Genesis demonstration | Economic playbook, `experiment` and `ledgerEntry` types, WAES review in the kernel path, a small-budget spend risk scale; a $500, 30-day digital-only run | 3 | M3, M4 |
+| M6: Operate | Steady-state operations, reinvestment, and bounded Genesis experiments inside a running business | 3 | M4, M5 |
+
+Product-track rules: Layers 2 and 3 never gain authority. Every playbook step
+is a proposal through the NQC Kernel. Belief updates can only change
+`AGENT_INFERRED` values. Customer-facing proposals need a passing WAES review
+as evidence.
+
 ## Existing foundation to preserve
 
 - `packages/kernel` already provides deterministic capability, policy, risk,
@@ -83,7 +105,7 @@ readiness claims.
 | Memory and learning | Memory-write governance proposal and retention metadata helpers | No tenant/domain-scoped persistent store, retrieval, provenance lifecycle, deletion, feedback loop, or validated improvement evidence | Not operational |
 | Tool/plugin ecosystem | Versioned in-process tool contracts validate the current Sanity MCP path | No persistent catalog, general plugin install/permission system, hosted tool runtime, marketplace, or externally verifiable approvals | Partial foundation |
 | SDK and developer experience | Internal TypeScript client and Python client/CLI cover validate, preview, and gated read-only run | No stable/published API, Go SDK, agent creation API, docs portal, or compatibility guarantees | Partial foundation |
-| Hosted runtime and triggers | Durable run records, journaled store, governed priority queue (idempotency, backpressure, per-tenant limits, leases, retries with rate-limit hints, cancellation, dead letters, audited redrive) and a worker in `@quicksilver/kernel/runtime` | Multi-host transactional store, trigger adapters (webhook/cron/events), isolated execution, auth on queue operations, metrics | Partial foundation |
+| Hosted runtime and triggers | Durable run records; in-memory, journaled-file, and PostgreSQL stores; governed priority queue (idempotency, backpressure, cross-process per-tenant limits, leases, retries with rate-limit hints, cancellation, dead letters, audited redrive, RBAC); worker; cron scheduler and signed-webhook trigger | Packaged host process and management API, isolated execution, shared replay cache, metrics | Partial foundation |
 | Identity, tenancy, and secrets | Kernel RBAC with tenant isolation, agent-authority bar, separation of duties, and audited decisions; hashed per-person bearer tokens; enforced on the run queue and web supervisor routes | SSO/OIDC, sessions, persistent principal/role admin, secrets vault and rotation, durable access-audit store | Partial foundation |
 | Monitoring and audit | Existing decision/process history in Sanity; live workflow response contains an in-memory step trace | No durable workflow run records, structured platform logs, metrics, traces, model/cost dashboards, or alerting | Partial foundation |
 | Enterprise deployment and extensions | Separate Studio schemas are prepared; canonical docs and roadmap are separated from challenge history | Dedicated Sanity project ID and Context MCP endpoints are pending; compliance packs, identity-provider integration, team collaboration, and governed extension releases are absent | Blocked / not built |
@@ -121,7 +143,7 @@ readiness claims.
 | Developer experience | Internal TypeScript SDK plus dependency-free Python SDK and `qs` CLI for workflow validation, safe preview, and opt-in read-only runs; neither is published as a stable API. No Go SDK or agent creation API |
 | Identity and secrets | NQC RBAC and hashed per-person tokens (`QUICKSILVER_PRINCIPALS`) for supervisor actions and queue operations; no SSO, team UI, or credential vault |
 | Monitoring | Decision log and process history; no metrics, traces, or operations dashboard |
-| Triggers and resilience | Queue with backpressure, retries, cancellation, and a dead-letter queue exists in the kernel runtime; triggers are typed on run records but no webhook/cron/event adapter feeds the queue yet |
+| Triggers and resilience | Cron schedules and signed webhooks enqueue through the governed queue (backpressure, retries, cancellation, dead letters); no packaged host process yet, and no event-bus trigger |
 | Collaboration and release | Git/process versions exist; no team workspace, approval roles, or workflow deployment pipeline |
 
 ## Build sequence
