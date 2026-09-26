@@ -294,6 +294,64 @@ provider-stated intent. They are kept in their own record, shown to the
 provider with their evidence, and never overwrite weights in the intent
 ledger.
 
+## Choice predictor v2 (frozen 2026-09-26)
+
+`eval/choice-predictor-v2.json` fixes the method, and `eval/choice-scenarios-v2.json`
+holds 30 fresh scenarios (`cs2-01` to `cs2-30`) in all nine categories, three
+or four each. Both were committed before any answers or model picks for them
+existed. A test pins the spec's content hash, so any change is a v3, never a
+silent edit.
+
+**Method (`src/predict-v2.ts`).** The blind model's pick is the starting
+point, and the learner adjusts it from the provider's own choices.
+
+- A multinomial logit over the options (`src/learn.ts`) with these features:
+  - `model`: 1 on the option the model picked
+  - `compromise`: the option is annotated as a middle position
+  - `practical`: an action that expresses no trade-off
+  - `ask`, plus `cat.<category>.ask`: a per-category ask tendency
+  - `dim.<dimension>`: the option's signed dimension loads
+- The model pick comes from the no-profile arm, which never sees any
+  answers. A model error gives no pick, and the `model` feature is then 0.
+- `prequentialV2` predicts each decision before learning its answer, in
+  scenario order. Nothing in this package calls a model.
+- Ties go to the earliest of a, b, c, ask.
+
+**Why the prior is `model` = 1.5, everything else 0.**
+
+- With four options, 1.5 gives the model's pick a starting probability of
+  0.60. That matches the blind model's measured agreement on the 38 set-v1
+  scenarios (60.5–63.2%), the only input used to set it.
+- The model's pick is therefore the prediction until there is evidence
+  against it. A provider who consistently overrides it toward a compromise
+  is followed after about three such answers (tested on synthetic data).
+- The profile readings are not used as a prior. They did not carry over to
+  concrete choices in set v1.
+- The learning rate (0.5) and prior strength (0.1) are the learner's
+  existing defaults, not tuned.
+
+**Scoring rule.** Prequential accuracy over all 30 fresh scenarios, against
+the charter target: at least 70% and at least 2× chance (25%). It is
+reported with the per-category breakdown, and with the model's pick alone
+for reference. Nothing is claimed until all 30 are answered.
+
+**How to run.**
+
+1. The founder answers the 30 fresh scenarios in a page (to be built), blind.
+2. Generate the model's blind picks on Azure. The model sees the scenarios
+   only, never any answers:
+   ```bash
+   npm run aura:choices:model -- --set v2 --picks-out data/aura/v2-picks.json
+   ```
+3. Score offline:
+   ```bash
+   npm run aura:choices:v2 -- data/aura/scenario-answers-v2.json data/aura/v2-picks.json [--detail]
+   ```
+
+Both files hold one person's data and stay out of the repository. **No v2
+result exists yet, and nothing is claimed until that run.** The same
+combiner is meant to be scored the same way on pilot verdicts.
+
 ## Entry point
 
 ```ts
@@ -374,7 +432,7 @@ Azure run on the development set (2026-09-26, before these fixes): baseline
 
 | Criterion | Status |
 |---|---|
-| Choice agreement ≥ 70% and ≥ 2× chance (primary, revised charter) | **Not met.** Frozen predictor v1: 6/38 (15.8%). Blind model test: 24/38 (63.2%) without the profile, 23/38 (60.5%) with it; passes 2× chance, misses 70%. Next: model plus learner, frozen, on fresh scenarios and pilot verdicts |
+| Choice agreement ≥ 70% and ≥ 2× chance (primary, revised charter) | **Not met.** Frozen predictor v1: 6/38 (15.8%). Blind model test: 24/38 (63.2%) without the profile, 23/38 (60.5%) with it; passes 2× chance, misses 70%. Next: predictor v2 (model plus learner), frozen 2026-09-26 on 30 fresh scenarios; not yet run |
 | ≥ 90% parsing accuracy | **Met on the held-out set:** model parser 27/30 (90.0%) on Azure, 2026-09-26. Confirm on a larger fresh set |
 | 100% provenance tagging | Enforced by validation; true on all 52 labeled objectives |
 | 0 unsupported inferences | Enforced by validation; 0 on all 52 |
