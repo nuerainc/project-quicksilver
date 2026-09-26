@@ -29,8 +29,9 @@
     "lint": "npm run lint --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "host:test": "node --experimental-strip-types --no-warnings --test packages/host/src/host.test.ts packages/host/src/vault.test.ts packages/host/src/observability.test.ts packages/host/src/config.test.ts",
-    "aura:test": "node --experimental-strip-types --no-warnings --test packages/aura/src/aura.test.ts packages/aura/src/ledger.test.ts packages/aura/src/profile.test.ts packages/aura/src/store.test.ts",
+    "aura:test": "node --experimental-strip-types --no-warnings --test packages/aura/src/aura.test.ts packages/aura/src/ledger.test.ts packages/aura/src/profile.test.ts packages/aura/src/store.test.ts packages/aura/src/predict.test.ts",
     "aura:eval": "node --experimental-strip-types --no-warnings packages/aura/src/eval-cli.ts",
+    "aura:choices": "node --experimental-strip-types --no-warnings packages/aura/src/choice-cli.ts",
     "aura:agreement": "node --experimental-strip-types --no-warnings packages/aura/src/agreement-cli.ts",
     "aura:eval:model": "npm run intent:eval --workspace=@quicksilver/agent --"
   },

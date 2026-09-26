@@ -1,0 +1,621 @@
+{
+ "version": 1,
+ "frozenAt": "2026-09-26",
+ "scenarioSetVersion": 1,
+ "profileInstrumentVersion": 1,
+ "method": {
+  "summary": "Pre-registered before the founder's scenario answers exist. Each option lists the profile dimensions it expresses and which pole. An option's fit is the sum over its dimensions of weight \u00d7 (profile score \u00d7 confidence/10), signed toward the option's pole. Every action option also expresses 'decide yourself' (autonomy, left) and every 'ask' option expresses 'ask me first' (autonomy, right). The predicted choice is the option with the highest fit; ties go to the earliest of a, b, c, ask. A scenario whose action options express no profile dimension is not covered: the predictor abstains, and an abstention counts as a miss in the headline number.",
+  "headline": "Choice agreement = correct predictions / all 38 scenarios (abstentions are misses). Also reported: coverage and agreement on covered scenarios, 'ask' agreement, and the 25% chance rate.",
+  "note": "The annotator had seen the founder's profile, but not any scenario answers, when writing these mappings; the mappings describe what each option means, not what the founder is expected to choose."
+ },
+ "annotations": {
+  "cs-01": {
+   "covered": true,
+   "options": {
+    "a": {
+     "relationships": [
+      "right",
+      1
+     ]
+    },
+    "b": {
+     "relationships": [
+      "right",
+      1
+     ],
+     "horizon": [
+      "left",
+      1
+     ]
+    },
+    "c": {}
+   }
+  },
+  "cs-02": {
+   "covered": false
+  },
+  "cs-03": {
+   "covered": false
+  },
+  "cs-04": {
+   "covered": false
+  },
+  "cs-05": {
+   "covered": true,
+   "options": {
+    "a": {},
+    "b": {
+     "horizon": [
+      "right",
+      1
+     ]
+    },
+    "c": {
+     "horizon": [
+      "left",
+      1
+     ]
+    }
+   }
+  },
+  "cs-06": {
+   "covered": true,
+   "options": {
+    "a": {
+     "risk": [
+      "left",
+      1
+     ]
+    },
+    "b": {
+     "risk": [
+      "right",
+      1
+     ]
+    },
+    "c": {
+     "risk": [
+      "right",
+      0.5
+     ]
+    }
+   }
+  },
+  "cs-07": {
+   "covered": true,
+   "options": {
+    "a": {
+     "horizon": [
+      "left",
+      1
+     ]
+    },
+    "b": {
+     "horizon": [
+      "right",
+      1
+     ],
+     "risk": [
+      "right",
+      1
+     ]
+    },
+    "c": {}
+   }
+  },
+  "cs-08": {
+   "covered": true,
+   "options": {
+    "a": {
+     "reputation": [
+      "right",
+      1
+     ]
+    },
+    "b": {
+     "reputation": [
+      "right",
+      0.5
+     ]
+    },
+    "c": {
+     "reputation": [
+      "left",
+      1
+     ]
+    }
+   }
+  },
+  "cs-09": {
+   "covered": true,
+   "options": {
+    "a": {
+     "customer": [
+      "right",
+      1
+     ],
+     "relationships": [
+      "right",
+      1
+     ]
+    },
+    "b": {
+     "relationships": [
+      "right",
+      1
+     ]
+    },
+    "c": {
+     "risk": [
+      "right",
+      1
+     ]
+    }
+   }
+  },
+  "cs-10": {
+   "covered": false
+  },
+  "cs-11": {
+   "covered": false
+  },
+  "cs-12": {
+   "covered": false
+  },
+  "cs-13": {
+   "covered": true,
+   "options": {
+    "a": {
+     "relationships": [
+      "right",
+      1
+     ],
+     "customer": [
+      "right",
+      1
+     ]
+    },
+    "b": {
+     "relationships": [
+      "left",
+      1
+     ]
+    },
+    "c": {
+     "customer": [
+      "right",
+      1
+     ]
+    }
+   }
+  },
+  "cs-14": {
+   "covered": true,
+   "options": {
+    "a": {
+     "horizon": [
+      "right",
+      1
+     ],
+     "risk": [
+      "right",
+      1
+     ]
+    },
+    "b": {
+     "risk": [
+      "left",
+      1
+     ]
+    },
+    "c": {
+     "horizon": [
+      "left",
+      1
+     ]
+    }
+   }
+  },
+  "cs-15": {
+   "covered": true,
+   "options": {
+    "a": {
+     "risk": [
+      "right",
+      1
+     ]
+    },
+    "b": {
+     "risk": [
+      "left",
+      1
+     ]
+    },
+    "c": {
+     "risk": [
+      "left",
+      0.5
+     ]
+    }
+   }
+  },
+  "cs-16": {
+   "covered": true,
+   "options": {
+    "a": {
+     "reputation": [
+      "right",
+      1
+     ]
+    },
+    "b": {
+     "reputation": [
+      "left",
+      1
+     ]
+    },
+    "c": {
+     "reputation": [
+      "right",
+      0.5
+     ]
+    }
+   }
+  },
+  "cs-17": {
+   "covered": true,
+   "options": {
+    "a": {
+     "customer": [
+      "right",
+      1
+     ]
+    },
+    "b": {
+     "customer": [
+      "left",
+      1
+     ]
+    },
+    "c": {
+     "customer": [
+      "right",
+      0.5
+     ]
+    }
+   }
+  },
+  "cs-18": {
+   "covered": false
+  },
+  "cs-19": {
+   "covered": false
+  },
+  "cs-20": {
+   "covered": false
+  },
+  "cs-21": {
+   "covered": false
+  },
+  "cs-22": {
+   "covered": true,
+   "options": {
+    "a": {
+     "horizon": [
+      "left",
+      1
+     ]
+    },
+    "b": {
+     "horizon": [
+      "right",
+      1
+     ]
+    },
+    "c": {}
+   }
+  },
+  "cs-23": {
+   "covered": true,
+   "options": {
+    "a": {
+     "reputation": [
+      "left",
+      1
+     ]
+    },
+    "b": {
+     "reputation": [
+      "right",
+      1
+     ]
+    },
+    "c": {
+     "reputation": [
+      "right",
+      0.5
+     ],
+     "horizon": [
+      "right",
+      1
+     ]
+    }
+   }
+  },
+  "cs-24": {
+   "covered": false
+  },
+  "cs-25": {
+   "covered": true,
+   "options": {
+    "a": {
+     "risk": [
+      "right",
+      1
+     ]
+    },
+    "b": {
+     "customer": [
+      "left",
+      0.5
+     ]
+    },
+    "c": {
+     "customer": [
+      "right",
+      0.5
+     ]
+    }
+   }
+  },
+  "cs-26": {
+   "covered": true,
+   "options": {
+    "a": {
+     "horizon": [
+      "left",
+      1
+     ]
+    },
+    "b": {
+     "horizon": [
+      "right",
+      1
+     ]
+    },
+    "c": {
+     "horizon": [
+      "left",
+      0.5
+     ]
+    }
+   }
+  },
+  "cs-27": {
+   "covered": true,
+   "options": {
+    "a": {},
+    "b": {
+     "relationships": [
+      "left",
+      0.5
+     ]
+    },
+    "c": {
+     "relationships": [
+      "left",
+      1
+     ]
+    }
+   }
+  },
+  "cs-28": {
+   "covered": true,
+   "options": {
+    "a": {
+     "risk": [
+      "right",
+      1
+     ]
+    },
+    "b": {},
+    "c": {
+     "risk": [
+      "left",
+      1
+     ]
+    }
+   }
+  },
+  "cs-29": {
+   "covered": true,
+   "options": {
+    "a": {
+     "customer": [
+      "left",
+      1
+     ],
+     "relationships": [
+      "right",
+      1
+     ]
+    },
+    "b": {
+     "relationships": [
+      "left",
+      1
+     ],
+     "risk": [
+      "right",
+      1
+     ]
+    },
+    "c": {
+     "customer": [
+      "left",
+      0.5
+     ]
+    }
+   }
+  },
+  "cs-30": {
+   "covered": false
+  },
+  "cs-31": {
+   "covered": true,
+   "options": {
+    "a": {},
+    "b": {},
+    "c": {
+     "autonomy": [
+      "right",
+      1
+     ]
+    }
+   }
+  },
+  "cs-32": {
+   "covered": true,
+   "options": {
+    "a": {},
+    "b": {},
+    "c": {
+     "autonomy": [
+      "right",
+      0.5
+     ]
+    }
+   }
+  },
+  "cs-33": {
+   "covered": true,
+   "options": {
+    "a": {
+     "risk": [
+      "right",
+      1
+     ]
+    },
+    "b": {
+     "risk": [
+      "left",
+      1
+     ],
+     "horizon": [
+      "right",
+      1
+     ]
+    },
+    "c": {
+     "risk": [
+      "left",
+      0.5
+     ]
+    }
+   }
+  },
+  "cs-34": {
+   "covered": true,
+   "options": {
+    "a": {
+     "relationships": [
+      "right",
+      1
+     ]
+    },
+    "b": {
+     "relationships": [
+      "left",
+      1
+     ]
+    },
+    "c": {
+     "relationships": [
+      "left",
+      0.5
+     ]
+    }
+   }
+  },
+  "cs-35": {
+   "covered": true,
+   "options": {
+    "a": {
+     "customer": [
+      "right",
+      1
+     ]
+    },
+    "b": {
+     "customer": [
+      "left",
+      1
+     ],
+     "horizon": [
+      "right",
+      1
+     ]
+    },
+    "c": {
+     "customer": [
+      "right",
+      0.5
+     ]
+    }
+   }
+  },
+  "cs-36": {
+   "covered": true,
+   "options": {
+    "a": {
+     "customer": [
+      "left",
+      1
+     ],
+     "risk": [
+      "right",
+      1
+     ]
+    },
+    "b": {
+     "risk": [
+      "left",
+      1
+     ]
+    },
+    "c": {
+     "risk": [
+      "left",
+      0.5
+     ]
+    }
+   }
+  },
+  "cs-37": {
+   "covered": false
+  },
+  "cs-38": {
+   "covered": true,
+   "options": {
+    "a": {
+     "risk": [
+      "left",
+      1
+     ]
+    },
+    "b": {
+     "risk": [
+      "right",
+      1
+     ]
+    },
+    "c": {
+     "risk": [
+      "right",
+      0.5
+     ]
+    }
+   }
+  }
+ }
+}

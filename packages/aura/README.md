@@ -135,6 +135,23 @@ The 38 choice scenarios then check whether Aura can predict the provider's
 choices from it. Dimensions are added in later versions only where they
 explain scenarios Aura got wrong.
 
+## Choice predictor (frozen v1)
+
+`eval/choice-predictor-v1.json` maps each scenario option to the profile
+dimensions it expresses. It was committed on 2026-09-26, before any scenario
+answers existed, and a test pins its content hash, so changing it means
+releasing a v2, never a silent edit.
+
+- `predictChoice` scores each option: fit = Σ weight × profile score ×
+  confidence/10, signed toward the option's pole.
+- Every action also counts as "decide yourself", and "ask" as "ask me first".
+- 25 of the 38 scenarios are covered. On the other 13 the predictor abstains,
+  and the headline number counts each abstention as a miss.
+
+```bash
+npm run aura:choices -- --profile profile-answers.json --choices scenario-answers.json --detail
+```
+
 ## Entry point
 
 ```ts
