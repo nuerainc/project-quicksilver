@@ -81,11 +81,15 @@ const profilePath = arg('--profile'), choicesPath = arg('--choices'), picksOut =
 // --examples <answers.json> [--examples-set v1|v2]: the provider's own earlier decisions, shown to the
 // model as worked examples (in-context learning). Never the answers of the set being predicted.
 const examplesPath = arg('--examples')
+// --examples-text <file>: extra worked examples as plain text, e.g. `npm run -s onboard -- decisions --export examples`
+// (logged real decisions and shadow verdicts) or the answered situational profile v2. Joins the examples arms.
+const examplesTextPath = arg('--examples-text')
+const hasExamples = Boolean(examplesPath || examplesTextPath)
 // --principles <export.json>: the provider's confirmed decision principles (confirmed + edited only).
 const principlesPath = arg('--principles')
 const set = arg('--set') ?? 'v1'
 if (set !== 'v1' && set !== 'v2') { console.log('--set must be v1 or v2'); process.exit(1) }
-if (set === 'v1' ? !(profilePath || examplesPath || principlesPath) || !choicesPath : !picksOut && !choicesPath) {
+if (set === 'v1' ? !(profilePath || hasExamples || principlesPath) || !choicesPath : !picksOut && !choicesPath) {
   console.log('Usage: --profile <profile-answers.json> --choices <scenario-answers.json> [--detail] [--picks-out <file>]\n   or: --set v2 --picks-out <file> [--profile <profile-answers.json>] [--choices <scenario-answers-v2.json>] [--detail]\n   add: [--examples <other-set-answers.json>] [--principles <principles-export.json>] [--picks-arm <arm>]')
   process.exit(1)
 }
@@ -99,18 +103,19 @@ const principles = principlesPath ? acceptedPrinciples(parsePrincipleExport(read
 if (principles && !principles.length) { console.log('--principles has no confirmed or edited principles.'); process.exit(1) }
 type Arm = ChoiceArm
 const arms: Arm[] = [
-  ...(principles && examplesPath ? ['rules+examples' as const] : []),
+  ...(principles && hasExamples ? ['rules+examples' as const] : []),
   ...(principles ? ['rules' as const] : []),
-  ...(examplesPath ? ['examples' as const] : []),
+  ...(hasExamples ? ['examples' as const] : []),
   ...(profile ? ['profile' as const] : []),
   'none',
 ]
 const examplesSet = arg('--examples-set') ?? (set === 'v2' ? 'v1' : 'v2')
 if (examplesPath && examplesSet === set) { console.log('--examples must come from the other scenario set, never the one being predicted.'); process.exit(1) }
 const examplesText = (() => {
-  if (!examplesPath) return ''
+  const extra = examplesTextPath ? readFileSync(resolve(base, examplesTextPath), 'utf8').trim() : ''
+  if (!examplesPath) return extra
   const exScenarios = read(join(evalDir, examplesSet === 'v2' ? 'choice-scenarios-v2.json' : 'choice-scenarios.json')).scenarios as typeof scenarios
-  return buildExamplesText(exScenarios, read(examplesPath).answers)
+  return [buildExamplesText(exScenarios, read(examplesPath).answers), extra].filter(Boolean).join('\n\n')
 })()
 const profileText = buildProfileText(profile?.dimensions ?? [])
 const principlesText = principles ? buildPrinciplesText(principles) : ''
