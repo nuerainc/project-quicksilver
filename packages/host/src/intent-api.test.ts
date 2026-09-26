@@ -105,3 +105,34 @@ test('question quality: answering and dismissing Aura\'s questions are recorded 
     assert.deepEqual({ scored: list.body.questionQuality.scored, answered: list.body.questionQuality.answered }, { scored: 2, answered: 1 })
   } finally { await host.stop() }
 })
+
+test('decision principles over HTTP: the provider states them, admins and viewers cannot, and the state shows them', async () => {
+  const { host, call, tokens } = await start()
+  try {
+    assert.equal((await call('/api/intent-ledger/nuera-rules', tokens.founder, { change: { type: 'company.create', companyId: 'nuera-rules', tenantId: TENANT, admins: ['entity-ops'], providers: [{ id: 'entity-founder', kind: 'person', name: 'Founder', authority: 1 }] } })).status, 201)
+    const principle = { id: 'conflict-small-first', text: 'When two goals conflict, take the smaller or test version first.', appliesTo: ['conflict'] }
+    const set = await call('/api/intent-ledger/nuera-rules', tokens.founder, { change: { type: 'principle.set', principle }, reason: 'Confirmed on the principles page' })
+    assert.equal(set.status, 201)
+    assert.equal(set.body.state.principles['conflict-small-first'].provenance, 'HUMAN_SPECIFIED')
+    const byAdmin = await call('/api/intent-ledger/nuera-rules', tokens.ops, { change: { type: 'principle.set', principle: { ...principle, id: 'admin-one' } } })
+    assert.equal(byAdmin.status, 403)
+    assert.match(byAdmin.body.reasons.join(' '), /Admins set decision rules only/)
+    assert.equal((await call('/api/intent-ledger/nuera-rules', tokens.ops, { change: { type: 'principle.retire', principleId: 'conflict-small-first' } })).status, 403)
+    assert.equal((await call('/api/intent-ledger/nuera-rules', tokens.viewer, { change: { type: 'principle.set', principle } })).status, 403)
+    assert.equal((await call('/api/intent-ledger/nuera-rules', tokens.founder, { change: { type: 'principle.set', principle: { id: 'bad' } } })).status, 403, 'a malformed principle is refused, not a crash')
+
+    const read = await call('/api/intent-ledger/nuera-rules', tokens.viewer)
+    assert.equal(read.status, 200)
+    assert.equal(read.body.verified.valid, true)
+    assert.deepEqual(Object.keys(read.body.state.principles), ['conflict-small-first'])
+    assert.equal(read.body.state.principles['conflict-small-first'].setBy, 'entity-founder')
+
+    assert.equal((await call('/api/intent-ledger/nuera-rules', tokens.founder, { change: { type: 'principle.retire', principleId: 'conflict-small-first', reason: 'Replaced' } })).status, 201)
+    const after = await call('/api/intent-ledger/nuera-rules', tokens.viewer)
+    assert.deepEqual(after.body.state.principles, {})
+    assert.equal(after.body.entries.length, 3, 'the retired principle stays in the history')
+    assert.equal(after.body.verified.valid, true)
+  } finally {
+    await host.stop({ abort: true })
+  }
+})

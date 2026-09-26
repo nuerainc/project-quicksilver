@@ -140,6 +140,12 @@ host uses the same project settings as evaluation records
 (`NEXT_PUBLIC_SANITY_PROJECT_ID`, `NEXT_PUBLIC_SANITY_DATASET`,
 `SANITY_AUTH_TOKEN`) and refuses the legacy challenge project.
 
+Set `QUICKSILVER_COMPANY_ID` to the company id of your intent ledger (the one
+created with `npm run onboard -- company`) to give the shadow-stage agent your
+confirmed decision principles (`npm run onboard -- principles import`). They
+are read from the ledger on every generate, so a retired principle stops
+applying at once.
+
 | Document type | One per | Id | Rules |
 |---|---|---|---|
 | `shadowRecommendation` | recommendation | `shadow-recommendation.<intentId>.<recId>` | Append-only. The verdict and the outcome are each set once; a save that would change or remove them is refused (HTTP 409). A racing writer loses on the revision check. |

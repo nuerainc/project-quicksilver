@@ -1,7 +1,7 @@
 /** Intent ledger tests: the provider operating rules from the Aura charter. */
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { generateKeyPairSync } from 'node:crypto'
+import { generateKeyPairSync, verify } from 'node:crypto'
 
 import { AccessController, type Principal } from '@quicksilver/kernel/identity'
 
@@ -179,4 +179,59 @@ test('back-and-forth weight changes are reported, never blocked', () => {
   const r = weightReversals(l, { now: new Date(Date.UTC(2026, 9, 10)) })
   assert.equal(r.length, 1)
   assert.deepEqual(r[0]!.values, [0.9, 0.3, 0.9, 0.3])
+})
+
+test('decision principles are stated intent: providers set and retire their own; admins and agents cannot', () => {
+  let l = coOwned()
+  const principle = { id: 'p.conflict', text: 'When two goals conflict, take the smaller or test version first.', appliesTo: ['conflict'], examples: ['s1-07'] }
+  const byAdmin = appendChange(l, ops, { type: 'principle.set', principle })
+  assert.equal(byAdmin.ok, false)
+  if (!byAdmin.ok) assert.match(byAdmin.reasons.join(' '), /Admins set decision rules only/)
+  assert.equal(appendChange(l, bot, { type: 'principle.set', principle }).ok, false)
+  assert.equal(appendChange(l, ana, { type: 'principle.set', principle: { ...principle, text: '' } }).ok, false)
+  assert.equal(appendChange(l, ana, { type: 'principle.set', principle: { ...principle, text: 'x'.repeat(501) } }).ok, false)
+
+  l = must(l, ana, { type: 'principle.set', principle }, at(5))
+  const set = l.entries.at(-1)!
+  assert.equal(set.actor.role, 'provider')
+  assert.equal(set.previous, undefined)
+  let s = replay(l)
+  assert.deepEqual(s.principles['p.conflict'], { ...principle, setBy: 'user:ana', setAt: set.at, provenance: 'HUMAN_SPECIFIED' })
+
+  // Another provider cannot rewrite or retire Ana's principle.
+  assert.equal(appendChange(l, ben, { type: 'principle.set', principle: { ...principle, text: 'Go big.' } }).ok, false)
+  assert.equal(appendChange(l, ben, { type: 'principle.retire', principleId: 'p.conflict' }).ok, false)
+  assert.equal(appendChange(l, ops, { type: 'principle.retire', principleId: 'p.conflict' }).ok, false)
+
+  // A reworded principle is a tracked change with the old wording kept.
+  l = must(l, ana, { type: 'principle.set', principle: { ...principle, text: 'When goals conflict, try the small version first.' } }, at(6))
+  assert.equal((l.entries.at(-1)!.previous as { text: string }).text, principle.text)
+  assert.equal(replay(l).principles['p.conflict']!.text, 'When goals conflict, try the small version first.')
+
+  l = must(l, ana, { type: 'principle.retire', principleId: 'p.conflict', reason: 'Folded into another principle' }, at(7))
+  s = replay(l)
+  assert.deepEqual(s.principles, {})
+  assert.equal(appendChange(l, ana, { type: 'principle.retire', principleId: 'p.conflict' }).ok, false, 'cannot retire twice')
+  // History keeps it: replay as of before the retirement.
+  assert.equal(replay(l, { seq: l.entries.length - 1 }).principles['p.conflict']!.setBy, 'user:ana')
+  assert.deepEqual(verifyLedger(l), { valid: true, entries: l.entries.length, head: l.entries.at(-1)!.hash })
+
+  const tampered = structuredClone(l)
+  ;(tampered.entries.at(-2)!.change as { principle: { text: string } }).principle.text = 'Always go big.'
+  assert.equal(verifyLedger(tampered).valid, false)
+})
+
+test('principle changes pass the kernel access check like other intent', () => {
+  const { privateKey, publicKey } = generateKeyPairSync('ed25519')
+  const access = new AccessController()
+  let l = coOwned()
+  const r = appendChange(l, ana, { type: 'principle.set', principle: { id: 'ask', text: "Don't ask me unless someone else's authority or data is involved." } }, { access, signingKey: privateKey })
+  assert.ok(r.ok)
+  if (r.ok) { l = r.ledger; assert.deepEqual(r.state.principles.ask!.appliesTo, []) }
+  const last = l.entries.at(-1)!
+  assert.ok(last.signature && verify(null, Buffer.from(last.hash), publicKey, Buffer.from(last.signature, 'base64')))
+  assert.equal(verifyLedger(l).valid, true)
+  assert.equal(appendChange(l, { ...ana, roles: ['viewer'] }, { type: 'principle.set', principle: { id: 'x', text: 'y' } }, { access }).ok, false, 'needs intent:provide')
+  const outsider: Principal = { id: 'user:ana', kind: 'human', tenantId: 'tenant-b', roles: ['intent-provider'] }
+  assert.equal(appendChange(l, outsider, { type: 'principle.set', principle: { id: 'x', text: 'y' } }, { access }).ok, false)
 })

@@ -18,7 +18,7 @@ export default defineType({
     defineField({ name: 'at', type: 'datetime' }),
     defineField({ name: 'actorId', type: 'string', description: 'Kernel principal id of the provider or admin.' }),
     defineField({ name: 'actorRole', type: 'string', options: { list: ['provider', 'admin'] } }),
-    defineField({ name: 'changeType', type: 'string', options: { list: ['company.create', 'providers.set', 'admins.set', 'rule.set', 'goal.set', 'goal.retire', 'weight.set', 'autonomy.set', 'commitment.set', 'commitment.retire'] } }),
+    defineField({ name: 'changeType', type: 'string', options: { list: ['company.create', 'providers.set', 'admins.set', 'rule.set', 'goal.set', 'goal.retire', 'weight.set', 'autonomy.set', 'commitment.set', 'commitment.retire', 'principle.set', 'principle.retire'] } }),
     defineField({ name: 'changeJson', type: 'text', description: 'The change exactly as hashed.' }),
     defineField({ name: 'previousJson', type: 'text', description: 'The value this change replaced.' }),
     defineField({ name: 'reason', type: 'string' }),

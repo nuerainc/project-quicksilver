@@ -124,6 +124,8 @@ async function buildIntent(config: HostConfig, log: Logger) {
  * per recommendation, one auraVerdictLearner per intent), through the same client
  * configuration as evaluation records; the legacy challenge project is refused.
  * The shadow-stage agent needs a model provider; without one, proposals are entered by hand.
+ * QUICKSILVER_COMPANY_ID names the company whose intent ledger holds the owner's decision
+ * principles; when set, the agent is given them (read fresh on every generate).
  */
 async function buildShadowStore(config: HostConfig, log: Logger): Promise<ShadowStore> {
   if ((process.env.QUICKSILVER_SHADOW_STORE ?? '').trim() === 'sanity') {
@@ -137,7 +139,8 @@ async function buildShadowStore(config: HostConfig, log: Logger): Promise<Shadow
     : new MemoryShadowStore()
 }
 
-async function buildShadow(config: HostConfig, log: Logger, graphs: import('@quicksilver/aura').IntentGraphStore): Promise<ShadowApiDeps> {
+async function buildShadow(config: HostConfig, log: Logger, intent: { graphs: import('@quicksilver/aura').IntentGraphStore; ledger: import('@quicksilver/aura').LedgerStore }): Promise<ShadowApiDeps> {
+  const { graphs } = intent
   const store = await buildShadowStore(config, log)
   const agent = await import('@quicksilver/agent')
   if (!agent.isLlmConfigured()) {
@@ -145,7 +148,10 @@ async function buildShadow(config: HostConfig, log: Logger, graphs: import('@qui
     return { store, graphs }
   }
   const { proposeShadowActions } = await import('@quicksilver/agent/shadow')
-  return { store, graphs, generator: (ctx) => proposeShadowActions(ctx) }
+  const companyId = process.env.QUICKSILVER_COMPANY_ID?.trim()
+  const { loadPrincipleTexts } = await import('@quicksilver/aura')
+  if (companyId) log.info('the shadow-stage agent follows the principles in the company intent ledger', { companyId })
+  return { store, graphs, generator: async (ctx) => proposeShadowActions({ ...ctx, principles: companyId ? await loadPrincipleTexts(intent.ledger, companyId) : [] }) }
 }
 
 /**
@@ -297,7 +303,7 @@ async function main(): Promise<void> {
     agentRunner: await buildAgentRunner(log),
     evaluationSink: await buildEvaluationSink(log),
     intent,
-    shadow: await buildShadow(config, log, intent.graphs),
+    shadow: await buildShadow(config, log, intent),
     genesis: await buildGenesis(config, log),
     ...(close ? { onStop: close } : {}),
     ...(ready ? { ready } : {}),

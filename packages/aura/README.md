@@ -62,7 +62,7 @@ entry.
 
 | Who | May change | Kernel permission |
 |---|---|---|
-| Intent provider (person, group or organization) | Goals and their horizons, their **own** weights and autonomy per goal, customer commitments, the decision rule | `intent:provide` |
+| Intent provider (person, group or organization) | Goals and their horizons, their **own** weights and autonomy per goal, their **own** decision principles, customer commitments, the decision rule | `intent:provide` |
 | Admin | The decision rule and the admin list only; no input into intent unless also recorded as a provider | `intent:rules` |
 | Agent | Nothing | — |
 
@@ -89,6 +89,24 @@ entry.
   provider with the final say.
 - **Reversals are reported, never blocked.** `weightReversals` lists weights
   moved back and forth within a window.
+- **Decision principles** are how one provider wants choices made, in their
+  own words ("When two goals conflict, take the smaller or test version
+  first"). They are intent, not rules: the decision rule combines several
+  providers' positions, while a principle says how this provider decides.
+  - `principle.set` `{ principle: { id, text (1–500), appliesTo?, examples? } }`
+    and `principle.retire` `{ principleId, reason? }`.
+  - Only providers may set or retire them, and only their own; admins and
+    agents cannot.
+  - `replay(...).principles` holds the active ones, each with `setBy`,
+    `setAt` and provenance `HUMAN_SPECIFIED`. Retired and reworded versions
+    stay in the ledger history (`previous`).
+  - `npm run onboard -- principles import <export.json> <companyId>` records
+    the confirmed and edited principles from the principles page's export and
+    skips rejected ones. Unchanged principles are left alone, so re-importing
+    is safe; changed text is a new, tracked entry. `principles list
+    <companyId>` shows the active ones. Code: `principles.ts`.
+  - The shadow-stage agent is given them when the host has
+    `QUICKSILVER_COMPANY_ID` set.
 
 ## Persistence
 
@@ -423,6 +441,30 @@ npm run aura:choices:model -- --set v1 --examples data/aura/scenario-answers-v2.
   such as pilot verdicts, with all earlier decisions as examples.
 - Offline check, same data (cross-set warm start of the v2 learner, no
   model): set 2 went from 11/30 cold to 13/30 after learning on set 1.
+
+### Stated principles arms (frozen 2026-09-26 before any run)
+
+`--principles <export.json>` gives the model the provider's confirmed and
+edited decision principles (rejected ones are dropped):
+
+- **rules**: the principles only.
+- **rules+examples** (with `--examples`): the principles, then the earlier
+  decisions from the other set.
+- The system prompt for both adds that these are the provider's own stated
+  principles, which take priority over general common sense, and that the
+  examples show how the provider applied them.
+- The existing arms (none, profile, examples) keep their frozen prompts byte
+  for byte. All prompts are in `packages/agent/src/choice-prompts.ts`, and
+  `choice-prompts.test.ts` pins them.
+
+```bash
+npm run aura:choices:model -- --set v2 --principles data/aura/principles.json --choices data/aura/scenario-answers-v2.json --detail
+npm run aura:choices:model -- --set v2 --principles data/aura/principles.json --examples data/aura/scenario-answers.json --choices data/aura/scenario-answers-v2.json --detail
+```
+
+**Honesty note:** the principles are drafted from the provider's answers on
+both sets, then confirmed in their words. Any set they were drafted from is
+not held out. The clean test is new decisions.
 
 ## Entry point
 

@@ -10,6 +10,11 @@
  * Grounding: every proposal must cite graph variables as evidence. Citations
  * that are not in the graph are dropped, and a proposal with none left is
  * dropped, so the agent cannot invent facts about the business.
+ *
+ * Principles: when the owner has confirmed decision principles in the intent
+ * ledger (principle.set), they are given to the agent as the owner's stated
+ * principles, to follow when choosing what to propose. Without principles the
+ * prompt is exactly as before.
  */
 import { generateText, Output } from 'ai'
 import { z } from 'zod'
@@ -78,17 +83,40 @@ export function groundProposals(graph: IntentGraph, raw: z.infer<typeof Schema>[
   return out
 }
 
-export async function proposeShadowActions(ctx: { graph: IntentGraph; departments: string[]; max: number; signal?: AbortSignal }): Promise<ShadowAgentProposal[]> {
+export interface ShadowAgentContext {
+  graph: IntentGraph
+  departments: string[]
+  max: number
+  /** The owner's stated decision principles (from the intent ledger), in their words. */
+  principles?: string[]
+  signal?: AbortSignal
+}
+
+/** At most this many principles, each cut to the ledger's 500-character limit. */
+const MAX_PRINCIPLES = 40
+
+/** The user prompt for the shadow-stage agent. Pure; exported for tests. */
+export function buildShadowPrompt(ctx: Omit<ShadowAgentContext, 'signal'>): string {
+  const facts = graphFacts(ctx.graph)
+  const principles = (ctx.principles ?? []).map((p) => p.trim().slice(0, 500)).filter(Boolean).slice(0, MAX_PRINCIPLES)
+  return [
+    `The owner's objective (data): ${JSON.stringify(ctx.graph.objective)}`,
+    `Departments to cover: ${ctx.departments.join(', ')}. At most ${ctx.max} proposals in total.`,
+    ...(principles.length ? [
+      "The owner's stated decision principles, in their own words. They are the owner's intent: follow them when choosing and shaping proposals, within the rules above.",
+      ...principles.map((p) => `- ${p}`),
+    ] : []),
+    'Facts (id: text):',
+    ...facts.map((f) => `- ${f.id}: ${f.text}`),
+  ].join('\n')
+}
+
+export async function proposeShadowActions(ctx: ShadowAgentContext): Promise<ShadowAgentProposal[]> {
   assertAgentDispatch('nuera-quicksilver:shadow', 'planning', 'moderate')
   const facts = graphFacts(ctx.graph)
   if (!facts.length) return []
   const role = (process.env.QUICKSILVER_SHADOW_ROLE || 'planner') as QuicksilverModelRole
-  const prompt = [
-    `The owner's objective (data): ${JSON.stringify(ctx.graph.objective)}`,
-    `Departments to cover: ${ctx.departments.join(', ')}. At most ${ctx.max} proposals in total.`,
-    'Facts (id: text):',
-    ...facts.map((f) => `- ${f.id}: ${f.text}`),
-  ].join('\n')
+  const prompt = buildShadowPrompt(ctx)
   const result = await generateText({
     model: modelForRole(role),
     system: SYSTEM,

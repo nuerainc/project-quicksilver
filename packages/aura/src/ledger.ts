@@ -13,6 +13,9 @@ import { AUTONOMY_DEPTHS } from './types.ts'
  *   - Intent providers (a person, a group, or an organization) are the only
  *     source of intent: goals, horizons, weights, autonomy, and customer
  *     commitments. Each provider changes only their own weights and autonomy.
+ *   - Decision principles ("when two goals conflict, take the smaller or test
+ *     version first") are intent too: a provider states them in their own
+ *     words, and only that provider may change or retire them. Admins cannot.
  *   - Admins set the decision rule and the admin list. They have no input into
  *     intent unless they are also recorded as a provider.
  *   - Every change is recorded with who made it, in which role, when, the old
@@ -66,6 +69,30 @@ export interface Commitment {
   setBy: string
 }
 
+/**
+ * A decision principle in the provider's own words: how they want choices
+ * made, e.g. "Don't ask me unless someone else's authority or data is
+ * involved". Not to be confused with the decision rule, which combines
+ * SEVERAL providers' positions.
+ */
+export interface Principle {
+  id: string
+  /** The principle exactly as the provider stated or confirmed it (1–500 characters). */
+  text: string
+  /** Kinds of decision it bears on, e.g. 'conflict', 'ask', 'spending', 'customers'. */
+  appliesTo: string[]
+  /** Scenario or decision ids that motivated it. */
+  examples: string[]
+  setBy: string
+  setAt: string
+  /** Always stated by a human provider, never inferred. */
+  provenance: 'HUMAN_SPECIFIED'
+}
+
+export type PrincipleInput = { id: string; text: string; appliesTo?: string[]; examples?: string[] }
+
+export const PRINCIPLE_TEXT_MAX = 500
+
 export interface CompanyIntent {
   companyId: string
   tenantId: string
@@ -78,6 +105,8 @@ export interface CompanyIntent {
   autonomy: Record<string, Record<string, AutonomyDepth>>
   rule: DecisionRule | null
   commitments: Record<string, Commitment>
+  /** Active decision principles by id; retired ones stay in the ledger history only. */
+  principles: Record<string, Principle>
 }
 
 export type IntentChange =
@@ -91,6 +120,8 @@ export type IntentChange =
   | { type: 'autonomy.set'; goalId: string; depth: AutonomyDepth }
   | { type: 'commitment.set'; commitment: Omit<Commitment, 'setBy'> }
   | { type: 'commitment.retire'; commitmentId: string }
+  | { type: 'principle.set'; principle: PrincipleInput }
+  | { type: 'principle.retire'; principleId: string; reason?: string }
 
 export type ActorRole = 'provider' | 'admin'
 
@@ -114,7 +145,7 @@ export interface IntentLedger {
 
 export const GENESIS_HASH = '0'.repeat(64)
 
-const INTENT_CHANGES = new Set<IntentChange['type']>(['goal.set', 'goal.retire', 'weight.set', 'autonomy.set', 'commitment.set', 'commitment.retire'])
+const INTENT_CHANGES = new Set<IntentChange['type']>(['goal.set', 'goal.retire', 'weight.set', 'autonomy.set', 'commitment.set', 'commitment.retire', 'principle.set', 'principle.retire'])
 const RULE_CHANGES = new Set<IntentChange['type']>(['rule.set', 'admins.set'])
 
 export function emptyLedger(): IntentLedger {
@@ -259,7 +290,36 @@ function checkChange(state: CompanyIntent, actorId: string, change: IntentChange
     case 'commitment.retire':
       if (!state.commitments[change.commitmentId]) r.push(`Commitment "${change.commitmentId}" does not exist.`)
       break
+    case 'principle.set': {
+      r.push(...checkPrinciple(change.principle))
+      const existing = change.principle && typeof change.principle.id === 'string' ? state.principles[change.principle.id] : undefined
+      if (existing && existing.setBy !== actorId) r.push(`Principle "${existing.id}" was stated by "${existing.setBy}"; only they can change it.`)
+      break
+    }
+    case 'principle.retire': {
+      const existing = typeof change.principleId === 'string' ? state.principles[change.principleId] : undefined
+      if (!existing) r.push(`Principle "${String(change.principleId)}" is not active.`)
+      else if (existing.setBy !== actorId) r.push(`Principle "${existing.id}" was stated by "${existing.setBy}"; only they can retire it.`)
+      if (change.reason !== undefined && (typeof change.reason !== 'string' || change.reason.length > 500)) r.push('A retirement reason is a string of at most 500 characters.')
+      break
+    }
   }
+  return r
+}
+
+/** Shape checks for a principle (also used by the import). */
+export function checkPrinciple(p: unknown): string[] {
+  const r: string[] = []
+  if (!p || typeof p !== 'object') return ['A principle is required.']
+  const { id, text, appliesTo, examples } = p as Record<string, unknown>
+  if (typeof id !== 'string' || !/^[a-zA-Z0-9][a-zA-Z0-9_.:-]{0,99}$/.test(id)) r.push('A principle id uses letters, digits, ".", ":", "-" or "_" (at most 100).')
+  if (typeof text !== 'string' || !text.trim() || text.length > PRINCIPLE_TEXT_MAX) r.push(`A principle's text is 1 to ${PRINCIPLE_TEXT_MAX} characters.`)
+  const tags = (v: unknown, name: string, max: number) => {
+    if (v === undefined) return
+    if (!Array.isArray(v) || v.length > max || v.some((x) => typeof x !== 'string' || !x.trim() || x.length > 100)) r.push(`${name} is a list of at most ${max} short strings.`)
+  }
+  tags(appliesTo, 'appliesTo', 20)
+  tags(examples, 'examples', 100)
   return r
 }
 
@@ -275,6 +335,8 @@ function previousValue(state: CompanyIntent, actorId: string, change: IntentChan
       case 'autonomy.set': return state.autonomy[actorId]?.[change.goalId]
       case 'commitment.set': return state.commitments[change.commitment.id]
       case 'commitment.retire': return state.commitments[change.commitmentId]
+      case 'principle.set': return state.principles[change.principle.id]
+      case 'principle.retire': return state.principles[change.principleId]
       default: return undefined
     }
   })()
@@ -291,7 +353,7 @@ export function replay(ledger: IntentLedger, until?: { at?: Date | string; seq?:
     const c = e.change
     const who = e.actor.id
     if (c.type === 'company.create') {
-      s = { companyId: c.companyId, tenantId: c.tenantId, providers: structuredClone(c.providers), admins: [...(c.admins ?? [])], goals: {}, weights: {}, autonomy: {}, rule: null, commitments: {} }
+      s = { companyId: c.companyId, tenantId: c.tenantId, providers: structuredClone(c.providers), admins: [...(c.admins ?? [])], goals: {}, weights: {}, autonomy: {}, rule: null, commitments: {}, principles: {} }
       continue
     }
     if (!s) continue
@@ -305,6 +367,16 @@ export function replay(ledger: IntentLedger, until?: { at?: Date | string; seq?:
       case 'autonomy.set': (s.autonomy[who] ??= {})[c.goalId] = c.depth; break
       case 'commitment.set': s.commitments[c.commitment.id] = { ...structuredClone(c.commitment), setBy: who }; break
       case 'commitment.retire': delete s.commitments[c.commitmentId]; break
+      case 'principle.set': s.principles[c.principle.id] = {
+        id: c.principle.id,
+        text: c.principle.text,
+        appliesTo: [...(c.principle.appliesTo ?? [])],
+        examples: [...(c.principle.examples ?? [])],
+        setBy: who,
+        setAt: e.at,
+        provenance: 'HUMAN_SPECIFIED',
+      }; break
+      case 'principle.retire': delete s.principles[c.principleId]; break
     }
   }
   if (!s) throw new Error('The ledger has no company.create entry in range.')

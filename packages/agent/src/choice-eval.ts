@@ -28,10 +28,29 @@
  * are read only afterwards, to score the predictions. The prompts below were
  * written on 2026-09-26 and contain no patterns learned from those answers.
  *
- * Two arms:
- *   profile  — the six profile readings with their confidence (0–10)
- *   none     — no profile: what a general model would choose
- * Both answer files hold one person's answers: keep them out of the repo.
+ * Stated decision principles (frozen 2026-09-26 before any run):
+ *
+ *   npm run aura:choices:model -- --set v2 --principles data/aura/principles.json --choices data/aura/scenario-answers-v2.json --detail
+ *   npm run aura:choices:model -- --set v2 --principles data/aura/principles.json --examples data/aura/scenario-answers.json --choices data/aura/scenario-answers-v2.json --detail
+ *
+ * --principles takes the principles page's export ({ principles: [{ id, text,
+ * status, appliesTo?, examples? }] }) and uses the confirmed and edited ones
+ * only. It adds the arm "rules" (principles only) and, with --examples, the arm
+ * "rules+examples". Their system prompt says the principles are the provider's
+ * own and take priority over general common sense, and that the examples show
+ * how the provider applied them. A principle's `examples` ids are never shown
+ * to the model, and principles distilled from the set being predicted make
+ * that set's result supporting evidence only.
+ *
+ * Arms:
+ *   profile         — the six profile readings with their confidence (0–10)
+ *   none            — no profile: what a general model would choose
+ *   examples        — the provider's decisions on the other set
+ *   rules           — the provider's stated principles
+ *   rules+examples  — both
+ * All prompts live in choice-prompts.ts; the none, profile and examples prompts
+ * are byte-identical to those frozen earlier (pinned by choice-prompts.test.ts).
+ * The answer, picks and principles files hold one person's answers: keep them out of the repo.
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
@@ -50,7 +69,10 @@ process.env.QUICKSILVER_MODEL_MODE ||= 'azure'
 
 const { generateText, Output } = await import('ai')
 const { z } = await import('zod')
-const { scoreProfile } = await import('@quicksilver/aura')
+const { scoreProfile, parsePrincipleExport, acceptedPrinciples } = await import('@quicksilver/aura')
+const { buildChoicePrompt, buildExamplesText, buildPrinciplesText, buildProfileText, systemForArm } = await import('./choice-prompts.ts')
+type ChoiceArm = import('./choice-prompts.ts').ChoiceArm
+type ChoiceScenario = import('./choice-prompts.ts').ChoiceScenario
 const { assertAgentDispatch } = await import('./governance.ts')
 const { modelForRole, resolveId } = await import('./models.ts')
 
@@ -59,47 +81,42 @@ const profilePath = arg('--profile'), choicesPath = arg('--choices'), picksOut =
 // --examples <answers.json> [--examples-set v1|v2]: the provider's own earlier decisions, shown to the
 // model as worked examples (in-context learning). Never the answers of the set being predicted.
 const examplesPath = arg('--examples')
+// --principles <export.json>: the provider's confirmed decision principles (confirmed + edited only).
+const principlesPath = arg('--principles')
 const set = arg('--set') ?? 'v1'
 if (set !== 'v1' && set !== 'v2') { console.log('--set must be v1 or v2'); process.exit(1) }
-if (set === 'v1' ? !(profilePath || examplesPath) || !choicesPath : !picksOut && !choicesPath) {
-  console.log('Usage: --profile <profile-answers.json> --choices <scenario-answers.json> [--detail] [--picks-out <file>]\n   or: --set v2 --picks-out <file> [--profile <profile-answers.json>] [--choices <scenario-answers-v2.json>] [--detail]')
+if (set === 'v1' ? !(profilePath || examplesPath || principlesPath) || !choicesPath : !picksOut && !choicesPath) {
+  console.log('Usage: --profile <profile-answers.json> --choices <scenario-answers.json> [--detail] [--picks-out <file>]\n   or: --set v2 --picks-out <file> [--profile <profile-answers.json>] [--choices <scenario-answers-v2.json>] [--detail]\n   add: [--examples <other-set-answers.json>] [--principles <principles-export.json>] [--picks-arm <arm>]')
   process.exit(1)
 }
 const base = process.env.INIT_CWD ?? process.cwd()
 const read = (p: string) => JSON.parse(readFileSync(resolve(base, p), 'utf8'))
 const evalDir = join(here, '..', '..', 'aura', 'eval')
 const instrument = read(join(evalDir, 'intent-profile-v1.json'))
-const scenarios = read(join(evalDir, set === 'v2' ? 'choice-scenarios-v2.json' : 'choice-scenarios.json')).scenarios as Array<{ id: string; category: string; providers?: string; said: string; situation: string; decision: string; options: Record<string, string> }>
+const scenarios = read(join(evalDir, set === 'v2' ? 'choice-scenarios-v2.json' : 'choice-scenarios.json')).scenarios as ChoiceScenario[]
 const profile = profilePath ? scoreProfile(instrument, read(profilePath).answers) : null
-type Arm = 'profile' | 'none' | 'examples'
-const arms: Arm[] = [...(examplesPath ? ['examples' as const] : []), ...(profile ? ['profile' as const] : []), 'none']
+const principles = principlesPath ? acceptedPrinciples(parsePrincipleExport(read(principlesPath))) : null
+if (principles && !principles.length) { console.log('--principles has no confirmed or edited principles.'); process.exit(1) }
+type Arm = ChoiceArm
+const arms: Arm[] = [
+  ...(principles && examplesPath ? ['rules+examples' as const] : []),
+  ...(principles ? ['rules' as const] : []),
+  ...(examplesPath ? ['examples' as const] : []),
+  ...(profile ? ['profile' as const] : []),
+  'none',
+]
 const examplesSet = arg('--examples-set') ?? (set === 'v2' ? 'v1' : 'v2')
 if (examplesPath && examplesSet === set) { console.log('--examples must come from the other scenario set, never the one being predicted.'); process.exit(1) }
 const examplesText = (() => {
   if (!examplesPath) return ''
   const exScenarios = read(join(evalDir, examplesSet === 'v2' ? 'choice-scenarios-v2.json' : 'choice-scenarios.json')).scenarios as typeof scenarios
-  const ans = read(examplesPath).answers as Record<string, { choice?: string; confidence?: string; note?: string }>
-  const lines = ['Here are earlier decisions this same provider made, with the option they chose and, when they gave one, their own note. Learn how they decide: what they protect, when they take a middle path, when they want to be asked, and when they would rather you just act.', '']
-  for (const e of exScenarios) {
-    const a = ans[e.id]
-    if (!a?.choice) continue
-    lines.push(`- ${e.providers ? `Providers: ${e.providers}. ` : ''}Said: ${e.said} Situation: ${e.situation} Decision: ${e.decision}`)
-    lines.push(`  Options: ${Object.entries(e.options).map(([k, v]) => `${k}) ${v}`).join(' | ')}`)
-    lines.push(`  They chose: ${a.choice}${a.confidence ? ` (${a.confidence})` : ''}${a.note?.trim() ? `. Their note: "${a.note.trim().slice(0, 300)}"` : ''}`)
-  }
-  return lines.join('\n')
+  return buildExamplesText(exScenarios, read(examplesPath).answers)
 })()
+const profileText = buildProfileText(profile?.dimensions ?? [])
+const principlesText = principles ? buildPrinciplesText(principles) : ''
 
-const SYSTEM = `You predict what an intent provider (a person, group or organization that an automated company acts for) would choose.
-Read what the provider said, the situation and the options. Pick the ONE option this provider would most want, given what they said and clearly meant.
-Pick "ask" only if acting without asking would likely go against what they want.
-Answer with the option id and one short reason.`
-
-const profileText = [
-  'The provider took a short intent profile. Each reading runs from one pole to the other, with a confidence out of 10 (low confidence means their answers were split or depended on context):',
-  ...(profile?.dimensions ?? []).map((d) => `- ${d.left} vs ${d.right}: ${d.lean} (confidence ${d.confidence}/10)`),
-  'They listed no red lines beyond the law.',
-].join('\n')
+const picksArm: Arm = (arg('--picks-arm') as Arm | undefined) ?? 'none'
+if (!arms.includes(picksArm)) { console.log(`--picks-arm "${picksArm}" did not run (arms: ${arms.join(', ')}).`); process.exit(1) }
 
 const role = (process.env.QUICKSILVER_INTENT_ROLE || 'planner') as 'planner'
 console.log(`Model: ${resolveId(role, 'azure')} · set ${set} · ${scenarios.length} scenarios · arms: ${arms.join(', ')}`)
@@ -108,27 +125,17 @@ async function predict(s: (typeof scenarios)[number], arm: Arm): Promise<string 
   assertAgentDispatch('nuera-quicksilver:intent', 'reasoning', 'low')
   const ids = Object.keys(s.options) as [string, ...string[]]
   const schema = z.object({ choice: z.enum(ids), reason: z.string() })
-  const prompt = [
-    arm === 'profile' ? profileText : arm === 'examples' ? examplesText : 'Nothing else is known about the provider.',
-    '',
-    s.providers ? `Intent providers: ${s.providers}` : '',
-    `What the provider said: ${s.said}`,
-    `Situation: ${s.situation}`,
-    `Decision: ${s.decision}`,
-    'Options:',
-    ...ids.map((id) => `- ${id}: ${s.options[id]}`),
-  ].filter((l) => l !== '').join('\n')
+  const prompt = buildChoicePrompt(arm, s, { profileText, examplesText, principlesText })
   try {
-    const result = await generateText({ model: modelForRole(role), system: SYSTEM, prompt, experimental_output: Output.object({ schema }), maxRetries: 2 } as Parameters<typeof generateText>[0])
+    const result = await generateText({ model: modelForRole(role), system: systemForArm(arm), prompt, experimental_output: Output.object({ schema }), maxRetries: 2 } as Parameters<typeof generateText>[0])
     return ((result as unknown as { experimental_output?: { choice: string } }).experimental_output?.choice) ?? null
   } catch {
     return null
   }
 }
 
-const predictions: Record<Arm, Record<string, string | null>> = { profile: {}, none: {}, examples: {} }
+const predictions: Record<Arm, Record<string, string | null>> = { profile: {}, none: {}, examples: {}, rules: {}, 'rules+examples': {} }
 for (const s of scenarios) for (const arm of arms) predictions[arm][s.id] = await predict(s, arm)
-const picksArm: Arm = (arg('--picks-arm') as Arm | undefined) ?? 'none'
 
 // Blind picks from the "none" arm, written before any answers are read.
 if (picksOut) {

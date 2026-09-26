@@ -12,6 +12,14 @@
  *   npm run onboard -- status <intentId>
  *   npm run onboard -- company <companyId> "<your name>"
  *   npm run onboard -- handover <companyId> <department> advise|propose|act-with-approval|act-within-limits ["reason"]
+ *   npm run onboard -- principles import <principles.json> <companyId>
+ *   npm run onboard -- principles list <companyId>
+ *
+ * `principles import` reads the review page's export ({ principles: [{ id, text,
+ * status: confirmed|edited|rejected, appliesTo?, examples? }] }) and records the
+ * confirmed and edited ones as your stated intent (principle.set). Rejected ones
+ * are listed as skipped and never recorded. Re-importing is a no-op for
+ * principles whose text is unchanged; changed text is recorded as a new entry.
  *
  * Data lives in data/intent (git-ignored), the same place the local host's
  * intent API reads, so graphs show up there too. Nothing here acts on the
@@ -47,6 +55,9 @@ import {
   newVerdictLearner,
   predictAccept,
   predictionAgreement,
+  importPrinciples,
+  listPrinciples,
+  parsePrincipleExport,
   type LearnerState,
   type Transaction,
 } from '@quicksilver/aura'
@@ -248,6 +259,35 @@ switch (cmd) {
     console.log(`Recorded: ${department} may now ${depth}. Entry ${r.entry.seq}, hash ${r.entry.hash.slice(0, 12)}…`)
     break
   }
+  case 'principles': {
+    const [sub, ...rest] = positional
+    if (sub === 'import') {
+      const [file, companyId] = rest
+      if (!file || !companyId) fail('Usage: principles import <principles.json> <companyId>')
+      let exported
+      try { exported = parsePrincipleExport(JSON.parse(await readFile(resolve(root, file), 'utf8'))) } catch (e) { fail(`Could not read ${file}: ${(e as Error).message}`) }
+      const r = await importPrinciples(ledgerStore, companyId, principal, exported).catch((e) => fail((e as Error).message))
+      for (const x of r.recorded) console.log(`  + ${x.id}${x.changed ? ' (new wording)' : ''} — entry ${x.seq}`)
+      for (const id of r.unchanged) console.log(`  = ${id} (already recorded, unchanged)`)
+      for (const id of r.skipped) console.log(`  - ${id} (rejected; not recorded)`)
+      for (const x of r.invalid) console.log(`  ! entry ${x.index}${x.id ? ` (${x.id})` : ''}: ${x.reasons.join(' ')}`)
+      for (const x of r.refused) console.log(`  ! ${x.id} refused: ${x.reasons.join(' ')}`)
+      console.log(`Recorded ${r.recorded.length}, unchanged ${r.unchanged.length}, skipped ${r.skipped.length}${r.invalid.length ? `, invalid ${r.invalid.length}` : ''}${r.refused.length ? `, refused ${r.refused.length}` : ''}.`)
+      if (r.refused.length) process.exit(1)
+      break
+    }
+    if (sub === 'list') {
+      const [companyId] = rest
+      if (!companyId) fail('Usage: principles list <companyId>')
+      const ledger = await loadLedger(ledgerStore, companyId).catch((e) => fail((e as Error).message))
+      if (!ledger.entries.length) fail(`No intent ledger for ${companyId}. Create it with: npm run onboard -- company ${companyId} "<your name>"`)
+      const list = listPrinciples(replay(ledger))
+      if (!list.length) console.log('No principles recorded yet.')
+      for (const p of list) console.log(`${p.id}${p.appliesTo.length ? ` [${p.appliesTo.join(', ')}]` : ''}: ${p.text}\n    set by ${p.setBy} at ${p.setAt}`)
+      break
+    }
+    fail('Usage: principles import <principles.json> <companyId> | principles list <companyId>')
+  }
   default:
-    console.log('Commands: start, answer, dismiss, connect, backtest, recommend, judge, outcome, status, company, handover. See the header of packages/host/src/onboard-cli.ts.')
+    console.log('Commands: start, answer, dismiss, connect, backtest, recommend, judge, outcome, status, company, handover, principles. See the header of packages/host/src/onboard-cli.ts.')
 }
