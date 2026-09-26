@@ -247,7 +247,7 @@ it runs a company. Current status is tracked in
 |---|---|---|---|---|
 | M1: Governance foundation | 0.2.0 | Kernel, evaluation, approval binding, RBAC, durable runs, triggers, separation of duties, persisted evaluations | **Complete 2026-09-25** | ~Oct 9, 2026 |
 | M2: Single-tenant host | 0.3.0 | Packaged host process, management API, secrets vault, structured logs and metrics, deploy config; runs on the founder's computer | **Complete 2026-09-26** | ~Oct 30, 2026 |
-| M3: Intent layer | 0.4.0 | Decision graph, provenance, impact scoring, the intent entry point | M1; Aura | ~Nov 25, 2026 |
+| M3: Intent layer | 0.4.0 | Decision graph, provenance, impact scoring, the intent entry point | **Complete 2026-09-26** (Aura's choice target stays on Aura's ladder) | ~Nov 25, 2026 |
 | M4: Playbooks and Onboard pilot | 0.5.0 | Playbook type, Onboard playbook, connectors, shadow mode on Nuera (the host runs on the founder's computer) | M2, M3 | Build ~Dec 15; pilot Jan–Feb 2027 |
 | M5: Genesis demonstration | 0.6.0 | Economic playbook, experiments, ledger, WAES review, **always-on hosting** (moved from M2; payment webhooks need a public address); a $500, 30-day digital-only run | M3, M4 | Feb–Mar 2027 |
 | M6: Operate | 0.7.0 | Steady-state operations and reinvestment | M4, M5 | Mar–Apr 2027 |
@@ -277,8 +277,8 @@ promised to be stable until 1.0.0.
 |---|---|
 | 0.1.0 | The kernel works; the platform foundation is in progress |
 | 0.2.0 | M1 governance foundation complete (2026-09-25) |
-| **0.3.0** (current, 2026-09-26) | M2 single-tenant host |
-| 0.4.0 | M3 intent layer |
+| 0.3.0 | M2 single-tenant host (2026-09-26) |
+| **0.4.0** (current, 2026-09-26) | M3 intent layer |
 | 0.5.0 | M4 playbooks and Onboard pilot |
 | 0.6.0 | M5 Genesis demonstration |
 | 0.7.0 | M6 Operate |

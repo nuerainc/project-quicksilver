@@ -1,7 +1,8 @@
 # @quicksilver/aura — the intent layer (Quicksilver Layer 2)
 
 Pre-charter prototype. Aura becomes 0.1.0 when its charter is approved; until
-then this package is versioned 0.0.0 and is built toward Quicksilver M3 (0.4.0).
+then this package is versioned 0.0.0. Quicksilver M3 (0.4.0) shipped on its
+built features; the criteria below are Aura's own bar for 0.1.0 and above.
 
 Aura turns a plain-language objective into a **decision graph** with
 provenance on every value, ranks what is still unknown by impact, and asks the
@@ -369,7 +370,7 @@ Azure run on the development set (2026-09-26, before these fixes): baseline
 80.8%, model 71.2%. The model mixed up onboard and operate, read rates
 ("per month", "weekly") as deadlines, and missed some literal constraints.
 
-## Charter success criteria (0.4.0) and status
+## Charter success criteria (Aura 0.1.0) and status
 
 | Criterion | Status |
 |---|---|
@@ -381,7 +382,7 @@ Azure run on the development set (2026-09-26, before these fixes): baseline
 | All inferred values explained | Enforced by validation |
 | Tests pass | `npm run aura:test` |
 
-Not yet built: the web entry point.
+The web entry point is the host console (`/console`), built 2026-09-26.
 
 ## Human rankings for the impact criterion
 

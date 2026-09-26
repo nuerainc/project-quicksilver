@@ -1,6 +1,6 @@
 {
   "name": "quicksilver",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "private": true,
   "license": "MIT",
   "description": "Nuera Quicksilver: intent-driven company operating system governed by the deterministic NQC Kernel (inspired by the Quicksilver Sanity Challenge submission)",

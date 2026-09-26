@@ -21,15 +21,27 @@ and 3.
 |---|---|---|---|---|
 | M1: Governance foundation | 0.2.0 | Kernel, evaluation, approval binding, RBAC, durable runs, triggers, separation of duties, persisted evaluations | Foundation, 1 | **Complete 2026-09-25** |
 | M2: Single-tenant host | 0.3.0 | Host process, management API, secrets vault, structured logs and metrics, deploy config ([hosted runtime](platform/hosted-runtime.md)) | Foundation | **Complete 2026-09-26** (runs on the founder's computer; always-on hosting moved to M5) |
-| M3: Intent layer | 0.4.0 | Decision graph, provenance tags, impact scoring for open unknowns, the intent entry point, belief updates through the memory governor | 2 | M1; Aura. **In progress:** `packages/aura` core built 2026-09-26 ([README](../packages/aura/README.md)) |
+| M3: Intent layer | 0.4.0 | Decision graph, provenance tags, impact scoring for open unknowns, the intent entry point, belief updates through the memory governor | 2 | M1; Aura. **Complete 2026-09-26** on built features ([Aura README](../packages/aura/README.md)); Aura's 70% choice-agreement target stays on Aura's own charter ladder |
 | M4: Playbooks and Onboard pilot | 0.5.0 | `playbook` type (process definition plus stage graphs), Onboard playbook, connectors, backtest and shadow mode, a pilot on Nuera (on the local host) | 3 | M2, M3 |
 | M5: Genesis demonstration | 0.6.0 | Economic playbook, `experiment` and `ledgerEntry` types, WAES review in the kernel path, a small-budget spend risk scale, always-on hosting (moved from M2); a $500, 30-day digital-only run | 3 | M3, M4 |
 | M6: Operate | 0.7.0 | Steady-state operations, reinvestment, and bounded Genesis experiments inside a running business | 3 | M4, M5 |
 
-**Versioning:** the current version is 0.3.0 (Nuera RDL versioning standard): M1 and M2 are complete. Each milestone raises the minor version.
+**Versioning:** the current version is 0.4.0 (Nuera RDL versioning standard): M1, M2 and M3 are complete. Each milestone raises the minor version.
 The M2 host runs on the founder's computer; always-on hosting is part of M5.
 
-**M3 progress (2026-09-26):** `packages/aura` has:
+**M3 released as 0.4.0 (2026-09-26), decoupled from Aura's choice target.**
+
+- Quicksilver's safety never depended on Aura. The kernel, RBAC and
+  human-only transitions govern every action.
+- Autonomy is gated per department in two ways:
+  - by shadow-mode agreement, measured on the owner's own verdicts
+  - by the provider's own autonomy entry in the intent ledger
+- Aura's 70% choice-agreement criterion remains the bar for **Aura 0.1.0 and
+  above**. It is not a bar for this release.
+- No department acts alone without evidence: 20+ judged recommendations,
+  80%+ agreement and no bad outcomes, and then the provider's own hand-over.
+
+`packages/aura` has:
 
 - the provenance-tagged decision graph, validation, impact scoring and targeted questions
 - governed belief updates and the intent entry point
@@ -51,12 +63,15 @@ starts from a 36-item intent profile (six dimensions, consistency checks, red
 lines). The 38 blind choice scenarios test whether Aura can predict the
 founder's choices from that profile.
 
-Still to build:
+Built since the M3 start:
 
-- implied-intent parsing (for example, "we run a feed store" settles the business type)
-- the choice predictor
-- the web entry point
-- the parser reaching 90%
+- implied-intent parsing ("we run a feed store" settles the business type)
+- the production parser, which reached 27/30 (90.0%) on the held-out set
+- the web entry point: the host console at `/console`
+- the choice predictors:
+  - frozen v1 (failed)
+  - a learning predictor (exploratory)
+  - a verdict learner that Aura scores predict-then-learn during the pilot
 
 **M4 build progress (2026-09-26):**
 

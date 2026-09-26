@@ -1081,6 +1081,34 @@ New workspace `packages/aura` (pre-charter, version 0.0.0):
 - Tests: aura 9/9, agent 21/21 (strict schema and grounding added), kernel
   213/213, host 30/30.
 
+## 2026-09-26 — Release 0.4.0: M3 intent layer complete; M4 shadow loop built  *(Claude, via Cowork)*
+
+- Founder decision ("complete up through M5"): Quicksilver M3 ships on its
+  built features.
+  - Aura's 70% choice-agreement target stays on Aura's own charter ladder
+    (Aura 0.1.0 and up).
+  - Safety never depended on Aura. Autonomy is gated by shadow agreement and
+    the provider's own ledger grant.
+- Choice prediction:
+
+  | Method | Result | Status |
+  |---|---|---|
+  | Frozen v1 | 6/38 | Failed |
+  | Exploratory learner, predict-then-learn | 16–20/38 | Exploratory |
+  | Blind Azure model, run by the founder | 24/38 (63.2%) without the profile; 23/38 (60.5%) with it | Past 2× chance, short of 70% |
+
+  The profile does not transfer to concrete choices.
+- M4:
+  - Shadow mode now runs on the host API (`/api/shadow/...`).
+  - A new shadow-stage agent (`nuera-quicksilver:shadow`) proposes grounded
+    actions. Each is evaluated by the kernel as if the department had been
+    handed over, and never executed.
+  - Aura records a prediction before each verdict and learns from it, so
+    the pilot is the fresh predict-then-learn test.
+- The host console (`/console`) is the M3 web entry point: objectives,
+  Aura's questions, shadow proposals and verdicts.
+- All packages move to 0.4.0.
+
 ## Errors encountered (chronological, all environments)
 
 | Day / Env | Error | Resolution |
