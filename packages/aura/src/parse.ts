@@ -33,7 +33,7 @@ const REVENUE_CUE = /\b(make|earn|earning|revenue|sales|profit|income|generate|b
 
 const NUMBER_WORDS: Record<string, number> = { a: 1, an: 1, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10, twelve: 12, thirty: 30, sixty: 60, ninety: 90 }
 const UNIT_DAYS: Record<string, number> = { day: 1, days: 1, week: 7, weeks: 7, month: 30, months: 30, quarter: 90, quarters: 90, year: 365, years: 365 }
-const TIMEFRAME = /\b(?:in|within|over|for|by the end of|next|the next|inside of?)\s+(?:the\s+)?(?:next\s+)?(\d+|a|an|one|two|three|four|five|six|seven|eight|nine|ten|twelve|thirty|sixty|ninety)\s*[- ]?\s*(days?|weeks?|months?|quarters?|years?)\b|\b(\d+)[- ](day|week|month|year)\b/i
+const TIMEFRAME = /\b(?:in|within|over|for|by the end of|next|the next|inside of?)\s+(?:the\s+)?(?:next\s+)?(\d+|a|an|one|two|three|four|five|six|seven|eight|nine|ten|twelve|thirty|sixty|ninety)\s*[- ]?\s*(days?|weeks?|months?|quarters?|years?)\b|\b(\d+)[- ](day|week|month|year)\b|\b(?:for|over|in|within|by the end of)\s+(?:the\s+)?next\s+(week|month|quarter|year)\b/i
 const HOURS = /\b(\d+(?:\.\d+)?)\s*(?:hours?|hrs?|h)\s*(?:a|per|each|\/)\s*week\b/i
 
 const MODE_CUES: Array<{ mode: OperatingMode; pattern: RegExp }> = [
@@ -54,7 +54,7 @@ const CONSTRAINT_CUES: Array<{ id: string; label: string; pattern: RegExp }> = [
   { id: 'no_employees', label: 'No employees', pattern: /\b(?:no|without) (?:employees|staff|hiring|hires)\b|\bsolo\b|\bjust me\b/i },
   { id: 'digital_only', label: 'Digital products and services only', pattern: /\b(?:digital[- ]only|only digital|no physical (?:products|inventory|goods)|no inventory|online only|only online)\b/i },
   { id: 'no_customer_contact', label: 'No outbound messages to customers without approval', pattern: /\b(?:don'?t|do not|never) (?:email|message|contact|text) (?:my |our )?customers\b/i },
-  { id: 'keep_day_job', label: 'Must fit around a full-time job', pattern: /\b(?:day job|full[- ]time job|while (?:i )?work(?:ing)?|nights and weekends|evenings and weekends|on the side)\b/i },
+  { id: 'keep_day_job', label: 'Must fit around a full-time job', pattern: /\b(?:side hustle|side business|day job|full[- ]time job|while (?:i )?work(?:ing)?|nights and weekends|evenings and weekends|on the side)\b/i },
 ]
 
 /** The constraint catalog both parsers map to (ids and labels only). */
@@ -106,8 +106,8 @@ function money(text: string): Pick<ParsedObjective, 'budget' | 'revenueTarget'> 
 function timeframe(text: string): ParsedObjective['timeframeDays'] {
   const m = TIMEFRAME.exec(text)
   if (!m) return null
-  const countText = (m[1] ?? m[3] ?? '').toLowerCase()
-  const unit = (m[2] ?? m[4] ?? '').toLowerCase()
+  const countText = (m[1] ?? m[3] ?? (m[5] ? '1' : '')).toLowerCase()
+  const unit = (m[2] ?? m[4] ?? m[5] ?? '').toLowerCase()
   const count = /^\d+$/.test(countText) ? Number(countText) : NUMBER_WORDS[countText]
   const days = UNIT_DAYS[unit] ?? UNIT_DAYS[`${unit}s`]
   if (!count || !days) return null

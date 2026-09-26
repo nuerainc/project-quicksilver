@@ -178,23 +178,42 @@ const { graph, questions, report } = await createIntent('I have $500 and want to
 |---|---|---|
 | Rule-based baseline | `parseObjectiveBaseline` | Literal text only, never guesses; the fallback when no model is configured |
 | Model-based | `@quicksilver/agent/intent` (`parseObjectiveWithModel`) | Agent `nuera-quicksilver:intent`, low impact only. Every value needs a quote found in the text, or it is dropped. |
+| **Combined** | `combineParses` / `parseObjectiveCombined` | Each field from the source that is reliable for it (see below) |
 
-`eval/objectives.json` holds 52 labeled objectives. An objective counts as
-correct only when every field matches. The charter's 0.4.0 target is ≥ 90%.
+The combined parser's rules were fixed on 2026-09-26, before the held-out set
+was scored:
+
+- **Money** (budget, revenue goal) comes from the model.
+- **Durations and weekly hours** come from the rules.
+- **Mode** comes from the rules' literal cue when there is one, otherwise from the model.
+- **Constraints** are the union of both.
+- **Autonomy:** the model can only make it more restrictive, never grant acting alone.
+
+Sets:
+
+- `eval/objectives.json`: the development set, 52 objectives. The rules were
+  improved after its misses were seen, so it no longer supports a claim.
+- `eval/objectives-holdout.json`: 30 held-out objectives, committed before
+  any parser was scored on them. **The 90% claim is made on this set.**
+
+An objective counts as correct only when every field matches.
 
 ```bash
-npm run aura:eval                          # baseline: 42/52 (80.8%) on 2026-09-26
-npm run aura:eval:model -- --misses        # model parser on Azure (reads .env)
-npm run aura:agreement -- --detail         # impact ranking vs the founder's blind rankings
-npm run aura:test
+npm run aura:eval                                   # baseline, development set
+npm run aura:eval -- --holdout                      # baseline, held-out set
+npm run aura:eval:model -- --holdout --misses       # baseline, model and combined on Azure (reads .env)
 ```
+
+Azure run on the development set (2026-09-26, before these fixes): baseline
+80.8%, model 71.2%. The model mixed up onboard and operate, read rates
+("per month", "weekly") as deadlines, and missed some literal constraints.
 
 ## Charter success criteria (0.4.0) and status
 
 | Criterion | Status |
 |---|---|
 | Choice agreement ≥ 70% and ≥ 2× chance (primary, revised charter) | Founder takes the intent profile (`eval/intent-profile-v1.json`), then Aura predicts the 38 blind scenarios in `eval/choice-scenarios.json` |
-| ≥ 90% parsing accuracy | Baseline 80.8%; the model parser is measured on Azure |
+| ≥ 90% parsing accuracy | Development set: baseline 86.5% after fixes. Claim pending: combined parser on the held-out set, on Azure |
 | 100% provenance tagging | Enforced by validation; true on all 52 labeled objectives |
 | 0 unsupported inferences | Enforced by validation; 0 on all 52 |
 | ≥ 80% top-3 agreement on impact ranking | **Not met: 56.3%** (chance 63.0%) on 32 objectives vs scorer v2, 2026-09-25. Scorer v3 (implied intent) needs fresh rankings |

@@ -1,0 +1,412 @@
+{
+ "version": 1,
+ "frozenAt": "2026-09-26",
+ "description": "Held-out labeled objectives, written and labeled on 2026-09-26 under the same rules as objectives.json, and committed before any parser was scored on them. Used to check parsing accuracy after the combined parser's rules were fixed.",
+ "objectives": [
+  {
+   "id": "hold-001",
+   "text": "I've got $750 saved and want to start a mobile car detailing business within 3 months.",
+   "expected": {
+    "mode": "genesis",
+    "budget": 750,
+    "revenueTarget": null,
+    "timeframeDays": 90,
+    "weeklyHours": null,
+    "autonomy": null,
+    "constraints": []
+   }
+  },
+  {
+   "id": "hold-002",
+   "text": "Help me start selling handmade leather goods online. I can put in 6 hours a week.",
+   "expected": {
+    "mode": "genesis",
+    "budget": null,
+    "revenueTarget": null,
+    "timeframeDays": null,
+    "weeklyHours": 6,
+    "autonomy": null,
+    "constraints": []
+   }
+  },
+  {
+   "id": "hold-003",
+   "text": "Launch a pet-sitting service in my town with no debt; I want $1,500 a month in bookings.",
+   "expected": {
+    "mode": "genesis",
+    "budget": null,
+    "revenueTarget": 1500,
+    "timeframeDays": null,
+    "weeklyHours": null,
+    "autonomy": null,
+    "constraints": [
+     "no_debt"
+    ]
+   }
+  },
+  {
+   "id": "hold-004",
+   "text": "Start a side business tutoring math on weekends; I keep my full-time job.",
+   "expected": {
+    "mode": "genesis",
+    "budget": null,
+    "revenueTarget": null,
+    "timeframeDays": null,
+    "weeklyHours": null,
+    "autonomy": null,
+    "constraints": [
+     "keep_day_job"
+    ]
+   }
+  },
+  {
+   "id": "hold-005",
+   "text": "I want to build an online course business from scratch, $400 budget, no paid ads, and ask me before you spend anything.",
+   "expected": {
+    "mode": "genesis",
+    "budget": 400,
+    "revenueTarget": null,
+    "timeframeDays": null,
+    "weeklyHours": null,
+    "autonomy": "act-with-approval",
+    "constraints": [
+     "no_paid_ads"
+    ]
+   }
+  },
+  {
+   "id": "hold-006",
+   "text": "Start a firewood delivery business and reach $3,000 in sales over the next 90 days.",
+   "expected": {
+    "mode": "genesis",
+    "budget": null,
+    "revenueTarget": 3000,
+    "timeframeDays": 90,
+    "weeklyHours": null,
+    "autonomy": null,
+    "constraints": []
+   }
+  },
+  {
+   "id": "hold-007",
+   "text": "Turn $1,000 into a small vending machine business. Just advise me for now.",
+   "expected": {
+    "mode": "genesis",
+    "budget": 1000,
+    "revenueTarget": null,
+    "timeframeDays": null,
+    "weeklyHours": null,
+    "autonomy": "advise",
+    "constraints": []
+   }
+  },
+  {
+   "id": "hold-008",
+   "text": "Start a digital-only design studio by myself, without hiring anyone.",
+   "expected": {
+    "mode": "genesis",
+    "budget": null,
+    "revenueTarget": null,
+    "timeframeDays": null,
+    "weeklyHours": null,
+    "autonomy": null,
+    "constraints": [
+     "digital_only",
+     "no_employees"
+    ]
+   }
+  },
+  {
+   "id": "hold-009",
+   "text": "I'd like to make extra money selling seedlings in the spring, 12 hours a week, within 8 weeks.",
+   "expected": {
+    "mode": "genesis",
+    "budget": null,
+    "revenueTarget": null,
+    "timeframeDays": 56,
+    "weeklyHours": 12,
+    "autonomy": null,
+    "constraints": []
+   }
+  },
+  {
+   "id": "hold-010",
+   "text": "Launch a newsletter about local farm auctions and grow it to $500 per month.",
+   "expected": {
+    "mode": "genesis",
+    "budget": null,
+    "revenueTarget": 500,
+    "timeframeDays": null,
+    "weeklyHours": null,
+    "autonomy": null,
+    "constraints": []
+   }
+  },
+  {
+   "id": "hold-011",
+   "text": "We run a small auto repair garage. Find out why our parts costs keep rising.",
+   "expected": {
+    "mode": "onboard",
+    "budget": null,
+    "revenueTarget": null,
+    "timeframeDays": null,
+    "weeklyHours": null,
+    "autonomy": null,
+    "constraints": []
+   }
+  },
+  {
+   "id": "hold-012",
+   "text": "My bakery sells wholesale to three cafes. Help me raise profit by $1,200 a month.",
+   "expected": {
+    "mode": "onboard",
+    "budget": null,
+    "revenueTarget": 1200,
+    "timeframeDays": null,
+    "weeklyHours": null,
+    "autonomy": null,
+    "constraints": []
+   }
+  },
+  {
+   "id": "hold-013",
+   "text": "Our landscaping crew wants to add snow removal this winter with a $4,000 equipment budget.",
+   "expected": {
+    "mode": "onboard",
+    "budget": 4000,
+    "revenueTarget": null,
+    "timeframeDays": null,
+    "weeklyHours": null,
+    "autonomy": null,
+    "constraints": []
+   }
+  },
+  {
+   "id": "hold-014",
+   "text": "I own a hardware store. Connect our point-of-sale data and suggest what to stock, read-only.",
+   "expected": {
+    "mode": "onboard",
+    "budget": null,
+    "revenueTarget": null,
+    "timeframeDays": null,
+    "weeklyHours": null,
+    "autonomy": "advise",
+    "constraints": []
+   }
+  },
+  {
+   "id": "hold-015",
+   "text": "Our clinic's schedule has too many no-shows. Figure out a fix within a month and don't text patients.",
+   "expected": {
+    "mode": "onboard",
+    "budget": null,
+    "revenueTarget": null,
+    "timeframeDays": 30,
+    "weeklyHours": null,
+    "autonomy": null,
+    "constraints": []
+   }
+  },
+  {
+   "id": "hold-016",
+   "text": "We have an existing welding shop; bring it into Quicksilver and don't contact our customers.",
+   "expected": {
+    "mode": "onboard",
+    "budget": null,
+    "revenueTarget": null,
+    "timeframeDays": null,
+    "weeklyHours": null,
+    "autonomy": null,
+    "constraints": [
+     "no_customer_contact"
+    ]
+   }
+  },
+  {
+   "id": "hold-017",
+   "text": "My flower shop does $9,000 a month and I want $12,000 a month by next spring.",
+   "expected": {
+    "mode": "onboard",
+    "budget": null,
+    "revenueTarget": 12000,
+    "timeframeDays": null,
+    "weeklyHours": null,
+    "autonomy": null,
+    "constraints": []
+   }
+  },
+  {
+   "id": "hold-018",
+   "text": "I operate two food trucks. Cut waste by $500 a month without adding staff.",
+   "expected": {
+    "mode": "onboard",
+    "budget": null,
+    "revenueTarget": 500,
+    "timeframeDays": null,
+    "weeklyHours": null,
+    "autonomy": null,
+    "constraints": [
+     "no_employees"
+    ]
+   }
+  },
+  {
+   "id": "hold-019",
+   "text": "Our farm stand needs a clear view of which products actually make money this season.",
+   "expected": {
+    "mode": "onboard",
+    "budget": null,
+    "revenueTarget": null,
+    "timeframeDays": null,
+    "weeklyHours": null,
+    "autonomy": null,
+    "constraints": []
+   }
+  },
+  {
+   "id": "hold-020",
+   "text": "Every Friday, send me a summary of sales and overdue invoices.",
+   "expected": {
+    "mode": "operate",
+    "budget": null,
+    "revenueTarget": null,
+    "timeframeDays": null,
+    "weeklyHours": null,
+    "autonomy": null,
+    "constraints": []
+   }
+  },
+  {
+   "id": "hold-021",
+   "text": "Keep reordering feed and supplies on your own within the limits I set.",
+   "expected": {
+    "mode": "operate",
+    "budget": null,
+    "revenueTarget": null,
+    "timeframeDays": null,
+    "weeklyHours": null,
+    "autonomy": "act-within-limits",
+    "constraints": []
+   }
+  },
+  {
+   "id": "hold-022",
+   "text": "Each morning, check cash and alert me if it falls below $5,000.",
+   "expected": {
+    "mode": "operate",
+    "budget": null,
+    "revenueTarget": null,
+    "timeframeDays": null,
+    "weeklyHours": null,
+    "autonomy": null,
+    "constraints": []
+   }
+  },
+  {
+   "id": "hold-023",
+   "text": "Run the weekly timesheet review, but ask me before changing any hours.",
+   "expected": {
+    "mode": "operate",
+    "budget": null,
+    "revenueTarget": null,
+    "timeframeDays": null,
+    "weeklyHours": null,
+    "autonomy": "act-with-approval",
+    "constraints": []
+   }
+  },
+  {
+   "id": "hold-024",
+   "text": "Automate our monthly sales tax filing prep hands-off.",
+   "expected": {
+    "mode": "operate",
+    "budget": null,
+    "revenueTarget": null,
+    "timeframeDays": null,
+    "weeklyHours": null,
+    "autonomy": "act-within-limits",
+    "constraints": []
+   }
+  },
+  {
+   "id": "hold-025",
+   "text": "Keep handling customer booking requests day to day and don't run any ads.",
+   "expected": {
+    "mode": "operate",
+    "budget": null,
+    "revenueTarget": null,
+    "timeframeDays": null,
+    "weeklyHours": null,
+    "autonomy": null,
+    "constraints": [
+     "no_paid_ads"
+    ]
+   }
+  },
+  {
+   "id": "hold-026",
+   "text": "Track equipment rentals every week and flag anything overdue.",
+   "expected": {
+    "mode": "operate",
+    "budget": null,
+    "revenueTarget": null,
+    "timeframeDays": null,
+    "weeklyHours": null,
+    "autonomy": null,
+    "constraints": []
+   }
+  },
+  {
+   "id": "hold-027",
+   "text": "Should I raise my prices?",
+   "expected": {
+    "mode": null,
+    "budget": null,
+    "revenueTarget": null,
+    "timeframeDays": null,
+    "weeklyHours": null,
+    "autonomy": null,
+    "constraints": []
+   }
+  },
+  {
+   "id": "hold-028",
+   "text": "Is a $2,000 trailer worth it for hauling hay?",
+   "expected": {
+    "mode": null,
+    "budget": 2000,
+    "revenueTarget": null,
+    "timeframeDays": null,
+    "weeklyHours": null,
+    "autonomy": null,
+    "constraints": []
+   }
+  },
+  {
+   "id": "hold-029",
+   "text": "What's the best way to use 5 hours a week?",
+   "expected": {
+    "mode": null,
+    "budget": null,
+    "revenueTarget": null,
+    "timeframeDays": null,
+    "weeklyHours": 5,
+    "autonomy": null,
+    "constraints": []
+   }
+  },
+  {
+   "id": "hold-030",
+   "text": "Give me ideas.",
+   "expected": {
+    "mode": null,
+    "budget": null,
+    "revenueTarget": null,
+    "timeframeDays": null,
+    "weeklyHours": null,
+    "autonomy": null,
+    "constraints": []
+   }
+  }
+ ]
+}

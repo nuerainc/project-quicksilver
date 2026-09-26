@@ -196,3 +196,22 @@ test('implied intent: what the objective clearly implies is inferred with its qu
   const vague = await createIntent('Bring my existing business into Quicksilver.', { requestedBy: 'entity-founder', now: NOW })
   assert.ok(vague.impact.some((i) => i.variableId === 'business_type'))
 })
+
+test('combined parser: money from the model, durations from the rules, constraints unioned, autonomy never granted by the model', async () => {
+  const { combineParses } = await import('./index.ts')
+  const text = 'Start a side hustle with $200 per month in 30 days, weekly.'
+  const rules = parseObjectiveBaseline(text)
+  const span = (t: string) => ({ text: t, index: text.indexOf(t) })
+  const model = { ...rules, budget: { value: 200, span: span('$200') }, revenueTarget: null, timeframeDays: { value: 7, span: span('weekly') }, autonomy: { value: 'act-within-limits' as const, cue: span('weekly') }, constraints: [{ id: 'digital_only', label: 'x', span: span('side hustle') }] }
+  const c = combineParses(rules, model)
+  assert.equal(c.budget?.value, 200)
+  assert.equal(c.timeframeDays?.value, 30, 'the rate "weekly" is not a deadline')
+  assert.equal(c.autonomy, null, 'the model cannot grant acting alone')
+  assert.deepEqual(c.constraints.map((x) => x.id).sort(), ['digital_only', 'keep_day_job'])
+  const restrict = combineParses({ ...rules, autonomy: { value: 'act-within-limits', cue: span('weekly') } }, { ...model, autonomy: { value: 'advise', cue: span('weekly') } })
+  assert.equal(restrict.autonomy?.value, 'advise', 'the model may make autonomy more restrictive')
+})
+
+test('baseline reads "the next quarter" as a 90-day timeframe', () => {
+  assert.equal(parseObjectiveBaseline('Our company needs a clear picture of cash flow for the next quarter.').timeframeDays?.value, 90)
+})

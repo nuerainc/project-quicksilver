@@ -13,7 +13,7 @@
 import { generateText, Output } from 'ai'
 import { z } from 'zod'
 
-import { AUTONOMY_DEPTHS, CONSTRAINT_TYPES, OPERATING_MODES, type ParsedObjective, type Span } from '@quicksilver/aura'
+import { AUTONOMY_DEPTHS, CONSTRAINT_TYPES, OPERATING_MODES, combineParses, parseObjectiveBaseline, type ParsedObjective, type Span } from '@quicksilver/aura'
 
 import { assertAgentDispatch } from './governance.ts'
 import { modelForRole, type QuicksilverModelRole } from './models.ts'
@@ -26,10 +26,10 @@ const quoted = <T extends z.ZodTypeAny>(value: T) =>
 // Strict structured output: every key required; "not stated" is null.
 export const IntentParseSchema = z.object({
   mode: z.object({ value: z.enum(OPERATING_MODES), quote: z.string() }).nullable()
-    .describe('genesis = start something new or make money from scratch; onboard = a business that already exists; operate = recurring or ongoing work. null if the text does not say.'),
+    .describe('genesis = start something new or make money from scratch. onboard = understand, set up, fix or grow a business that already exists ("our restaurant loses money", "my shop sells..."), even when a rate like "per month" appears. operate = the request is itself recurring work to keep doing ("every morning", "send me a weekly report", "keep running", "watch cash every day"). null only if none applies.'),
   budget: quoted(z.number()).describe('Money the person will spend or invest, in USD. Not revenue goals, not thresholds to watch.'),
   revenueTarget: quoted(z.number()).describe('The money goal stated (revenue, sales, profit or savings), in USD. If a current figure and a goal both appear, the goal.'),
-  timeframeDays: quoted(z.number()).describe('Duration in days (week = 7, month = 30, quarter = 90, year = 360 when stated as "12 months", else 365).'),
+  timeframeDays: quoted(z.number()).describe('The deadline or horizon for achieving the objective, in days (week = 7, month = 30, quarter = 90, year = 365). A rate or frequency is NOT a timeframe: "per month", "a month", "weekly report", "each week", "every day" are null here.'),
   weeklyHours: quoted(z.number()).describe('Hours per week the person can give.'),
   autonomy: z.object({ value: z.enum(AUTONOMY_DEPTHS), quote: z.string() }).nullable()
     .describe('advise = advice or read-only; act-with-approval = ask before acting; act-within-limits = act on its own. null if not stated.'),
@@ -45,7 +45,8 @@ Rules:
 - Every value needs a quote copied exactly from the objective.
 - "$2k" is 2000; "$10k" is 10000.
 - A threshold to watch ("warn me under $2,000") is neither a budget nor a revenue target.
-- If the text does not state a field, return null (or an empty list for constraints).`
+- If the text does not state a field, return null (or an empty list for constraints).
+- Autonomy: only when the text says how much the system may do on its own. Never infer permission to act.`
 
 /** Find `quote` in `text` (case-insensitive); null when it isn't there. */
 function locate(text: string, quote: string | undefined): Span | null {
@@ -86,6 +87,11 @@ export function toParsedObjective(objective: string, raw: IntentParse): ParsedOb
     })).values()],
     dropped,
   }
+}
+
+/** The combined parser (see @quicksilver/aura combineParses): rules and model, field by field. */
+export async function parseObjectiveCombined(objective: string, options: { role?: QuicksilverModelRole; signal?: AbortSignal } = {}): Promise<ParsedObjective> {
+  return combineParses(parseObjectiveBaseline(objective), await parseObjectiveWithModel(objective, options))
 }
 
 export async function parseObjectiveWithModel(objective: string, options: { role?: QuicksilverModelRole; signal?: AbortSignal } = {}): Promise<ParsedObjective> {
