@@ -52,6 +52,17 @@ export interface ShadowStore {
   save(intentId: string, log: ShadowLog, learner: LearnerState | null): Promise<void>
 }
 
+/**
+ * A store refused a save: it would rewrite a verdict or outcome, change a
+ * recorded recommendation, or another writer got there first. Reload and retry.
+ */
+export class ShadowRecordConflictError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'ShadowRecordConflictError'
+  }
+}
+
 export interface ShadowApiDeps {
   store: ShadowStore
   graphs: IntentGraphStore
@@ -185,6 +196,15 @@ export function validateProposal(value: unknown): { ok: true; proposal: ShadowPr
 // ── Routes ────────────────────────────────────────────────────────────────
 
 export async function handleShadowRoute(ctx: ShadowApiContext, deps: ShadowApiDeps): Promise<Response | undefined> {
+  try {
+    return await route(ctx, deps)
+  } catch (error) {
+    if (error instanceof ShadowRecordConflictError) return { status: 409, body: { error: error.message } }
+    throw error
+  }
+}
+
+async function route(ctx: ShadowApiContext, deps: ShadowApiDeps): Promise<Response | undefined> {
   const { method, parts, principal, access, tenantId } = ctx
   if (parts[1] !== 'shadow' || parts.length < 3) return undefined
   const intentId = parts[2]!

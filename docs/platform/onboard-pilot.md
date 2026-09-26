@@ -118,3 +118,22 @@ What the host does with each one:
 Aura's learner lives in `learner.json` next to `shadow.json`. It is Aura's
 inference about you: it never writes to the intent ledger and grants
 nothing. Hand-over is still your own `handover` entry.
+
+## Persistence
+
+By default the shadow log and Aura's learner are files: `shadow.json` and
+`learner.json` under `<intent>/onboard/<intentId>/`, next to the file run
+store (in memory when the run store is not a file store).
+
+Set `QUICKSILVER_SHADOW_STORE=sanity` to keep them in Sanity instead. The
+host uses the same project settings as evaluation records
+(`NEXT_PUBLIC_SANITY_PROJECT_ID`, `NEXT_PUBLIC_SANITY_DATASET`,
+`SANITY_AUTH_TOKEN`) and refuses the legacy challenge project.
+
+| Document type | One per | Id | Rules |
+|---|---|---|---|
+| `shadowRecommendation` | recommendation | `shadow-recommendation.<intentId>.<recId>` | Append-only. The verdict and the outcome are each set once; a save that would change or remove them is refused (HTTP 409). A racing writer loses on the revision check. |
+| `auraVerdictLearner` | intent | `aura-verdict-learner.<intentId>` | Marked `AGENT_INFERRED`. Updated after each verdict, under the same revision check. |
+
+Both types are read-only in Studio. After pulling, deploy the schema with
+`npm run schema:deploy -- --login`.
