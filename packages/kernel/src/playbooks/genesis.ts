@@ -1,5 +1,6 @@
 import type { Facts } from '../process.ts'
 import type { RiskLevel } from '../types.ts'
+import { waesFacts, type WaesFacts, type WaesReview } from '../waes.ts'
 import { spendRiskLevel, type Experiment, type MoneyLedger, type MoneyTotals, moneyTotals } from './economics.ts'
 
 /**
@@ -32,6 +33,12 @@ export interface GenesisRunConfig {
   }
   /** Customer-facing content needs a passing WAES review (the kernel enforces it; this must be true). */
   waesRequired: true
+  /**
+   * Accept a manual founder review in place of a WAES run (default false).
+   * On while the WAES suites do not run as a service; turn it off once they do.
+   * A manual pass is always recorded as manual (`waes.reviewKind: 'manual'`).
+   */
+  waesManualReviewAllowed?: boolean
   prerequisites: {
     /** Set only by the founder, once an entity path is approved. */
     entityApproved: boolean
@@ -49,6 +56,7 @@ export function validateGenesisConfig(c: GenesisRunConfig): string[] {
   if (!Number.isInteger(c.durationDays) || c.durationDays < 1 || c.durationDays > 90) errors.push('durationDays must be 1 to 90.')
   if (c.digitalOnly !== true) errors.push('Genesis runs are digital-only.')
   if (c.waesRequired !== true) errors.push('waesRequired must be true.')
+  if (c.waesManualReviewAllowed !== undefined && typeof c.waesManualReviewAllowed !== 'boolean') errors.push('waesManualReviewAllowed must be true or false.')
   if (!c.allowedCategories?.length) errors.push('allowedCategories must list at least one category.')
   const overlap = (c.allowedCategories ?? []).filter((x) => (c.prohibitedCategories ?? []).includes(x))
   if (overlap.length) errors.push(`Categories cannot be both allowed and prohibited: ${overlap.join(', ')}.`)
@@ -129,4 +137,9 @@ export function genesisFacts(c: GenesisRunConfig, ledger: MoneyLedger, experimen
     ...(current?.decisions.length ? { 'experiment.verdict': current.decisions.at(-1)!.verdict } : {}),
     ...(totals.returnOnCapital !== null ? { 'run.returnOnCapital': totals.returnOnCapital } : {}),
   }
+}
+
+/** WAES gate facts under this run's policy: manual founder reviews count only when `waesManualReviewAllowed` is true. */
+export function genesisWaesFacts(c: GenesisRunConfig, review: WaesReview | undefined, content: string, actorId: string): WaesFacts {
+  return waesFacts(review, content, actorId, { allowManual: c.waesManualReviewAllowed === true })
 }

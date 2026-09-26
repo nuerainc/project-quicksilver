@@ -53,6 +53,14 @@ in Postgres.
   intent data, money ledger) and the vault key, each separately.
 - **Console:** `/console` is served when the intent API is on. It holds no
   data, and every call uses the viewer's own token.
+- **Customer-facing text:** nothing customer-facing goes out without a
+  passing review of the exact text. Until WAES runs as a service, the
+  founder reviews it himself (`npm run genesis -- review`, or the console's
+  "Review customer-facing text" form). These are recorded as **manual
+  founder reviews, not WAES evaluations**, and the run report lists them
+  separately from WAES reviews. They count only while the run config has
+  `"waesManualReviewAllowed": true`; turn it off once WAES runs as a
+  service. See [genesis-run.md](genesis-run.md).
 - **Boundaries:**
   - The legacy Sanity project and the Challenge endpoints stay refused.
   - The public Sanity Challenge instance stays synthetic.

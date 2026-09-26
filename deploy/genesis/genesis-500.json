@@ -13,6 +13,7 @@
   "dailyCapUsd": 50
  },
  "waesRequired": true,
+ "waesManualReviewAllowed": true,
  "prerequisites": {
   "entityApproved": false,
   "paymentAccounts": ["genesis-payments", "genesis-card"]

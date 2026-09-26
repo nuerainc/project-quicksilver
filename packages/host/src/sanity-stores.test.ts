@@ -12,16 +12,20 @@ import { judge, recommend, recordOutcome, type ShadowLog } from '@quicksilver/ke
 import {
   ExperimentConflictError,
   ExperimentRecordError,
+  FileContentReviewStore,
   FileExperimentStore,
   FileMoneyLedgerStore,
   genesisStoresFromEnv,
   MoneyLedgerConflictError,
   MoneyLedgerIntegrityError,
+  SanityContentReviewStore,
   SanityExperimentStore,
   SanityMoneyLedgerStore,
+  type ContentReviewStore,
   type ExperimentStore,
   type MoneyLedgerStore,
 } from './genesis-store.ts'
+import { ContentReviewConflictError, createManualReview } from './genesis-reviews.ts'
 import { LegacySanityProjectError, sanityConfigFromEnv, type SanityDoc, type SanityMutation, type SanityStoreClient } from './sanity-client.ts'
 import { ShadowRecordConflictError } from './shadow-api.ts'
 import { SanityShadowStore } from './shadow-store-sanity.ts'
@@ -272,6 +276,7 @@ test('the legacy challenge project is refused by every Sanity store and by the e
   assert.throws(() => new SanityShadowStore(legacy), LegacySanityProjectError)
   assert.throws(() => new SanityMoneyLedgerStore(legacy), LegacySanityProjectError)
   assert.throws(() => new SanityExperimentStore(legacy), LegacySanityProjectError)
+  assert.throws(() => new SanityContentReviewStore(legacy), LegacySanityProjectError)
   assert.throws(() => sanityConfigFromEnv({ NEXT_PUBLIC_SANITY_PROJECT_ID: 'd280bqjc', SANITY_AUTH_TOKEN: 'test-token' }), LegacySanityProjectError)
   await assert.rejects(genesisStoresFromEnv({ dir: tmpdir(), budgetUsd: 500, env: { QUICKSILVER_GENESIS_STORE: 'sanity', NEXT_PUBLIC_SANITY_PROJECT_ID: 'd280bqjc', SANITY_AUTH_TOKEN: 'test-token' } }), LegacySanityProjectError)
 })
@@ -299,4 +304,34 @@ test('the host adapter appends only new entries and loads what the CLI stores wr
   const reloaded = await adapter.load(config)
   assert.equal(reloaded.ledger.entries.length, 2)
   assert.deepEqual((await stores.ledger.load('run-a')).map((e) => e.amountUsd), [5, 7])
+})
+
+// ── Content reviews ───────────────────────────────────────────────────────
+
+test('content reviews: append-only in files and Sanity; a taken id is never rewritten', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'genesis-reviews-'))
+  const sanity = new FakeSanity()
+  const stores: Array<[string, ContentReviewStore]> = [['file', new FileContentReviewStore(dir)], ['sanity', new SanityContentReviewStore(sanity)]]
+  const make = (verdict: 'pass' | 'block', at: Date) => {
+    const r = createManualReview({ text: 'Weekly feed price digest.', channel: 'email', verdict, note: 'ok', experimentId: 'exp-1' }, human, at)
+    assert.ok(r.ok)
+    return r.review
+  }
+  const first = make('pass', T0)
+  const second = make('block', new Date(T0.getTime() + 1000))
+  for (const [name, store] of stores) {
+    await store.append(RUN, second)
+    await store.append(RUN, first)
+    await store.append(RUN, first) // identical: no-op
+    const list = await store.list(RUN)
+    assert.deepEqual(list.map((r) => r.verdict), ['pass', 'block'], `${name}: oldest first`)
+    assert.deepEqual(list[0], first, `${name}: round-trips exactly`)
+    await assert.rejects(store.append(RUN, { ...first, verdict: 'block' }), ContentReviewConflictError, name)
+    assert.deepEqual((await store.list(RUN)).map((r) => r.verdict), ['pass', 'block'], `${name}: unchanged after the refused write`)
+    await assert.rejects(store.append(RUN, { ...make('pass', T0), reviewerKind: 'service' }), /must be made by a human/, name)
+  }
+  const doc = sanity.docs.get(`content-review.${RUN}.${first.reviewId}`)!
+  assert.equal(doc._type, 'contentReview')
+  assert.equal(doc.kind, 'manual')
+  assert.equal(doc.text, 'Weekly feed price digest.')
 })

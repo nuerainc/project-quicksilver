@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url'
 
 import { authorize } from '../approval.ts'
 import type { CapabilityRef, EntityRef, ProposedAction } from '../types.ts'
-import { waesContentDigest, waesFacts, type WaesReview } from '../waes.ts'
+import { MANUAL_REVIEW_COMPONENT, WAES_BLOCK_REASONS, waesContentDigest, waesFacts, type WaesReview } from '../waes.ts'
 import {
   appendMoney,
   applyEvaluation,
@@ -21,7 +21,7 @@ import {
   type ExperimentDefinition,
   type MoneyLedger,
 } from './economics.ts'
-import { decideSpend, genesisBlockers, genesisFacts, validateGenesisConfig, type GenesisRunConfig } from './genesis.ts'
+import { decideSpend, genesisBlockers, genesisFacts, genesisWaesFacts, validateGenesisConfig, type GenesisRunConfig } from './genesis.ts'
 import { validatePlaybook, type PlaybookDefinition } from './playbook.ts'
 import { nextAutomaticTransition } from '../process.ts'
 
@@ -161,4 +161,61 @@ test('WAES gate: customer-facing actions are hard-blocked without a passing revi
   assert.equal(run(waesFacts({ ...review, verdict: 'revise' }, content, 'agent-genesis')).recommendation, 'reject')
   assert.equal(run(waesFacts(review, content.replace(/\n/g, '\r\n'), 'agent-genesis')).recommendation, 'execute-autonomously')
   assert.equal(authorize({ action: { ...action, customerFacing: false }, actor, capabilities, policies: [], evidence: [{ id: 'ev', title: 's', confidence: 0.9 }] }).recommendation, 'execute-autonomously')
+})
+
+test('WAES gate: a manual founder review unlocks a customer-facing action only when manual reviews are allowed', () => {
+  const content = 'Get a margin report for your feed store in 48 hours.'
+  const actor: EntityRef = { id: 'agent-genesis', name: 'Genesis', entityType: 'agent', capabilityIds: ['cap-send'] }
+  const capabilities: CapabilityRef[] = [{ id: 'cap-send', name: 'Send offer', baseRiskLevel: 1, authorizedEntityIds: ['agent-genesis'] }]
+  const action: ProposedAction = { description: 'Publish the offer page', actorId: 'agent-genesis', capabilityId: 'cap-send', applicablePolicyIds: [], evidenceIds: ['ev'], reversible: true, operationalImpact: 1, uncertainty: 1, customerFacing: true }
+  const run = (facts: Record<string, string | number | boolean>) => authorize({ action, actor, capabilities, policies: [], evidence: [{ id: 'ev', title: 'signal', confidence: 0.9 }], facts })
+  const manual: WaesReview = { reviewId: 'm1', kind: 'manual', contentDigest: waesContentDigest(content), verdict: 'pass', components: [MANUAL_REVIEW_COMPONENT], reviewer: 'entity-founder', reviewerKind: 'human', reviewedAt: T0.toISOString() }
+
+  // Allowed: passes, and the facts say it was manual.
+  const allowed = waesFacts(manual, content, 'agent-genesis', { allowManual: true })
+  assert.deepEqual(allowed, { 'waes.review': 'pass', 'waes.reviewId': 'm1', 'waes.reviewKind': 'manual' })
+  assert.equal(run(allowed).recommendation, 'execute-autonomously')
+
+  // Not allowed (the default): blocked with its own reason.
+  const notAllowed = waesFacts(manual, content, 'agent-genesis')
+  assert.equal(notAllowed['waes.review'], 'manual-not-allowed')
+  const r = run(notAllowed)
+  assert.equal(r.recommendation, 'reject')
+  assert.ok(r.blockingReasons.includes(WAES_BLOCK_REASONS['manual-not-allowed']))
+
+  // The proposer cannot approve its own text, even manually.
+  assert.equal(waesFacts({ ...manual, reviewer: 'agent-genesis' }, content, 'agent-genesis', { allowManual: true })['waes.review'], 'self-reviewed')
+  // Different content: stale.
+  assert.equal(waesFacts(manual, content + ' Now 50% off!', 'agent-genesis', { allowManual: true })['waes.review'], 'stale')
+  assert.equal(run(waesFacts(manual, content + ' Now 50% off!', 'agent-genesis', { allowManual: true })).recommendation, 'reject')
+  // A non-human manual reviewer, or a missing reviewer kind, is refused.
+  assert.equal(waesFacts({ ...manual, reviewerKind: 'service' }, content, 'agent-genesis', { allowManual: true })['waes.review'], 'manual-invalid')
+  assert.equal(waesFacts({ ...manual, reviewerKind: undefined }, content, 'agent-genesis', { allowManual: true })['waes.review'], 'manual-invalid')
+  assert.equal(run(waesFacts({ ...manual, reviewerKind: 'service' }, content, 'agent-genesis', { allowManual: true })).recommendation, 'reject')
+  // A manual review must name only the marker; a WAES review may not carry it.
+  assert.equal(waesFacts({ ...manual, components: ['SENTINEL'] }, content, 'agent-genesis', { allowManual: true })['waes.review'], 'manual-invalid')
+  assert.equal(waesFacts({ ...manual, kind: 'waes', components: [MANUAL_REVIEW_COMPONENT] }, content, 'agent-genesis', { allowManual: true })['waes.review'], 'manual-invalid')
+  // Manual revise/block still block.
+  assert.equal(run(waesFacts({ ...manual, verdict: 'revise' }, content, 'agent-genesis', { allowManual: true })).recommendation, 'reject')
+  assert.equal(run(waesFacts({ ...manual, verdict: 'block' }, content, 'agent-genesis', { allowManual: true })).recommendation, 'reject')
+
+  // The run config carries the policy.
+  assert.equal(config.waesManualReviewAllowed, true)
+  assert.equal(config.waesRequired, true)
+  assert.equal(genesisWaesFacts(config, manual, content, 'agent-genesis')['waes.review'], 'pass')
+  assert.equal(genesisWaesFacts({ ...config, waesManualReviewAllowed: false }, manual, content, 'agent-genesis')['waes.review'], 'manual-not-allowed')
+  const { waesManualReviewAllowed: _omit, ...withoutFlag } = config
+  assert.deepEqual(validateGenesisConfig(withoutFlag as GenesisRunConfig), [])
+  assert.equal(genesisWaesFacts(withoutFlag as GenesisRunConfig, manual, content, 'agent-genesis')['waes.review'], 'manual-not-allowed', 'default is off')
+  assert.deepEqual(validateGenesisConfig({ ...config, waesManualReviewAllowed: 'yes' as unknown as boolean }), ['waesManualReviewAllowed must be true or false.'])
+})
+
+test('WAES gate: reviews recorded before `kind` existed still behave as WAES reviews', () => {
+  const content = 'Weekly feed price digest, free for 30 days.'
+  const legacy: WaesReview = { reviewId: 'w-old', contentDigest: waesContentDigest(content), verdict: 'pass', components: ['SENTINEL', 'COMPASS'], reviewer: 'waes-service', reviewedAt: T0.toISOString() }
+  assert.deepEqual(waesFacts(legacy, content, 'agent-genesis'), { 'waes.review': 'pass', 'waes.reviewId': 'w-old', 'waes.reviewKind': 'waes' })
+  // allowManual does not matter for a WAES review, and no reviewerKind is needed.
+  assert.equal(waesFacts(legacy, content, 'agent-genesis', { allowManual: false })['waes.review'], 'pass')
+  assert.equal(waesFacts({ ...legacy, components: [] }, content, 'agent-genesis')['waes.review'], 'missing')
+  assert.equal(waesFacts({ ...legacy, kind: 'other' as never }, content, 'agent-genesis')['waes.review'], 'missing')
 })
