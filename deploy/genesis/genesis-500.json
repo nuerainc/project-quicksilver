@@ -1,0 +1,21 @@
+{
+ "schemaVersion": 1,
+ "runId": "genesis-500-30d",
+ "playbookId": "genesis",
+ "budgetUsd": 500,
+ "durationDays": 30,
+ "digitalOnly": true,
+ "allowedCategories": ["compute", "hosting", "domain", "software", "advertising", "content", "payment-fees"],
+ "prohibitedCategories": ["physical-goods", "inventory", "hiring", "financial-products", "gambling", "regulated-goods", "data-purchase"],
+ "spend": {
+  "autoMaxUsd": 10,
+  "autoMaxRisk": 2,
+  "dailyCapUsd": 50
+ },
+ "waesRequired": true,
+ "prerequisites": {
+  "entityApproved": false,
+  "paymentAccounts": ["genesis-payments", "genesis-card"]
+ },
+ "owner": "entity-founder"
+}

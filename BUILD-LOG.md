@@ -1109,6 +1109,33 @@ New workspace `packages/aura` (pre-charter, version 0.0.0):
   Aura's questions, shadow proposals and verdicts.
 - All packages move to 0.4.0.
 
+## 2026-09-26 — M5 built: Genesis economics, WAES gate, always-on hosting templates  *(Claude, via Cowork)*
+
+- `packages/kernel/src/playbooks/economics.ts`:
+  - experiments, fixed and digest-pinned when a human starts them
+  - kill, continue and close apply on their own; scale and hold need the
+    founder
+  - a hash-chained money ledger in which compute counts as capital
+  - the spend risk scale, measured against the remaining budget
+- `packages/kernel/src/playbooks/genesis.ts`:
+  - the run config validator
+  - blockers (an approved entity; payment accounts in the vault)
+  - spend decisions
+  - playbook facts
+- `packages/kernel/src/waes.ts` and `authorize()`:
+  - a customer-facing action is hard-blocked unless a WAES review passed
+    the exact content (content digest), from a reviewer other than the
+    proposer
+  - the shadow kernel verdict now shows this block for customer-facing
+    proposals
+- `deploy/playbooks/genesis.json`, `deploy/genesis/genesis-500.json`
+  ($500, 30 days, digital only), and `npm run genesis`.
+- `deploy/render.yaml` and `deploy/docker-compose.public.yml`, with
+  [always-on hosting](docs/platform/always-on-hosting.md). Nothing is
+  deployed.
+- The run itself waits on the entity decision and payment accounts. 0.5.0
+  and 0.6.0 follow pilot and run evidence.
+
 ## Errors encountered (chronological, all environments)
 
 | Day / Env | Error | Resolution |

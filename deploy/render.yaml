@@ -1,0 +1,57 @@
+# Always-on hosting template (M5): Render blueprint for the single-tenant host.
+# Not deployed. Use it once the entity and payment accounts exist (Genesis needs
+# a public address for payment webhooks).
+#
+# In Render: New → Blueprint → this repository, blueprint path deploy/render.yaml.
+# Every secret below is `sync: false`: you enter it in the Render dashboard,
+# it is never committed. The host config itself is a Render secret file.
+services:
+  - type: web
+    name: quicksilver-host
+    runtime: docker
+    dockerfilePath: deploy/Dockerfile.host
+    dockerContext: .
+    plan: starter
+    region: oregon
+    healthCheckPath: /healthz
+    autoDeploy: false            # deploy on purpose, after review
+    numInstances: 1              # one host per tenant at this version
+    disk:
+      name: quicksilver-data     # vault file, intent graphs, shadow logs, money ledger
+      mountPath: /data
+      sizeGB: 1
+    envVars:
+      - key: PORT
+        value: "8787"
+      - key: QUICKSILVER_HOST_CONFIG
+        value: /etc/secrets/quicksilver.host.json   # add as a Render secret file
+      - key: QUICKSILVER_TENANT_ID
+        value: nuera
+      - key: DATABASE_URL
+        fromDatabase:
+          name: quicksilver-db
+          property: connectionString
+      - key: QUICKSILVER_VAULT_KEY
+        sync: false
+      - key: QUICKSILVER_PRINCIPALS
+        sync: false
+      - key: SANITY_CONTEXT_MCP_URL
+        sync: false
+      - key: SANITY_CONTEXT_TOKEN
+        sync: false
+      - key: NEXT_PUBLIC_SANITY_PROJECT_ID
+        sync: false
+      - key: SANITY_AUTH_TOKEN
+        sync: false
+      - key: AZURE_API_KEY
+        sync: false
+      - key: AZURE_RESOURCE_NAME
+        sync: false
+
+databases:
+  - name: quicksilver-db
+    plan: basic-256mb
+    region: oregon
+    databaseName: quicksilver
+    user: quicksilver
+    ipAllowList: []              # private network only

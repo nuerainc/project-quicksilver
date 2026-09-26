@@ -1,0 +1,30 @@
+# Always-on hosting template (M5): add TLS and a public address to the
+# single-tenant stack on any small VPS. Not deployed.
+#
+#   export QUICKSILVER_DOMAIN=host.example.com   # a DNS name pointing at the server
+#   docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.public.yml up -d --build
+#
+# Caddy obtains and renews the certificate. The host stays on the private
+# compose network; only Caddy listens publicly (80, 443).
+services:
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      - host
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      QUICKSILVER_DOMAIN: ${QUICKSILVER_DOMAIN:?set QUICKSILVER_DOMAIN}
+    command: caddy reverse-proxy --from ${QUICKSILVER_DOMAIN} --to host:8787
+    volumes:
+      - caddydata:/data
+
+  host:
+    # Remove the localhost-only port mapping from the base file's host service;
+    # Caddy reaches it on the compose network.
+    ports: !reset []
+
+volumes:
+  caddydata:

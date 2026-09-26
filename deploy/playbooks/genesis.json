@@ -1,0 +1,515 @@
+{
+ "schemaVersion": 1,
+ "id": "genesis",
+ "version": 1,
+ "name": "Genesis: the economic loop",
+ "description": "Observe, hypothesize, run an experiment with thresholds fixed before it starts, measure, update beliefs, then allocate: kill (automatic), continue, or ask the founder to modify or expand. Every spend and message goes through the kernel; customer-facing content needs a passing WAES review.",
+ "modes": [
+  "genesis"
+ ],
+ "trigger": {
+  "kind": "manual"
+ },
+ "requiredVariables": [],
+ "process": {
+  "id": "genesis-process",
+  "name": "Genesis",
+  "version": 1,
+  "initialState": "observe",
+  "states": [
+   {
+    "id": "observe",
+    "label": "Observe: read market signals"
+   },
+   {
+    "id": "hypothesize",
+    "label": "Hypothesize: draft experiments"
+   },
+   {
+    "id": "experiment",
+    "label": "Experiment running"
+   },
+   {
+    "id": "measure",
+    "label": "Measure"
+   },
+   {
+    "id": "update-belief",
+    "label": "Update beliefs"
+   },
+   {
+    "id": "allocate",
+    "label": "Allocate: apply the fixed thresholds"
+   },
+   {
+    "id": "expand",
+    "label": "Expand (scale)"
+   },
+   {
+    "id": "modify",
+    "label": "Modify"
+   },
+   {
+    "id": "kill",
+    "label": "Kill"
+   },
+   {
+    "id": "closed",
+    "label": "Run closed",
+    "terminal": true
+   }
+  ],
+  "transitions": [
+   {
+    "id": "observed",
+    "from": "observe",
+    "to": "hypothesize",
+    "guard": {
+     "all": [
+      {
+       "fact": "stage.status",
+       "op": "eq",
+       "value": "completed"
+      }
+     ]
+    },
+    "automatic": true
+   },
+   {
+    "id": "start-experiment",
+    "from": "hypothesize",
+    "to": "experiment",
+    "label": "Founder starts the drafted experiment (fixes its thresholds and budget)",
+    "guard": {
+     "all": [
+      {
+       "fact": "experiment.drafted",
+       "op": "eq",
+       "value": true
+      }
+     ]
+    },
+    "requiresHumanApproval": true
+   },
+   {
+    "id": "running",
+    "from": "experiment",
+    "to": "measure",
+    "guard": {
+     "all": [
+      {
+       "fact": "experiment.running",
+       "op": "eq",
+       "value": true
+      }
+     ]
+    },
+    "automatic": true
+   },
+   {
+    "id": "measured",
+    "from": "measure",
+    "to": "update-belief",
+    "guard": {
+     "all": [
+      {
+       "fact": "experiment.measurements",
+       "op": "gte",
+       "value": 1
+      }
+     ]
+    },
+    "automatic": true
+   },
+   {
+    "id": "belief-updated",
+    "from": "update-belief",
+    "to": "allocate",
+    "guard": {
+     "all": [
+      {
+       "fact": "experiment.verdict",
+       "op": "exists"
+      }
+     ]
+    },
+    "automatic": true
+   },
+   {
+    "id": "kill",
+    "from": "allocate",
+    "to": "kill",
+    "label": "Kill: automatic, stopping never needs permission",
+    "guard": {
+     "all": [
+      {
+       "fact": "experiment.verdict",
+       "op": "in",
+       "value": [
+        "kill",
+        "over-budget",
+        "expired"
+       ]
+      }
+     ]
+    },
+    "automatic": true
+   },
+   {
+    "id": "continue",
+    "from": "allocate",
+    "to": "measure",
+    "guard": {
+     "all": [
+      {
+       "fact": "experiment.verdict",
+       "op": "eq",
+       "value": "continue"
+      }
+     ]
+    },
+    "automatic": true
+   },
+   {
+    "id": "scale",
+    "from": "allocate",
+    "to": "expand",
+    "label": "Scale: the founder decides (it spends more)",
+    "guard": {
+     "all": [
+      {
+       "fact": "experiment.verdict",
+       "op": "eq",
+       "value": "scale"
+      }
+     ]
+    },
+    "requiresHumanApproval": true
+   },
+   {
+    "id": "modify",
+    "from": "allocate",
+    "to": "modify",
+    "label": "Hold: the founder decides whether to modify",
+    "guard": {
+     "all": [
+      {
+       "fact": "experiment.verdict",
+       "op": "eq",
+       "value": "hold"
+      }
+     ]
+    },
+    "requiresHumanApproval": true
+   },
+   {
+    "id": "next-after-kill",
+    "from": "kill",
+    "to": "hypothesize",
+    "guard": {
+     "all": [
+      {
+       "fact": "budget.remainingUsd",
+       "op": "gt",
+       "value": 0
+      },
+      {
+       "fact": "run.daysLeft",
+       "op": "gt",
+       "value": 0
+      }
+     ]
+    },
+    "automatic": true
+   },
+   {
+    "id": "next-after-modify",
+    "from": "modify",
+    "to": "hypothesize",
+    "guard": {
+     "all": [
+      {
+       "fact": "budget.remainingUsd",
+       "op": "gt",
+       "value": 0
+      },
+      {
+       "fact": "run.daysLeft",
+       "op": "gt",
+       "value": 0
+      }
+     ]
+    },
+    "automatic": true
+   },
+   {
+    "id": "expand-start",
+    "from": "expand",
+    "to": "experiment",
+    "label": "Founder starts the larger experiment",
+    "guard": {
+     "all": [
+      {
+       "fact": "budget.remainingUsd",
+       "op": "gt",
+       "value": 0
+      }
+     ]
+    },
+    "requiresHumanApproval": true
+   },
+   {
+    "id": "close-after-kill",
+    "from": "kill",
+    "to": "closed",
+    "guard": {
+     "any": [
+      {
+       "fact": "budget.remainingUsd",
+       "op": "lte",
+       "value": 0
+      },
+      {
+       "fact": "run.daysLeft",
+       "op": "lte",
+       "value": 0
+      }
+     ]
+    },
+    "automatic": true
+   },
+   {
+    "id": "close-after-modify",
+    "from": "modify",
+    "to": "closed",
+    "guard": {
+     "any": [
+      {
+       "fact": "budget.remainingUsd",
+       "op": "lte",
+       "value": 0
+      },
+      {
+       "fact": "run.daysLeft",
+       "op": "lte",
+       "value": 0
+      }
+     ]
+    },
+    "automatic": true
+   },
+   {
+    "id": "stop-observe",
+    "from": "observe",
+    "to": "closed",
+    "label": "Founder stops the run",
+    "requiresHumanApproval": true
+   },
+   {
+    "id": "stop-hypothesize",
+    "from": "hypothesize",
+    "to": "closed",
+    "label": "Founder stops the run",
+    "requiresHumanApproval": true
+   },
+   {
+    "id": "stop-experiment",
+    "from": "experiment",
+    "to": "closed",
+    "label": "Founder stops the run",
+    "requiresHumanApproval": true
+   },
+   {
+    "id": "stop-measure",
+    "from": "measure",
+    "to": "closed",
+    "label": "Founder stops the run",
+    "requiresHumanApproval": true
+   },
+   {
+    "id": "stop-update-belief",
+    "from": "update-belief",
+    "to": "closed",
+    "label": "Founder stops the run",
+    "requiresHumanApproval": true
+   },
+   {
+    "id": "stop-allocate",
+    "from": "allocate",
+    "to": "closed",
+    "label": "Founder stops the run",
+    "requiresHumanApproval": true
+   },
+   {
+    "id": "stop-expand",
+    "from": "expand",
+    "to": "closed",
+    "label": "Founder stops the run",
+    "requiresHumanApproval": true
+   },
+   {
+    "id": "stop-modify",
+    "from": "modify",
+    "to": "closed",
+    "label": "Founder stops the run",
+    "requiresHumanApproval": true
+   },
+   {
+    "id": "stop-kill",
+    "from": "kill",
+    "to": "closed",
+    "label": "Founder stops the run",
+    "requiresHumanApproval": true
+   }
+  ]
+ },
+ "stageGraphs": {
+  "observe": {
+   "schemaVersion": 1,
+   "id": "genesis-observe",
+   "version": 1,
+   "entryNodeId": "start",
+   "nodes": [
+    {
+     "id": "start",
+     "kind": "trigger",
+     "label": "Start"
+    },
+    {
+     "id": "work",
+     "kind": "agent",
+     "label": "Summarize market signals from public sources (read only)",
+     "config": {
+      "agentId": "query",
+      "evaluationRequired": true,
+      "impact": "low"
+     }
+    },
+    {
+     "id": "done",
+     "kind": "output",
+     "label": "Done"
+    }
+   ],
+   "edges": [
+    {
+     "id": "e1",
+     "from": "start",
+     "to": "work"
+    },
+    {
+     "id": "e2",
+     "from": "work",
+     "to": "done"
+    }
+   ]
+  },
+  "hypothesize": {
+   "schemaVersion": 1,
+   "id": "genesis-hypothesize",
+   "version": 1,
+   "entryNodeId": "start",
+   "nodes": [
+    {
+     "id": "start",
+     "kind": "trigger",
+     "label": "Start"
+    },
+    {
+     "id": "work",
+     "kind": "agent",
+     "label": "Draft testable hypotheses with a metric and kill/hold/scale thresholds (proposals only)",
+     "config": {
+      "agentId": "query",
+      "evaluationRequired": true,
+      "impact": "low"
+     }
+    },
+    {
+     "id": "done",
+     "kind": "output",
+     "label": "Done"
+    }
+   ],
+   "edges": [
+    {
+     "id": "e1",
+     "from": "start",
+     "to": "work"
+    },
+    {
+     "id": "e2",
+     "from": "work",
+     "to": "done"
+    }
+   ]
+  },
+  "update-belief": {
+   "schemaVersion": 1,
+   "id": "genesis-update-belief",
+   "version": 1,
+   "entryNodeId": "start",
+   "nodes": [
+    {
+     "id": "start",
+     "kind": "trigger",
+     "label": "Start"
+    },
+    {
+     "id": "work",
+     "kind": "agent",
+     "label": "Explain what the measurements change about each belief",
+     "config": {
+      "agentId": "query",
+      "evaluationRequired": true,
+      "impact": "low"
+     }
+    },
+    {
+     "id": "done",
+     "kind": "output",
+     "label": "Done"
+    }
+   ],
+   "edges": [
+    {
+     "id": "e1",
+     "from": "start",
+     "to": "work"
+    },
+    {
+     "id": "e2",
+     "from": "work",
+     "to": "done"
+    }
+   ]
+  }
+ },
+ "stepCapabilities": {
+  "observe/work": "capability-read-market-signals",
+  "hypothesize/work": "capability-propose-experiments",
+  "update-belief/work": "capability-read-company-state"
+ },
+ "budget": {
+  "amountUsd": 500,
+  "includesCompute": true
+ },
+ "metrics": [
+  {
+   "id": "return-on-capital",
+   "label": "Revenue per dollar of capital used (compute included)",
+   "unit": "ratio",
+   "direction": "higher-is-better",
+   "kill": 0.1,
+   "hold": 0.5,
+   "scale": 1.0
+  }
+ ],
+ "outputs": [
+  "experiment records with fixed thresholds",
+  "hash-chained money ledger",
+  "belief updates with evidence",
+  "final report"
+ ],
+ "owner": "entity-founder"
+}

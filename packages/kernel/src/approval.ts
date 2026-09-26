@@ -2,6 +2,7 @@ import type { CapabilityRef, EvidenceRef, EntityRef, PolicyCheck, PolicyRef, Pro
 import { checkCapability } from './capability.ts'
 import { checkAuthority } from './authority.ts'
 import { averageEvidenceConfidence, computeRisk } from './risk.ts'
+import { WAES_BLOCK_REASONS, type WaesReviewFact } from './waes.ts'
 
 /** Defaults used when the QUICKSILVER_RISK_* env vars are unset or invalid. */
 export const DEFAULT_RISK_AUTO_MAX: RiskLevel = 2
@@ -103,6 +104,11 @@ export function authorize(args: AuthorizeArgs): AuthorizeResult {
   const concerns: string[] = []
   if (authority.conflicts.length > 0) concerns.push(...authority.conflicts)
   concerns.push(...authority.approvalReasons)
+  // WAES gate (M5): customer-facing actions are hard-blocked without a passing review of this content.
+  if (action.customerFacing === true || facts?.['action.customerFacing'] === true) {
+    const review = (facts?.['waes.review'] ?? 'missing') as WaesReviewFact
+    if (review !== 'pass') blockingReasons.push(WAES_BLOCK_REASONS[review] ?? WAES_BLOCK_REASONS.missing)
+  }
   if (actionEvidence.length === 0) {
     blockingReasons.push('No evidence supports this action.')
   } else if (evidenceConf < 0.5) {

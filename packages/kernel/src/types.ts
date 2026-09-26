@@ -31,6 +31,8 @@ export interface ProposedAction {
   operationalImpact: RiskLevel
   /** Uncertainty in the planner's confidence in success. */
   uncertainty: RiskLevel
+  /** Customers would see or receive it (an offer, claim or message). Needs a passing WAES review. */
+  customerFacing?: boolean
 }
 
 /** A capability reference (denormalized for kernel use). */

@@ -23,7 +23,7 @@ and 3.
 | M2: Single-tenant host | 0.3.0 | Host process, management API, secrets vault, structured logs and metrics, deploy config ([hosted runtime](platform/hosted-runtime.md)) | Foundation | **Complete 2026-09-26** (runs on the founder's computer; always-on hosting moved to M5) |
 | M3: Intent layer | 0.4.0 | Decision graph, provenance tags, impact scoring for open unknowns, the intent entry point, belief updates through the memory governor | 2 | M1; Aura. **Complete 2026-09-26** on built features ([Aura README](../packages/aura/README.md)); Aura's 70% choice-agreement target stays on Aura's own charter ladder |
 | M4: Playbooks and Onboard pilot | 0.5.0 | `playbook` type (process definition plus stage graphs), Onboard playbook, connectors, backtest and shadow mode, a pilot on Nuera (on the local host) | 3 | M2, M3 |
-| M5: Genesis demonstration | 0.6.0 | Economic playbook, `experiment` and `ledgerEntry` types, WAES review in the kernel path, a small-budget spend risk scale, always-on hosting (moved from M2); a $500, 30-day digital-only run | 3 | M3, M4 |
+| M5: Genesis demonstration | 0.6.0 | Economic playbook, `experiment` and `ledgerEntry` types, WAES review in the kernel path, a small-budget spend risk scale, always-on hosting (moved from M2); a $500, 30-day digital-only run | 3 | M3, M4. **Built 2026-09-26** ([Genesis run](platform/genesis-run.md), [always-on hosting](platform/always-on-hosting.md)); the run waits on the entity decision and payment accounts |
 | M6: Operate | 0.7.0 | Steady-state operations, reinvestment, and bounded Genesis experiments inside a running business | 3 | M4, M5 |
 
 **Versioning:** the current version is 0.4.0 (Nuera RDL versioning standard): M1, M2 and M3 are complete. Each milestone raises the minor version.
@@ -91,6 +91,35 @@ Built since the M3 start:
 - Still to come:
   - live connectors (bookkeeping, payments, CRM, email), which need the founder's credentials in the vault
   - the pilot itself, Jan–Feb 2027, then 0.5.0
+
+**M5 build (2026-09-26):**
+
+- The economic playbook (`deploy/playbooks/genesis.json`): observe →
+  hypothesize → experiment → measure → update beliefs → allocate →
+  expand, modify or kill.
+  - Kill is automatic.
+  - Starting, scaling and modifying are the founder's.
+- The `experiment` type:
+  - hypothesis, metric, thresholds, budget and duration are fixed when a
+    human starts it
+  - the digest is pinned
+  - every measurement needs a source
+- The money ledger (`ledgerEntry`): spend, compute, revenue and refunds in a
+  hash chain, each with a source. Compute is costed as capital.
+- The small-budget spend risk scale, measured against what is left.
+  - Spend decisions refuse prohibited categories, overspend and the daily
+    cap.
+  - Above $10, above risk 2, or outside an experiment, the founder decides.
+- The WAES gate in `authorize()`: a customer-facing action is hard-blocked
+  unless a WAES review passed that exact content, from a separate reviewer.
+- Always-on hosting templates (Render blueprint; VPS with Caddy TLS) and
+  docs. Not deployed.
+- The $500, 30-day run config and `npm run genesis` commands.
+- `check` lists what blocks the run:
+  - an approved entity
+  - payment accounts in the vault
+- Versions: 0.5.0 follows the Onboard pilot's evidence; 0.6.0 follows the
+  Genesis run's.
 
 **Carried into M3 (found by the first live host run, 2026-09-26):**
 - Done: the seed policies now carry structured effects (`apps/studio/seed/policies.ts`, tested by `npm run seed:test`):

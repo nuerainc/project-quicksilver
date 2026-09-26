@@ -249,7 +249,7 @@ it runs a company. Current status is tracked in
 | M2: Single-tenant host | 0.3.0 | Packaged host process, management API, secrets vault, structured logs and metrics, deploy config; runs on the founder's computer | **Complete 2026-09-26** | ~Oct 30, 2026 |
 | M3: Intent layer | 0.4.0 | Decision graph, provenance, impact scoring, the intent entry point | **Complete 2026-09-26** (Aura's choice target stays on Aura's ladder) | ~Nov 25, 2026 |
 | M4: Playbooks and Onboard pilot | 0.5.0 | Playbook type, Onboard playbook, connectors, shadow mode on Nuera (the host runs on the founder's computer) | M2, M3 | Build ~Dec 15; pilot Jan–Feb 2027 |
-| M5: Genesis demonstration | 0.6.0 | Economic playbook, experiments, ledger, WAES review, **always-on hosting** (moved from M2; payment webhooks need a public address); a $500, 30-day digital-only run | M3, M4 | Feb–Mar 2027 |
+| M5: Genesis demonstration | 0.6.0 | Economic playbook, experiments, ledger, WAES review, **always-on hosting** (moved from M2; payment webhooks need a public address); a $500, 30-day digital-only run | M3, M4. **Built 2026-09-26**; the run waits on the entity and payment accounts | Feb–Mar 2027 |
 | M6: Operate | 0.7.0 | Steady-state operations and reinvestment | M4, M5 | Mar–Apr 2027 |
 
 M2 is deliberately single-tenant. SSO and multi-tenant hosting come before

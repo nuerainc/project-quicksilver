@@ -150,11 +150,13 @@ export function kernelVerdict(proposal: ShadowProposal, deps: Pick<ShadowApiDeps
       reversible: proposal.reversible,
       operationalImpact: clampRisk(proposal.operationalImpact),
       uncertainty: clampRisk(proposal.uncertainty),
+      ...(proposal.customerFacing ? { customerFacing: true } : {}),
     },
     actor: { id: actorId, name: `${proposal.department} (shadow)`, entityType: 'agent', capabilityIds: [capabilityId] },
     capabilities: [{ id: capabilityId, name: `Run ${proposal.department}`, baseRiskLevel: deps.baseRiskLevel ?? 1, authorizedEntityIds: [actorId], policyScopes: ['operations', proposal.department] }],
     policies: deps.policies ?? [],
     evidence,
+    // No WAES review exists at the shadow stage, so a customer-facing proposal shows what the gate would do: block.
     facts: { 'action.customerFacing': proposal.customerFacing === true },
   })
   return { recommendation: result.recommendation, riskLevel: result.riskLevel, reasons: [...result.blockingReasons, ...result.concerns] }

@@ -33,7 +33,10 @@
     "./triggers/cron": "./src/triggers/cron.ts",
     "./runtime/postgres": "./src/runtime/postgres-store.ts",
     "./playbooks": "./src/playbooks/playbook.ts",
-    "./playbooks/shadow": "./src/playbooks/shadow.ts"
+    "./playbooks/shadow": "./src/playbooks/shadow.ts",
+    "./playbooks/economics": "./src/playbooks/economics.ts",
+    "./playbooks/genesis": "./src/playbooks/genesis.ts",
+    "./waes": "./src/waes.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"
