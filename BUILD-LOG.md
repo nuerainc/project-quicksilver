@@ -1041,6 +1041,24 @@ end to end, was verified by the founder:
 All workspace packages and the Python SDK move to 0.2.0. M2 (0.3.0) is built
 and waits on its first deployment.
 
+## 2026-09-26 — Release 0.3.0: M2 single-tenant host complete  *(Claude, via Cowork)*
+
+- The host now runs on the founder's computer (`npm run host`), with the
+  local example config (file store, localhost only).
+- First live run: `npm run host -- run daily-brief "Which decisions are
+  waiting for approval?"` used the live model and the dedicated Context MCP
+  endpoints. The Quicksilver Engine returned ALLOW with score 100, the run
+  completed, and no audit-write failure was logged, so the evaluation record
+  was stored in Sanity.
+- Founder decision: M2 is complete. Local hosting is fine for now; always-on
+  hosting moves to M5, where the Genesis run needs a public address for
+  payment webhooks. The M4 Onboard pilot runs on the local host. All packages
+  move to 0.3.0.
+- The run surfaced two seed-data gaps, carried into M3: seed policies lack a
+  structured `effect`, and the seed decision predates
+  `requestedBy`/`proposedBy`.
+- The one-off `run` command now prints each agent step's output once.
+
 ## Errors encountered (chronological, all environments)
 
 | Day / Env | Error | Resolution |

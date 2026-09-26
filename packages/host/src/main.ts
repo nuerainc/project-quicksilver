@@ -225,7 +225,12 @@ async function main(): Promise<void> {
     if (!enq.accepted) throw new Error(`Run refused (${enq.code}): ${enq.reasons.join(' ')}`)
     const [finished] = await host.worker.drain()
     const run = finished ?? (await host.queue.get(enq.run.runId))
-    console.log(JSON.stringify({ runId: run?.runId, status: run?.status, steps: run?.result?.steps, outputs: run?.result?.outputs, error: run?.result?.error ?? run?.lastError }, null, 2))
+    // Print each agent step's output once (trigger and output nodes only echo other steps).
+    const graph = config.workflows[workflowId]!
+    const agentOutputs = Object.fromEntries(
+      Object.entries(run?.result?.outputs ?? {}).filter(([nodeId]) => graph.nodes.find((n) => n.id === nodeId)?.kind === 'agent'),
+    )
+    console.log(JSON.stringify({ runId: run?.runId, status: run?.status, steps: run?.result?.steps, outputs: agentOutputs, error: run?.result?.error ?? run?.lastError }, null, 2))
     await close?.()
     process.exitCode = run?.status === 'completed' ? 0 : 1
     return

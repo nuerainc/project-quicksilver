@@ -88,7 +88,7 @@ Kernel, and recorded.
 7. **Wellbeing alignment,** with WAES review of every offer, claim and outbound message.
 8. **Platform baseline parity,** proven by a pass/fail test for each baseline item.
 
-**Version:** 0.2.0 (M1 governance foundation complete; M2 single-tenant host built, first deployment pending). Following the Nuera RDL versioning standard, Nuera Quicksilver stays on 0.x until all three modes pass the
+**Version:** 0.3.0 (M1 governance foundation and M2 single-tenant host complete; the host runs on the founder's computer, and always-on hosting moves to M5). Following the Nuera RDL versioning standard, Nuera Quicksilver stays on 0.x until all three modes pass the
 parity gate; each milestone raises the minor version (M1 → 0.2.0 … M6 → 0.7.0), and
 1.0.0 requires operational evidence for every mode.
 

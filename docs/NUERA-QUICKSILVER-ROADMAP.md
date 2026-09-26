@@ -20,14 +20,21 @@ and 3.
 | Milestone | Version | Delivers | Layer | Depends on |
 |---|---|---|---|---|
 | M1: Governance foundation | 0.2.0 | Kernel, evaluation, approval binding, RBAC, durable runs, triggers, separation of duties, persisted evaluations | Foundation, 1 | **Complete 2026-09-25** |
-| M2: Single-tenant hosted platform | 0.3.0 | Host process, management API, secrets vault, structured logs and metrics, deploy config ([hosted runtime](platform/hosted-runtime.md)) | Foundation | Code complete; first deployment pending (target ~Oct 30). SSO and multi-tenancy move before 0.9.0 |
+| M2: Single-tenant host | 0.3.0 | Host process, management API, secrets vault, structured logs and metrics, deploy config ([hosted runtime](platform/hosted-runtime.md)) | Foundation | **Complete 2026-09-26** (runs on the founder's computer; always-on hosting moved to M5) |
 | M3: Intent layer | 0.4.0 | Decision graph, provenance tags, impact scoring for open unknowns, the intent entry point, belief updates through the memory governor | 2 | M1; Aura |
-| M4: Playbooks and Onboard pilot | 0.5.0 | `playbook` type (process definition plus stage graphs), Onboard playbook, connectors, backtest and shadow mode, a pilot with 1–3 businesses | 3 | M2, M3 |
-| M5: Genesis demonstration | 0.6.0 | Economic playbook, `experiment` and `ledgerEntry` types, WAES review in the kernel path, a small-budget spend risk scale; a $500, 30-day digital-only run | 3 | M3, M4 |
+| M4: Playbooks and Onboard pilot | 0.5.0 | `playbook` type (process definition plus stage graphs), Onboard playbook, connectors, backtest and shadow mode, a pilot on Nuera (on the local host) | 3 | M2, M3 |
+| M5: Genesis demonstration | 0.6.0 | Economic playbook, `experiment` and `ledgerEntry` types, WAES review in the kernel path, a small-budget spend risk scale, always-on hosting (moved from M2); a $500, 30-day digital-only run | 3 | M3, M4 |
 | M6: Operate | 0.7.0 | Steady-state operations, reinvestment, and bounded Genesis experiments inside a running business | 3 | M4, M5 |
 
-**Versioning:** the current version is 0.2.0 (Nuera RDL versioning standard): M1 is complete. Each milestone raises the minor version.
-M2 is code complete. The host runs on the founder's computer for now (no cloud hosting yet); the version moves to 0.3.0 once it has run the Nuera daily brief on schedule with evaluations recorded.
+**Versioning:** the current version is 0.3.0 (Nuera RDL versioning standard): M1 and M2 are complete. Each milestone raises the minor version.
+The M2 host runs on the founder's computer; always-on hosting is part of M5.
+
+**Carried into M3 (found by the first live host run, 2026-09-26):**
+- The seed policies in `f87t11g1` have no structured `effect`, so live
+  decisions still use the free-text conflict path instead of the M1 resolver.
+  Give the seeded policies structured effects and re-seed.
+- The seed decision predates `requestedBy` and `proposedBy`; decisions created
+  since M1 carry both.
 0.9.0 is the release candidate, when all three modes pass the parity gate in
 testing. **1.0.0 requires all three modes (Genesis, Onboard, Operate) to pass the
 parity gate with operational evidence.** See the
