@@ -76,6 +76,18 @@ npm run onboard -- handover nuera collections act-with-approval "20 of 21 accept
 The local host serves the same shadow log over its API, so the shadow-stage
 agent can propose and you can judge from anywhere the host is reachable.
 
+**Console:** open `http://127.0.0.1:<port>/console` while the host runs
+(`npm run host`). Sign in with your bearer token; it is kept only in that
+browser tab. From the console you can:
+
+- state objectives
+- answer Aura's questions
+- ask the shadow agent for proposals
+- judge each recommendation
+
+The page itself holds no data: everything comes from the API, under your
+own permissions.
+
 | Route | Who | What |
 |---|---|---|
 | `GET /api/shadow/:intentId` | `decision:read` | Recommendations, per-department report, playbook facts, Aura's prediction score and learned weights (marked `AGENT_INFERRED`) |

@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Quicksilver Console</title>
+<style>
+:root { --bg:#f7f7f5; --panel:#fff; --ink:#1b1b1b; --muted:#666; --line:#ddd; --accent:#2f5d8a; --ok:#2e7d4f; --warn:#a15c00; --bad:#a32d2d; }
+@media (prefers-color-scheme: dark) { :root { --bg:#141414; --panel:#1e1e1e; --ink:#eee; --muted:#9a9a9a; --line:#333; --accent:#7fb0e0; --ok:#6cc08b; --warn:#e0a24f; --bad:#e07474; } }
+* { box-sizing: border-box; }
+body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui, sans-serif; }
+main { max-width: 880px; margin: 0 auto; padding: 16px; }
+h1 { font-size: 20px; margin: 8px 0 4px; } h2 { font-size: 16px; margin: 0 0 8px; }
+.sub { color: var(--muted); margin: 0 0 16px; }
+section { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 14px; margin-bottom: 14px; }
+label { display:block; font-size: 13px; color: var(--muted); margin: 6px 0 2px; }
+input, textarea, select { width: 100%; font: inherit; padding: 7px 9px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--ink); }
+textarea { min-height: 70px; }
+button { font: inherit; padding: 6px 12px; border-radius: 6px; border: 1px solid var(--accent); background: var(--accent); color: #fff; cursor: pointer; margin-top: 8px; }
+button.ghost { background: transparent; color: var(--accent); }
+.row { display:flex; gap: 8px; flex-wrap: wrap; align-items: end; } .row > * { flex: 1 1 160px; }
+.item { border-top: 1px solid var(--line); padding: 10px 0; } .item:first-child { border-top: 0; }
+.tag { display:inline-block; font-size: 12px; padding: 1px 7px; border-radius: 10px; border: 1px solid var(--line); color: var(--muted); margin-right: 4px; }
+.ok { color: var(--ok); } .warn { color: var(--warn); } .bad { color: var(--bad); }
+.msg { font-size: 13px; min-height: 1.2em; }
+.list-intent { cursor: pointer; } .list-intent:hover { color: var(--accent); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Quicksilver Console</h1>
+  <p class="sub">State what you want, answer what Aura asks, and judge shadow recommendations. Nothing here executes an action.</p>
+
+  <section>
+    <h2>Sign in</h2>
+    <label for="token">Bearer token (kept in this tab only)</label>
+    <div class="row"><input id="token" type="password" autocomplete="off"><button id="save-token" style="flex:0 0 auto">Use token</button></div>
+    <div class="msg" id="who"></div>
+  </section>
+
+  <section>
+    <h2>New objective</h2>
+    <label for="objective">What do you want?</label>
+    <textarea id="objective" maxlength="2000" placeholder="We run a feed store. Help us understand our margins."></textarea>
+    <button id="create">Create intent</button>
+    <div class="msg" id="create-msg"></div>
+  </section>
+
+  <section>
+    <h2>Intents</h2>
+    <div id="intents" class="msg">Sign in to see intents.</div>
+  </section>
+
+  <section id="detail" hidden>
+    <h2 id="detail-title"></h2>
+    <div id="detail-meta" class="msg"></div>
+    <h2 style="margin-top:12px">Aura still needs to know</h2>
+    <div id="questions"></div>
+    <h2 style="margin-top:12px">Shadow recommendations</h2>
+    <div id="shadow-summary" class="msg"></div>
+    <div class="row">
+      <input id="gen-depts" value="finance, operations, sales" aria-label="Departments">
+      <button id="generate" class="ghost" style="flex:0 0 auto">Ask the shadow agent</button>
+    </div>
+    <div id="recs"></div>
+  </section>
+</main>
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id)
+  let token = ''
+  try { token = sessionStorage.getItem('qs-token') || '' } catch {}
+  $('token').value = token
+  let current = null
+
+  function el(tag, attrs = {}, ...kids) {
+    const e = document.createElement(tag)
+    for (const [k, v] of Object.entries(attrs)) { if (k === 'class') e.className = v; else if (k.startsWith('on')) e.addEventListener(k.slice(2), v); else e.setAttribute(k, v) }
+    for (const k of kids) e.append(k instanceof Node ? k : document.createTextNode(String(k)))
+    return e
+  }
+  async function api(path, body) {
+    const r = await fetch(path, { method: body === undefined ? 'GET' : 'POST', headers: { authorization: 'Bearer ' + token, ...(body !== undefined ? { 'content-type': 'application/json' } : {}) }, ...(body !== undefined ? { body: JSON.stringify(body) } : {}) })
+    const data = await r.json().catch(() => ({}))
+    if (!r.ok) throw new Error(data.error || ('HTTP ' + r.status))
+    return data
+  }
+  const say = (id, text, cls = '') => { $(id).className = 'msg ' + cls; $(id).textContent = text }
+
+  async function signIn() {
+    token = $('token').value.trim()
+    try { sessionStorage.setItem('qs-token', token) } catch {}
+    try { const me = await api('/api/whoami'); say('who', 'Signed in as ' + me.id + ' (' + me.roles.join(', ') + ')', 'ok'); await loadIntents() }
+    catch (e) { say('who', e.message, 'bad') }
+  }
+  async function loadIntents() {
+    const box = $('intents')
+    try {
+      const { intents } = await api('/api/intents')
+      box.replaceChildren(...(intents.length ? intents.map((i) => el('div', { class: 'item list-intent', onclick: () => openIntent(i.id) }, i.objective, ' ', el('span', { class: 'tag' }, i.mode || 'mode unknown'), el('span', { class: 'tag' }, new Date(i.createdAt).toLocaleDateString()))) : [el('span', {}, 'No intents yet.')]))
+    } catch (e) { box.textContent = e.message }
+  }
+  async function openIntent(id) {
+    const { intent } = await api('/api/intents/' + encodeURIComponent(id))
+    current = intent
+    $('detail').hidden = false
+    $('detail-title').textContent = intent.objective
+    say('detail-meta', 'Mode: ' + (intent.mode || 'unknown') + ' · autonomy: ' + intent.autonomyDepth + ' · ' + intent.id)
+    $('questions').replaceChildren(...(intent.questions.length ? intent.questions.map((q) => {
+      const input = el('input', { maxlength: '1000', 'aria-label': q.question })
+      const msg = el('div', { class: 'msg' })
+      return el('div', { class: 'item' }, el('div', {}, q.question), el('div', { class: 'row' }, input, el('button', { style: 'flex:0 0 auto', onclick: async () => {
+        try { await api('/api/intents/' + encodeURIComponent(id) + '/answers', { variableId: q.variableId, answer: input.value }); await openIntent(id) } catch (e) { msg.className = 'msg bad'; msg.textContent = e.message }
+      } }, 'Answer')), msg)
+    }) : [el('div', { class: 'msg ok' }, 'No open questions.')]))
+    await loadShadow(id)
+  }
+  async function loadShadow(id) {
+    try {
+      const s = await api('/api/shadow/' + encodeURIComponent(id))
+      const p = s.aura.predictions
+      say('shadow-summary', s.recommendations.length + ' recommendations · ' + s.facts['shadow.recommendations'] + ' judged · agreement ' + Math.round(s.facts['shadow.agreement'] * 100) + '%' + (p.scored ? ' · Aura predicted your verdict ' + p.agreed + '/' + p.scored : ''))
+      $('recs').replaceChildren(...s.recommendations.slice().reverse().map((r) => {
+        const verdict = r.verdict ? el('span', { class: 'tag ' + (r.verdict.value === 'rejected' ? 'bad' : 'ok') }, r.verdict.value) : null
+        const kcls = r.kernel.recommendation === 'execute-autonomously' ? 'ok' : r.kernel.recommendation === 'reject' ? 'bad' : 'warn'
+        const buttons = r.verdict ? [] : ['accepted', 'modified', 'rejected'].map((v) => el('button', { class: 'ghost', style: 'flex:0 0 auto', onclick: async () => { try { await api('/api/shadow/' + encodeURIComponent(id) + '/recommendations/' + r.id + '/verdict', { value: v }); await loadShadow(id) } catch (e) { alertBox.textContent = e.message } } }, v))
+        const alertBox = el('div', { class: 'msg bad' })
+        return el('div', { class: 'item' },
+          el('div', {}, r.description),
+          el('div', {}, el('span', { class: 'tag' }, r.department), el('span', { class: 'tag ' + kcls }, 'kernel: ' + r.kernel.recommendation + ', risk ' + r.kernel.riskLevel), r.prediction ? el('span', { class: 'tag' }, 'Aura: ' + Math.round(r.prediction.accept * 100) + '% accept') : '', verdict || ''),
+          buttons.length ? el('div', { class: 'row' }, ...buttons) : '', alertBox)
+      }))
+    } catch (e) { say('shadow-summary', e.message, 'bad') }
+  }
+
+  $('save-token').addEventListener('click', signIn)
+  $('create').addEventListener('click', async () => {
+    try { const { intent } = await api('/api/intents', { objective: $('objective').value }); say('create-msg', 'Created ' + intent.id, 'ok'); $('objective').value = ''; await loadIntents(); await openIntent(intent.id) }
+    catch (e) { say('create-msg', e.message, 'bad') }
+  })
+  $('generate').addEventListener('click', async () => {
+    if (!current) return
+    const departments = $('gen-depts').value.split(',').map((d) => d.trim().toLowerCase()).filter(Boolean)
+    try { const r = await api('/api/shadow/' + encodeURIComponent(current.id) + '/generate', { departments }); say('shadow-summary', 'The agent proposed ' + r.added.length + (r.refused && r.refused.length ? ' (' + r.refused.length + ' refused)' : '') + '. Nothing was executed.', 'ok'); setTimeout(() => loadShadow(current.id), 800) }
+    catch (e) { say('shadow-summary', e.message, 'bad') }
+  })
+  if (token) signIn()
+})()
+</script>
+</body>
+</html>

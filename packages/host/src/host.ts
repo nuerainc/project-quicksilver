@@ -1,4 +1,5 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
+import { readFileSync } from 'node:fs'
 import type { AddressInfo } from 'node:net'
 
 import { AccessController, type AccessDecision, type Principal } from '@quicksilver/kernel/identity'
@@ -51,6 +52,16 @@ export interface HostDependencies {
   intent?: IntentApiDeps
   /** Shadow mode for the Onboard pilot (M4). Routes return 404 when absent. */
   shadow?: ShadowApiDeps
+}
+
+const CONSOLE_HEADERS = {
+  'content-security-policy': "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; img-src 'self'; form-action 'none'; base-uri 'none'; frame-ancestors 'none'",
+  'referrer-policy': 'no-referrer',
+}
+let consoleHtml: string | undefined
+function consolePage(): string {
+  consoleHtml ??= readFileSync(new URL('./console.html', import.meta.url), 'utf8')
+  return consoleHtml
 }
 
 const RUN_STATUSES: readonly WorkflowRunStatus[] = ['queued', 'running', 'completed', 'blocked', 'cancelled', 'dead-lettered']
@@ -270,6 +281,7 @@ export class QuicksilverHost {
         'content-type': out.contentType ?? 'application/json; charset=utf-8',
         'cache-control': 'no-store',
         'x-content-type-options': 'nosniff',
+        ...(out.headers ?? {}),
       })
       res.end(typeof out.body === 'string' ? out.body : JSON.stringify(out.body))
     } catch (error) {
@@ -282,7 +294,7 @@ export class QuicksilverHost {
     }
   }
 
-  private async dispatch(req: IncomingMessage, url: URL): Promise<{ status: number; body: unknown; contentType?: string }> {
+  private async dispatch(req: IncomingMessage, url: URL): Promise<{ status: number; body: unknown; contentType?: string; headers?: Record<string, string> }> {
     const method = req.method ?? 'GET'
     const path = url.pathname.replace(/\/+$/, '') || '/'
     const parts = path.split('/').filter(Boolean)
@@ -306,6 +318,11 @@ export class QuicksilverHost {
       if (raw === undefined) return this.webhookResult(parts[1]!, { status: 413, body: { accepted: false, error: 'Body too large.' } })
       const outcome = await this.webhooks!.receive(parts[1]!, { get: (name) => headerValue(req, name) }, raw)
       return this.webhookResult(parts[1]!, outcome)
+    }
+
+    // The console page (M3 web entry point). It holds no data: it calls the API with the viewer's own token.
+    if (method === 'GET' && (path === '/' || path === '/console') && this.deps.intent) {
+      return { status: 200, body: consolePage(), contentType: 'text/html; charset=utf-8', headers: CONSOLE_HEADERS }
     }
 
     if (parts[0] !== 'api') return { status: 404, body: { error: 'Not found.' } }

@@ -110,3 +110,17 @@ test('the shadow-stage agent proposes; departments it was not asked about are re
     assert.equal((await none.call(`/api/shadow/${none.intentId}/generate`, none.tokens.founder, {})).status, 501)
   } finally { await none.host.stop() }
 })
+
+test('the console page is served without data, with a strict content policy', async () => {
+  const { host } = await start()
+  try {
+    const port = (host as any).server.address().port
+    const r = await fetch(`http://127.0.0.1:${port}/console`)
+    assert.equal(r.status, 200)
+    assert.match(r.headers.get('content-type') ?? '', /text\/html/)
+    assert.match(r.headers.get('content-security-policy') ?? '', /connect-src 'self'/)
+    const html = await r.text()
+    assert.match(html, /<title>Quicksilver Console<\/title>/)
+    assert.doesNotMatch(html, /intent-[0-9a-f]{8}/, 'no intent data is embedded in the page')
+  } finally { await host.stop() }
+})
