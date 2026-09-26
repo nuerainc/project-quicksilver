@@ -45,7 +45,7 @@ The M2 host runs on the founder's computer; always-on hosting is part of M5.
 - persistence: append-only file and Sanity stores for the ledger, verified on
   every load, and Studio schemas `intentLedgerEntry` and `intentGraph`
 
-The first impact-ranking test scored 56.3% (below the 63% chance rate); the
+Choice agreement (the primary criterion): predictor v1 scored 6/38 (15.8%, below 25% chance). It cannot pick compromise options, which the founder chose most often, so v2 is to be frozen and tested on fresh scenarios. The first impact-ranking test scored 56.3% (below the 63% chance rate); the
 revised charter makes choice agreement the primary measure. Calibration now
 starts from a 36-item intent profile (six dimensions, consistency checks, red
 lines). The 38 blind choice scenarios test whether Aura can predict the

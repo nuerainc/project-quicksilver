@@ -152,6 +152,33 @@ releasing a v2, never a silent edit.
 npm run aura:choices -- --profile profile-answers.json --choices scenario-answers.json --detail
 ```
 
+### Predictor v1 result (2026-09-26): 6/38 (15.8%), below chance
+
+The founder answered all 38 scenarios, 37 of them marked "sure", after v1
+was frozen and pushed. v1 scored 6/38 overall and 6/25 (24%) on the
+scenarios it covers, both at or below chance. The misses show two design
+flaws and one missing ingredient:
+
+- **Compromise options can never win.** A linear sum of dimension scores
+  always favors an extreme option. The founder chose the middle-ground
+  option in 9 of the 25 covered scenarios (a labeled sponsorship, a small
+  pop-up instead of a loan, a premium tier that keeps small-farm prices, a
+  3-month test with a stop point).
+- **Practical fixes score zero.** An option expressing no profile dimension
+  ("export the records, then cancel") could never win. The founder chose one
+  6 times.
+- **Hard requirements come first.** The founder's notes ("it needs to work",
+  "it's limited to 15", "do it right") show stated requirements eliminating
+  options before any trade-off is weighed.
+- "Ask" was chosen twice, both times when other people's data or authority
+  was involved.
+
+v1 stays recorded as failed; it is not retuned. v2 changes the method:
+requirements eliminate options first, then the least-sacrifice option wins
+(no goal badly sacrificed), with extremes only for strong profile leans. It
+will be frozen before it is tested on a fresh scenario set, since these 38
+are now seen. The founder's raw answers are kept out of the repository.
+
 ## Entry point
 
 ```ts
@@ -232,7 +259,7 @@ Azure run on the development set (2026-09-26, before these fixes): baseline
 
 | Criterion | Status |
 |---|---|
-| Choice agreement ≥ 70% and ≥ 2× chance (primary, revised charter) | Founder takes the intent profile (`eval/intent-profile-v1.json`), then Aura predicts the 38 blind scenarios in `eval/choice-scenarios.json` |
+| Choice agreement ≥ 70% and ≥ 2× chance (primary, revised charter) | **Not met: predictor v1 scored 6/38 (15.8%)**, below 25% chance, 2026-09-26. v2 needs a fresh scenario set |
 | ≥ 90% parsing accuracy | **Met on the held-out set:** model parser 27/30 (90.0%) on Azure, 2026-09-26. Confirm on a larger fresh set |
 | 100% provenance tagging | Enforced by validation; true on all 52 labeled objectives |
 | 0 unsupported inferences | Enforced by validation; 0 on all 52 |
