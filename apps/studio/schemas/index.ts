@@ -17,6 +17,7 @@ import shadowRecommendation from './shadow-recommendation'
 import auraVerdictLearner from './aura-verdict-learner'
 import moneyEntry from './money-entry'
 import experimentRecord from './experiment-record'
+import contentReview from './content-review'
 
 export const schemaTypes = [
   organization,
@@ -38,4 +39,5 @@ export const schemaTypes = [
   auraVerdictLearner,
   moneyEntry,
   experimentRecord,
+  contentReview,
 ]

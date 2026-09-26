@@ -276,3 +276,63 @@ test('the file store uses the CLI layout: <dir>/<runId>/{experiments,ledger,run}
     assert.ok((await read('run.json')).startedAt)
   } finally { await rm(dir, { recursive: true, force: true }) }
 })
+
+const R = '/api/genesis/reviews'
+const offer = 'Get a margin report for your feed store in 48 hours.'
+
+test('reviews: only a human provider records a manual founder review, with the caller as reviewer; GET lists them apart from WAES', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'genesis-reviews-'))
+  try {
+    const { host, call, tokens } = await start({ config: { ...runConfig(), waesManualReviewAllowed: true }, store: new FileGenesisStore(dir) })
+    try {
+      assert.equal((await call(R, tokens.agent, { text: offer, channel: 'landing-page', verdict: 'pass' })).status, 403, 'an agent cannot approve text')
+      assert.equal((await call(R, tokens.viewer, { text: offer, channel: 'landing-page', verdict: 'pass' })).status, 403)
+
+      const made = await call(R, tokens.founder, { text: offer, channel: 'landing-page', verdict: 'pass', note: 'Plain claim.', reviewer: 'someone-else', kind: 'waes', components: ['SENTINEL'] })
+      assert.equal(made.status, 201)
+      const r = made.body.review
+      assert.equal(r.kind, 'manual', 'the body cannot make it a WAES review')
+      assert.deepEqual(r.components, ['MANUAL-FOUNDER-REVIEW'])
+      assert.equal(r.reviewer, 'entity-founder', 'the reviewer is always the caller')
+      assert.equal(r.reviewerKind, 'human')
+      assert.equal(r.text, offer)
+      assert.equal(r.note, 'Plain claim.')
+      assert.equal(made.body.executed, false)
+      assert.match(made.body.label, /not a WAES evaluation/)
+
+      // A later decision on changed text is a new record; nothing is rewritten.
+      assert.equal((await call(R, tokens.founder, { text: `${offer} Now 50% off!`, channel: 'landing-page', verdict: 'revise' })).status, 201)
+
+      const g = await call('/api/genesis', tokens.viewer)
+      assert.equal(g.body.config.waesManualReviewAllowed, true)
+      assert.equal(g.body.config.waesRequired, true)
+      assert.equal(g.body.reviews.length, 2)
+      assert.equal(g.body.reviews[0].verdict, 'revise', 'newest first')
+      assert.deepEqual(g.body.reviewSummary.manual, { total: 2, pass: 1, revise: 1, block: 0 })
+      assert.deepEqual(g.body.reviewSummary.waes, { total: 0, pass: 0, revise: 0, block: 0 })
+    } finally { await host.stop() }
+    const stored = JSON.parse(await readFile(join(dir, 'genesis-test', 'reviews.json'), 'utf8'))
+    assert.equal(stored.length, 2)
+    assert.equal(stored[0].contentDigest, (await import('@quicksilver/kernel/waes')).waesContentDigest(offer))
+  } finally { await rm(dir, { recursive: true, force: true }) }
+})
+
+test('reviews: input validation, unknown experiments, and the policy note when manual reviews are not accepted', async () => {
+  const { host, call, tokens } = await start()
+  try {
+    const bad = async (body: unknown) => (await call(R, tokens.founder, body)).status
+    assert.equal(await bad({ channel: 'email', verdict: 'pass' }), 422)
+    assert.equal(await bad({ text: '   ', channel: 'email', verdict: 'pass' }), 422)
+    assert.equal(await bad({ text: 'x'.repeat(20_001), channel: 'email', verdict: 'pass' }), 422)
+    assert.equal(await bad({ text: offer, channel: 'Email!', verdict: 'pass' }), 422)
+    assert.equal(await bad({ text: offer, channel: 'email', verdict: 'approve' }), 422)
+    assert.equal(await bad({ text: offer, channel: 'email', verdict: 'pass', note: 'n'.repeat(501) }), 422)
+    assert.equal(await bad({ text: offer, channel: 'email', verdict: 'pass', experimentId: 'no-such' }), 404)
+    await call(E, tokens.founder, { definition: definition() })
+    const ok = await call(R, tokens.founder, { text: offer, channel: 'email', verdict: 'block', experimentId: 'exp-landing' })
+    assert.equal(ok.status, 201)
+    assert.equal(ok.body.review.experimentId, 'exp-landing')
+    assert.match(ok.body.counts, /does not accept manual founder reviews/, 'runConfig() leaves waesManualReviewAllowed unset (off)')
+    assert.equal((await call('/api/genesis', tokens.viewer)).body.config.waesManualReviewAllowed, false)
+  } finally { await host.stop() }
+})

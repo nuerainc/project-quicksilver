@@ -5,16 +5,19 @@ import { experimentDigest, verifyMoneyLedger, type Experiment, type ExperimentSt
 
 import { assertAllowedSanityProject, createSanityStoreClient, idSegment, isSanityConflict, type SanityStoreClient } from './sanity-client.ts'
 import type { GenesisState, GenesisStore } from './genesis-api.ts'
+import { checkReviewAppend, ContentReviewConflictError, sameReview, sortReviews, type ContentReviewRecord } from './genesis-reviews.ts'
 import type { GenesisRunConfig } from '@quicksilver/kernel/playbooks/genesis'
 
 /**
- * Persistence for Genesis (M5): the money ledger and the run's experiments.
+ * Persistence for Genesis (M5): the money ledger, the run's experiments and
+ * its content reviews (manual founder reviews of customer-facing text).
  *
- *   File (default)  <dir>/<runId>/ledger.json and experiments.json, the layout
- *                   genesis-cli has always used; every write is atomic
- *                   (write a temp file, then rename).
+ *   File (default)  <dir>/<runId>/ledger.json, experiments.json and reviews.json,
+ *                   the layout genesis-cli has always used; every write is
+ *                   atomic (write a temp file, then rename).
  *   Sanity          moneyEntry     one per ledger entry, id "money-entry.<runId>.<seq>"
  *                   experimentRecord one per experiment, id "experiment-record.<runId>.<experimentId>"
+ *                   contentReview  one per review, id "content-review.<runId>.<reviewId>"
  *                   Ids contain a dot, which keeps them out of unauthenticated reads.
  *
  * Rules every store enforces:
@@ -26,6 +29,9 @@ import type { GenesisRunConfig } from '@quicksilver/kernel/playbooks/genesis'
  *     Its start stamp is set once, and its measurements and decisions only
  *     grow. Violations throw ExperimentRecordError. A write that loses a race
  *     to another writer throws ExperimentConflictError.
+ *   - Content reviews are append-only: a reviewId is written once, and a
+ *     different record under a taken id throws ContentReviewConflictError.
+ *     A new decision is a new record.
  */
 
 export interface MoneyLedgerStore {
@@ -40,6 +46,13 @@ export interface ExperimentStore {
   list(runId: string): Promise<Experiment[]>
   /** Create or update one experiment (keyed by definition.id). */
   put(runId: string, experiment: Experiment): Promise<void>
+}
+
+export interface ContentReviewStore {
+  /** Reviews of the run, oldest first. */
+  list(runId: string): Promise<ContentReviewRecord[]>
+  /** Append one review; never rewrites a stored one. */
+  append(runId: string, review: ContentReviewRecord): Promise<void>
 }
 
 export class MoneyLedgerIntegrityError extends Error {
@@ -196,6 +209,26 @@ export class FileExperimentStore implements ExperimentStore {
     if (i >= 0) all[i] = experiment
     else all.push(experiment)
     await writeJsonAtomic(this.path(runId), all)
+  }
+}
+
+/** <dir>/<runId>/reviews.json holding every content review of the run, append-only. */
+export class FileContentReviewStore implements ContentReviewStore {
+  private readonly dir: string
+  constructor(dir: string) {
+    this.dir = dir
+  }
+  private path(runId: string) {
+    checkRunId(runId)
+    return join(this.dir, runId, 'reviews.json')
+  }
+  async list(runId: string): Promise<ContentReviewRecord[]> {
+    return sortReviews(await readJson<ContentReviewRecord[]>(this.path(runId), []))
+  }
+  async append(runId: string, review: ContentReviewRecord): Promise<void> {
+    const all = await readJson<ContentReviewRecord[]>(this.path(runId), [])
+    if (!checkReviewAppend(runId, all, review)) return
+    await writeJsonAtomic(this.path(runId), [...all, review])
   }
 }
 
@@ -408,12 +441,95 @@ export class SanityExperimentStore implements ExperimentStore {
   }
 }
 
+export interface SanityContentReviewDocument {
+  _id: string
+  _type: 'contentReview'
+  runId: string
+  reviewId: string
+  kind: ContentReviewRecord['kind']
+  contentDigest: string
+  text: string
+  verdict: ContentReviewRecord['verdict']
+  components: string[]
+  reviewer: string
+  reviewerKind: ContentReviewRecord['reviewerKind']
+  reviewedAt: string
+  note?: string
+  experimentId?: string
+  channel: string
+}
+
+export function contentReviewDocumentId(runId: string, reviewId: string): string {
+  checkRunId(runId)
+  return `content-review.${idSegment(runId)}.${idSegment(reviewId)}`
+}
+
+export function toContentReviewDocument(runId: string, r: ContentReviewRecord): SanityContentReviewDocument {
+  return {
+    _id: contentReviewDocumentId(runId, r.reviewId),
+    _type: 'contentReview',
+    runId,
+    reviewId: r.reviewId,
+    kind: r.kind,
+    contentDigest: r.contentDigest,
+    text: r.text,
+    verdict: r.verdict,
+    components: [...r.components],
+    reviewer: r.reviewer,
+    reviewerKind: r.reviewerKind,
+    reviewedAt: r.reviewedAt,
+    ...(r.note !== undefined ? { note: r.note } : {}),
+    ...(r.experimentId !== undefined ? { experimentId: r.experimentId } : {}),
+    channel: r.channel,
+  }
+}
+
+export function fromContentReviewDocument(d: SanityContentReviewDocument): ContentReviewRecord {
+  return {
+    reviewId: d.reviewId,
+    kind: d.kind,
+    contentDigest: d.contentDigest,
+    text: d.text,
+    verdict: d.verdict,
+    components: [...(d.components ?? [])],
+    reviewer: d.reviewer,
+    reviewerKind: d.reviewerKind,
+    reviewedAt: d.reviewedAt,
+    ...(d.note !== undefined ? { note: d.note } : {}),
+    ...(d.experimentId !== undefined ? { experimentId: d.experimentId } : {}),
+    channel: d.channel,
+  }
+}
+
+export class SanityContentReviewStore implements ContentReviewStore {
+  private readonly client: SanityStoreClient
+  constructor(client: SanityStoreClient) {
+    assertAllowedSanityProject(client.projectId)
+    this.client = client
+  }
+  async list(runId: string): Promise<ContentReviewRecord[]> {
+    checkRunId(runId)
+    const docs = await this.client.fetch<SanityContentReviewDocument[]>(
+      '*[_type == $type && runId == $runId && !(_id in path("drafts.**"))] | order(reviewedAt asc)',
+      { type: 'contentReview', runId },
+    )
+    return sortReviews([...docs].sort((a, b) => a._id.localeCompare(b._id)).map(fromContentReviewDocument))
+  }
+  async append(runId: string, review: ContentReviewRecord): Promise<void> {
+    checkReviewAppend(runId, [], review)
+    // createIfNotExists never overwrites: if the id is taken, Sanity returns the stored review.
+    const stored = await this.client.createIfNotExists(toContentReviewDocument(runId, review))
+    if (!sameReview(fromContentReviewDocument(stored), review)) throw new ContentReviewConflictError(runId, review.reviewId)
+  }
+}
+
 // ── Choosing a store ──────────────────────────────────────────────────────
 
 export interface GenesisStores {
   kind: 'file' | 'sanity'
   ledger: MoneyLedgerStore
   experiments: ExperimentStore
+  reviews: ContentReviewStore
 }
 
 /**
@@ -426,9 +542,9 @@ export async function genesisStoresFromEnv(options: { dir: string; budgetUsd: nu
   if ((env.QUICKSILVER_GENESIS_STORE ?? 'file').trim() === 'sanity') {
     const client = options.client ?? (await createSanityStoreClient(env))
     if (!client) throw new Error('QUICKSILVER_GENESIS_STORE=sanity needs NEXT_PUBLIC_SANITY_PROJECT_ID and SANITY_AUTH_TOKEN.')
-    return { kind: 'sanity', ledger: new SanityMoneyLedgerStore(client), experiments: new SanityExperimentStore(client) }
+    return { kind: 'sanity', ledger: new SanityMoneyLedgerStore(client), experiments: new SanityExperimentStore(client), reviews: new SanityContentReviewStore(client) }
   }
-  return { kind: 'file', ledger: new FileMoneyLedgerStore(options.dir, { budgetUsd: options.budgetUsd }), experiments: new FileExperimentStore(options.dir) }
+  return { kind: 'file', ledger: new FileMoneyLedgerStore(options.dir, { budgetUsd: options.budgetUsd }), experiments: new FileExperimentStore(options.dir), reviews: new FileContentReviewStore(options.dir) }
 }
 
 // ── Host API adapter ──────────────────────────────────────────────────────
@@ -455,4 +571,6 @@ export class StoresGenesisAdapter implements GenesisStore {
     for (const e of experiments) if (stored.get(e.definition.id) !== JSON.stringify(e)) await this.stores.experiments.put(runId, e)
   }
   async saveRun(): Promise<void> {}
+  loadReviews(runId: string): Promise<ContentReviewRecord[]> { return this.stores.reviews.list(runId) }
+  appendReview(runId: string, review: ContentReviewRecord): Promise<void> { return this.stores.reviews.append(runId, review) }
 }

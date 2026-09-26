@@ -21,6 +21,9 @@ import {
 } from '@quicksilver/kernel/playbooks/economics'
 import { decideSpend, genesisBlockers, genesisFacts, validateGenesisConfig, type GenesisRunConfig } from '@quicksilver/kernel/playbooks/genesis'
 
+import { checkReviewAppend, createManualReview, MANUAL_REVIEW_LABEL, parseContentReviewInput, reviewSummary, sortReviews, type ContentReviewRecord } from './genesis-reviews.ts'
+import { FileContentReviewStore } from './genesis-store.ts'
+
 /**
  * Genesis run on the host (M5): the same commands as `npm run genesis`, over HTTP.
  *
@@ -32,11 +35,16 @@ import { decideSpend, genesisBlockers, genesisFacts, validateGenesisConfig, type
  *   POST /api/genesis/experiments/:id/decide  { note? }      intent:provide, humans only
  *   POST /api/genesis/money  { kind, amountUsd, category, description, source, experimentId?, confirm? }
  *                                                            intent:provide, humans only
+ *   POST /api/genesis/reviews { text, channel, verdict, note?, experimentId? }
+ *                                                            intent:provide, humans only: records a
+ *                                                            MANUAL FOUNDER REVIEW of the exact text,
+ *                                                            with the caller as reviewer (never a WAES run)
  *
  * Nothing here moves money or executes an action. The money route RECORDS
  * money that has already moved, after the kernel's spend rules; every
- * response carries `executed: false`. Data uses the same layout as the CLI
- * (<dir>/<runId>/ledger.json, experiments.json, run.json), so both see it.
+ * response carries `executed: false`. A review sends and publishes nothing.
+ * Data uses the same layout as the CLI (<dir>/<runId>/ledger.json,
+ * experiments.json, run.json, reviews.json), so both see it.
  */
 
 export interface GenesisRunState {
@@ -54,6 +62,10 @@ export interface GenesisStore {
   saveLedger(runId: string, ledger: MoneyLedger): Promise<void>
   saveExperiments(runId: string, experiments: Experiment[]): Promise<void>
   saveRun(runId: string, run: GenesisRunState): Promise<void>
+  /** Content reviews (manual founder reviews of customer-facing text), oldest first. */
+  loadReviews(runId: string): Promise<ContentReviewRecord[]>
+  /** Append-only: a stored review is never rewritten. */
+  appendReview(runId: string, review: ContentReviewRecord): Promise<void>
 }
 
 export interface GenesisApiDeps {
@@ -84,10 +96,11 @@ const emptyState = (c: GenesisRunConfig): GenesisState => ({ ledger: { runId: c.
 
 // ── Stores ────────────────────────────────────────────────────────────────
 
-/** Files at <dir>/<runId>/{ledger,experiments,run}.json: the layout `npm run genesis` uses. */
+/** Files at <dir>/<runId>/{ledger,experiments,run,reviews}.json: the layout `npm run genesis` uses. */
 export class FileGenesisStore implements GenesisStore {
   private readonly dir: string
-  constructor(dir: string) { this.dir = dir }
+  private readonly reviews: FileContentReviewStore
+  constructor(dir: string) { this.dir = dir; this.reviews = new FileContentReviewStore(dir) }
   private path(runId: string, file: string) {
     if (!RUN_ID.test(runId)) throw new Error('Invalid run id.')
     return join(this.dir, runId, file)
@@ -115,6 +128,8 @@ export class FileGenesisStore implements GenesisStore {
   saveLedger(runId: string, ledger: MoneyLedger) { return this.write(runId, 'ledger.json', ledger) }
   saveExperiments(runId: string, experiments: Experiment[]) { return this.write(runId, 'experiments.json', experiments) }
   saveRun(runId: string, run: GenesisRunState) { return this.write(runId, 'run.json', run) }
+  loadReviews(runId: string) { return this.reviews.list(runId) }
+  appendReview(runId: string, review: ContentReviewRecord) { return this.reviews.append(runId, review) }
 }
 
 export class MemoryGenesisStore implements GenesisStore {
@@ -124,6 +139,12 @@ export class MemoryGenesisStore implements GenesisStore {
   async saveLedger(runId: string, ledger: MoneyLedger) { this.put(runId, { ledger }) }
   async saveExperiments(runId: string, experiments: Experiment[]) { this.put(runId, { experiments }) }
   async saveRun(runId: string, run: GenesisRunState) { this.put(runId, { run }) }
+  private readonly reviews = new Map<string, ContentReviewRecord[]>()
+  async loadReviews(runId: string) { return sortReviews(structuredClone(this.reviews.get(runId) ?? [])) }
+  async appendReview(runId: string, review: ContentReviewRecord) {
+    const current = this.reviews.get(runId) ?? []
+    if (checkReviewAppend(runId, current, review)) this.reviews.set(runId, [...current, structuredClone(review)])
+  }
 }
 
 // One write at a time per run, so concurrent requests cannot lose each other's entries.
@@ -248,6 +269,7 @@ export async function handleGenesisRoute(ctx: GenesisApiContext, deps: GenesisAp
     const denied = needAny('decision:read')
     if (denied) return denied
     const s = await store.load(config)
+    const reviews = await store.loadReviews(config.runId)
     const vault = await readVaultNames(deps)
     const totals = moneyTotals(s.ledger)
     const at = now()
@@ -262,6 +284,7 @@ export async function handleGenesisRoute(ctx: GenesisApiContext, deps: GenesisAp
           durationDays: config.durationDays,
           digitalOnly: config.digitalOnly,
           waesRequired: config.waesRequired,
+          waesManualReviewAllowed: config.waesManualReviewAllowed === true,
           allowedCategories: config.allowedCategories,
           prohibitedCategories: config.prohibitedCategories,
           spend: config.spend,
@@ -275,6 +298,9 @@ export async function handleGenesisRoute(ctx: GenesisApiContext, deps: GenesisAp
         experiments: s.experiments.map((e) => experimentView(e, totals.byExperiment[e.definition.id]?.capitalUsedUsd ?? 0, at)),
         facts,
         ledger: { entries: s.ledger.entries.length, verified: verifyMoneyLedger(s.ledger), recent: s.ledger.entries.slice(-10).reverse() },
+        // Manual founder reviews are counted apart from WAES reviews; newest first.
+        reviewSummary: reviewSummary(reviews),
+        reviews: reviews.slice(-20).reverse(),
         executes: false,
       },
     }
@@ -335,6 +361,38 @@ export async function handleGenesisRoute(ctx: GenesisApiContext, deps: GenesisAp
           ...(decision ? { decision, ...(decision.recommendation === 'request-approval' ? { approvedBy: principal.id } : {}) } : {}),
           executed: false,
           note: RECORDS_ONLY,
+        },
+      }
+    })
+  }
+
+  // POST /api/genesis/reviews
+  if (parts.length === 3 && parts[2] === 'reviews' && method === 'POST') {
+    const denied = humanOnly('records a manual founder review')
+    if (denied) return denied
+    const body = await bodyOf()
+    if (!body.ok) return body.res
+    const parsed = parseContentReviewInput(body.value)
+    if (!parsed.ok) return { status: 422, body: { error: parsed.error } }
+    const input = parsed.input
+    return withLock(config.runId, async () => {
+      if (input.experimentId) {
+        const s = await store.load(config)
+        if (!s.experiments.some((e) => e.definition.id === input.experimentId)) return { status: 404, body: { error: `No experiment "${input.experimentId}".` } }
+      }
+      const r = createManualReview(input, actor, now())
+      if (!r.ok) return { status: 422, body: { error: 'Not recorded.', reasons: r.reasons } }
+      await store.appendReview(config.runId, r.review)
+      return {
+        status: 201,
+        body: {
+          review: r.review,
+          label: MANUAL_REVIEW_LABEL,
+          counts: config.waesManualReviewAllowed === true
+            ? 'This run accepts manual founder reviews at the WAES gate; the gate records the pass as manual.'
+            : 'This run does not accept manual founder reviews at the WAES gate; this record alone will not unlock the text.',
+          executed: false,
+          note: 'Recorded only. Nothing was sent or published.',
         },
       }
     })

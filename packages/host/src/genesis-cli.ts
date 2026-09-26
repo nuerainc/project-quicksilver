@@ -12,6 +12,9 @@
  *   npm run genesis -- revenue <amountUsd> "<what>" --source <type>:<ref> [--experiment <id>]
  *   npm run genesis -- refund <amountUsd> <category> "<what>" --source <type>:<ref>
  *   npm run genesis -- status
+ *   npm run genesis -- review <file-or-"text"> --channel <c> [--experiment <id>] pass|revise|block ["note"]
+ *   npm run genesis -- reviews
+ *   npm run genesis -- check-content <file-or-"text"> [--proposer <actorId>]
  *
  * These commands RECORD money that has already moved and apply the fixed
  * rules. They never move money. Data lives in data/genesis/<runId>/ (gitignored),
@@ -19,6 +22,10 @@
  * experimentRecord documents; see genesis-store.ts).
  * You act as QUICKSILVER_GENESIS_ACTOR (default entity-founder), a human;
  * `evaluate` acts as the kernel, which may only kill, continue or close.
+ *
+ * `review` records a MANUAL FOUNDER REVIEW of the exact text (you, a human, are
+ * the reviewer). It is never a WAES run and is always labeled as manual. The
+ * review commands send and publish nothing.
  */
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
@@ -43,6 +50,7 @@ import {
 import { decideSpend, genesisBlockers, genesisFacts, validateGenesisConfig, type GenesisRunConfig } from '@quicksilver/kernel/playbooks/genesis'
 
 import { loadHostConfig } from './config.ts'
+import { contentStatus, createManualReview, MANUAL_REVIEW_LABEL, parseContentReviewInput, readContentArg, reviewSummary } from './genesis-reviews.ts'
 import { genesisStoresFromEnv, MoneyLedgerIntegrityError, runStartedAt } from './genesis-store.ts'
 import { SecretsVault } from './vault.ts'
 
@@ -53,7 +61,7 @@ const founder = { id: actorId, kind: 'human' as const }
 const kernelActor = { id: 'kernel', kind: 'service' as const }
 const [cmd, ...args] = process.argv.slice(2)
 const flag = (name: string) => { const i = args.indexOf(name); return i >= 0 ? args[i + 1] : undefined }
-const VALUE_FLAGS = ['--source', '--experiment']
+const VALUE_FLAGS = ['--source', '--experiment', '--channel', '--proposer']
 const positional = args.filter((a, i) => !a.startsWith('--') && !(i > 0 && VALUE_FLAGS.includes(args[i - 1]!)))
 
 function fail(message: string): never { console.error(message); process.exit(1) }
@@ -222,8 +230,68 @@ switch (cmd) {
       console.log(`    ${m.label}: latest ${e.measurements.at(-1)?.value ?? '—'} (kill ${m.kill}, hold ${m.hold}, scale ${m.scale}); spent ${usd(money?.capitalUsedUsd ?? 0)} of ${usd(e.definition.budgetUsd)}`)
     }
     console.log(`  Ledger: ${ledger.entries.length} entries, chain verified.`)
+    const rs = reviewSummary(await stores.reviews.list(config.runId))
+    console.log(`  WAES reviews: ${rs.waes.total} (pass ${rs.waes.pass}, revise ${rs.waes.revise}, block ${rs.waes.block}).`)
+    console.log(`  Manual founder reviews (not WAES): ${rs.manual.total} (pass ${rs.manual.pass}, revise ${rs.manual.revise}, block ${rs.manual.block}); manual reviews are ${config.waesManualReviewAllowed === true ? 'accepted' : 'NOT accepted'} at the WAES gate.`)
+    break
+  }
+  case 'review': {
+    const [arg, verdict, note] = positional
+    const usage = 'Usage: review <file-or-"text"> --channel <channel> [--experiment <id>] pass|revise|block ["note"]'
+    if (!arg) fail(usage)
+    const content = await readContentArg(arg, root)
+    const experimentId = flag('--experiment')
+    if (experimentId) findExperiment(experimentId)
+    const parsed = parseContentReviewInput({ text: content.text, channel: flag('--channel'), verdict, ...(note !== undefined ? { note } : {}), ...(experimentId ? { experimentId } : {}) })
+    if (!parsed.ok) fail(`${parsed.error}\n${usage}`)
+    const r = createManualReview(parsed.input, founder, new Date())
+    if (!r.ok) fail(r.reasons.join(' '))
+    await stores.reviews.append(config.runId, r.review)
+    console.log(`${MANUAL_REVIEW_LABEL}. Recorded ${r.review.verdict} for ${r.review.channel} text ${content.from === 'file' ? `from ${content.path}` : '(from the argument)'}.`)
+    console.log(`  reviewId ${r.review.reviewId}`)
+    console.log(`  digest   ${r.review.contentDigest}`)
+    console.log(`  reviewer ${r.review.reviewer} (human)`)
+    if (config.waesManualReviewAllowed !== true) console.log('  ! This run does not accept manual reviews at the WAES gate, so this record alone will not unlock the text.')
+    console.log('Nothing was sent or published.')
+    break
+  }
+  case 'reviews': {
+    const list = await stores.reviews.list(config.runId)
+    if (!list.length) { console.log('No content reviews recorded yet.'); break }
+    for (const r of list) {
+      const label = r.kind === 'manual' ? 'MANUAL FOUNDER REVIEW (not WAES)' : `WAES (${r.components.join(', ')})`
+      const first = r.text.replace(/\s+/g, ' ').trim()
+      console.log(`${r.reviewedAt}  ${r.verdict.toUpperCase().padEnd(6)} ${label}  ${r.channel}${r.experimentId ? ` · ${r.experimentId}` : ''} · by ${r.reviewer}`)
+      console.log(`  ${r.reviewId}  digest ${r.contentDigest.slice(0, 16)}…`)
+      console.log(`  "${first.length > 100 ? `${first.slice(0, 100)}…` : first}"${r.note ? `  note: ${r.note}` : ''}`)
+    }
+    const rs = reviewSummary(list)
+    console.log(`WAES reviews: ${rs.waes.total}. Manual founder reviews: ${rs.manual.total}.`)
+    break
+  }
+  case 'check-content': {
+    const [arg] = positional
+    if (!arg) fail('Usage: check-content <file-or-"text"> [--proposer <actorId>]')
+    const content = await readContentArg(arg, root)
+    const proposer = flag('--proposer')
+    const st = contentStatus(config, await stores.reviews.list(config.runId), content.text, proposer ?? '\u0000unnamed-proposer')
+    console.log(`digest ${st.contentDigest} (${content.from === 'file' ? content.path : 'text from the argument'})`)
+    if (!st.review) console.log('No review covers this exact text.')
+    else {
+      const r = st.review
+      console.log(`Latest review of this exact text: ${r.verdict} by ${r.reviewer} at ${r.reviewedAt} (${r.reviewId}), ${st.reviewsOfThisText} review(s) of it in all.`)
+      console.log(r.kind === 'manual' ? `  ${MANUAL_REVIEW_LABEL}.` : `  WAES review (${r.components.join(', ')}).`)
+    }
+    if (st.passes) {
+      console.log(`PASSES the WAES gate${st.manual ? ' on a MANUAL founder review (recorded as waes.reviewKind: manual)' : ''}${proposer ? ` for an action proposed by ${proposer}` : ''}.`)
+      if (!proposer && st.review) console.log(`  An action proposed by ${st.review.reviewer} would still be refused: the reviewer must differ from the proposer.`)
+    } else {
+      console.log(`BLOCKED at the WAES gate (${st.facts['waes.review']}): ${st.reason}`)
+      process.exitCode = 1
+    }
+    console.log('Nothing was sent or published.')
     break
   }
   default:
-    console.log('Commands: check, experiment draft|start, measure, evaluate, decide, spend, compute, revenue, refund, status. See the header of packages/host/src/genesis-cli.ts.')
+    console.log('Commands: check, experiment draft|start, measure, evaluate, decide, spend, compute, revenue, refund, status, review, reviews, check-content. See the header of packages/host/src/genesis-cli.ts.')
 }

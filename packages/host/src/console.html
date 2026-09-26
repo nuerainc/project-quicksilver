@@ -110,6 +110,22 @@ h3 { font-size: 14px; margin: 12px 0 4px; }
     <label class="check"><input id="m-confirm" type="checkbox">I approve this as myself if the rules say the founder must decide</label>
     <button id="m-record">Record money</button>
     <div class="msg" id="money-msg"></div>
+    <h3>Review customer-facing text</h3>
+    <p class="msg warn"><strong>Manual founder review — not a WAES evaluation.</strong> Records your decision on the exact text below (bound by its digest). Nothing is sent or published. Changed text needs a new review.</p>
+    <p class="msg" id="r-policy"></p>
+    <label for="r-text">Exact text customers would see</label>
+    <textarea id="r-text" maxlength="20000"></textarea>
+    <div class="row">
+      <div><label for="r-channel">Channel</label><select id="r-channel"><option>landing-page</option><option>email</option><option>ad</option><option>social-post</option><option>other</option></select></div>
+      <div><label for="r-verdict">Decision</label><select id="r-verdict"><option value="pass">pass</option><option value="revise">revise</option><option value="block">block</option></select></div>
+      <div><label for="r-experiment">Experiment</label><select id="r-experiment"><option value="">none</option></select></div>
+    </div>
+    <label for="r-note">Note (optional)</label>
+    <input id="r-note" maxlength="500" autocomplete="off">
+    <button id="r-record">Record manual review</button>
+    <div class="msg" id="review-msg"></div>
+    <h3>Recent content reviews</h3>
+    <div id="reviews"></div>
   </section>
 </main>
 <script>
@@ -303,9 +319,42 @@ h3 { font-size: 14px; margin: 12px 0 4px; }
       el('h3', {}, 'Experiments'),
       ...(g.experiments.length ? g.experiments.map(experimentItem) : [el('div', { class: 'msg' }, 'No experiments drafted yet.')]),
       ...(recent.length ? [el('h3', {}, 'Recent money entries'), ...recent] : []))
-    const sel = $('m-experiment'), keep = sel.value
-    sel.replaceChildren(el('option', { value: '' }, 'none'), ...g.experiments.map((x) => el('option', { value: x.definition.id }, x.definition.id + ' (' + x.status + ')')))
-    sel.value = g.experiments.some((x) => x.definition.id === keep) ? keep : ''
+    for (const id of ['m-experiment', 'r-experiment']) {
+      const sel = $(id), keep = sel.value
+      sel.replaceChildren(el('option', { value: '' }, 'none'), ...g.experiments.map((x) => el('option', { value: x.definition.id }, x.definition.id + ' (' + x.status + ')')))
+      sel.value = g.experiments.some((x) => x.definition.id === keep) ? keep : ''
+    }
+    renderReviews(g)
+  }
+  function renderReviews(g) {
+    const rs = g.reviewSummary || { waes: { total: 0 }, manual: { total: 0 } }
+    const policy = $('r-policy')
+    policy.className = 'msg ' + (g.config.waesManualReviewAllowed ? '' : 'warn')
+    policy.textContent = (g.config.waesManualReviewAllowed
+      ? 'This run accepts manual founder reviews at the WAES gate until WAES runs as a service; a pass is recorded as manual.'
+      : 'This run does not accept manual founder reviews at the WAES gate.') + ' WAES reviews: ' + rs.waes.total + ' · manual founder reviews: ' + rs.manual.total + '.'
+    const list = (g.reviews || []).slice(0, 10).map((r) => {
+      const cls = r.verdict === 'pass' ? 'ok' : r.verdict === 'block' ? 'bad' : 'warn'
+      const text = r.text.replace(/\s+/g, ' ').trim()
+      return el('div', { class: 'item' },
+        el('div', {}, el('span', { class: 'tag ' + cls }, r.verdict), el('span', { class: 'tag' }, r.kind === 'manual' ? 'Manual founder review — not a WAES evaluation' : 'WAES: ' + r.components.join(', ')), el('span', { class: 'tag' }, r.channel), r.experimentId ? el('span', { class: 'tag' }, r.experimentId) : ''),
+        el('div', {}, text.length > 240 ? text.slice(0, 240) + '…' : text),
+        el('div', { class: 'msg' }, 'by ' + r.reviewer + ' · ' + fmtTime(r.reviewedAt) + ' · ', el('span', { class: 'mono' }, r.contentDigest.slice(0, 12) + '…'), r.note ? ' · ' + r.note : ''))
+    })
+    $('reviews').replaceChildren(...(list.length ? list : [el('div', { class: 'msg' }, 'No content reviews yet.')]))
+  }
+  async function recordReview() {
+    const box = $('review-msg')
+    const body = { text: $('r-text').value, channel: $('r-channel').value, verdict: $('r-verdict').value }
+    if ($('r-note').value.trim()) body.note = $('r-note').value
+    if ($('r-experiment').value) body.experimentId = $('r-experiment').value
+    try {
+      const r = await api('/api/genesis/reviews', body)
+      box.className = 'msg ok'
+      box.textContent = r.label + ': recorded ' + r.review.verdict + ' (' + r.review.reviewId + ', digest ' + r.review.contentDigest.slice(0, 12) + '…). ' + r.counts + ' ' + r.note
+      $('r-note').value = ''
+      await loadGenesis()
+    } catch (e) { fail(box, e) }
   }
   async function recordMoney() {
     const box = $('money-msg')
@@ -328,6 +377,7 @@ h3 { font-size: 14px; margin: 12px 0 4px; }
   $('ledger-company').addEventListener('keydown', (ev) => { if (ev.key === 'Enter') loadLedger() })
   try { $('ledger-company').value = sessionStorage.getItem('qs-company') || '' } catch {}
   $('m-record').addEventListener('click', recordMoney)
+  $('r-record').addEventListener('click', recordReview)
   if (token) signIn()
 })()
 </script>
