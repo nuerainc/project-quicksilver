@@ -11,8 +11,8 @@
  * learned from the answers being predicted.
  */
 
-export type ChoiceArm = 'profile' | 'none' | 'examples' | 'rules' | 'rules+examples'
-export const CHOICE_ARMS: readonly ChoiceArm[] = ['profile', 'none', 'examples', 'rules', 'rules+examples']
+export type ChoiceArm = 'profile' | 'none' | 'examples' | 'rules' | 'rules+examples' | 'all'
+export const CHOICE_ARMS: readonly ChoiceArm[] = ['profile', 'none', 'examples', 'rules', 'rules+examples', 'all']
 
 export interface ChoiceScenario {
   id: string
@@ -68,10 +68,13 @@ export interface ChoiceContext {
   profileText?: string
   examplesText?: string
   principlesText?: string
+  /** "all" arm, rolling mode: this set's earlier answers, each added only after it was predicted. */
+  earlierText?: string
 }
 
-export function systemForArm(arm: ChoiceArm): string {
-  return arm === 'rules' || arm === 'rules+examples' ? CHOICE_SYSTEM_RULES : CHOICE_SYSTEM
+export function systemForArm(arm: ChoiceArm, options: { goals?: boolean } = {}): string {
+  const base = arm === 'all' ? CHOICE_SYSTEM_ALL : arm === 'rules' || arm === 'rules+examples' ? CHOICE_SYSTEM_RULES : CHOICE_SYSTEM
+  return options.goals ? `${base}\n${CHOICE_GOALS_METHOD}` : base
 }
 
 function contextFor(arm: ChoiceArm, ctx: ChoiceContext): string {
@@ -81,6 +84,7 @@ function contextFor(arm: ChoiceArm, ctx: ChoiceContext): string {
     case 'rules': return ctx.principlesText ?? ''
     case 'rules+examples': return `${ctx.principlesText ?? ''}\n\n${ctx.examplesText ?? ''}`
     case 'none': return 'Nothing else is known about the provider.'
+    case 'all': return [ctx.principlesText, ctx.profileText, ctx.examplesText, ctx.earlierText].filter((t) => t?.trim()).join('\n\n')
   }
 }
 
@@ -97,4 +101,30 @@ export function buildChoicePrompt(arm: ChoiceArm, s: ChoiceScenario, ctx: Choice
     'Options:',
     ...ids.map((id) => `- ${id}: ${s.options[id]}`),
   ].filter((l) => l !== '').join('\n')
+}
+
+/*
+ * Added 2026-09-26 (exploratory until frozen as predictor v3). Everything the
+ * provider has given, in one prompt, plus two optional methods:
+ *   - goals: score each option against each stated goal separately (the
+ *     charter's rule: "options are scored against each goal separately, never
+ *     as one blended score") before choosing;
+ *   - rolling: predict-then-learn within the set; each answer joins the prompt
+ *     only after that scenario has been predicted.
+ * These were written after the founder's set 1 and set 2 answers were seen, so
+ * results on those sets are exploratory, never a criterion test.
+ */
+
+/** System prompt for the "all" arm. */
+export const CHOICE_SYSTEM_ALL = `${CHOICE_SYSTEM}
+Everything this provider has told you comes first: their own principles (when given) take priority over general common sense, their profile shows how they lean, and their earlier decisions show how they actually decide. Weigh their earlier decisions most heavily when a situation resembles one of them.`
+
+/** Added to any system prompt with --goals. */
+export const CHOICE_GOALS_METHOD = `Method: first list every goal the provider stated or clearly implied (including limits like "don't burn out my staff" or "don't change what we are"). Then check each option against each goal separately: which goals it keeps and which it gives up. Do not blend them into one score. An option that gives up a stated goal loses to one that keeps every goal, unless the provider's own principles or earlier decisions say otherwise. Then choose.`
+
+/** This set's answers so far, for rolling (predict-then-learn) mode. Only scenarios already predicted may be passed. */
+export function buildEarlierText(earlier: ChoiceScenario[], answers: Record<string, ScenarioAnswer>): string {
+  const answered = earlier.filter((e) => answers[e.id]?.choice)
+  if (!answered.length) return ''
+  return buildExamplesText(answered, answers).replace(/^Here are earlier decisions this same provider made/, 'Here are decisions this same provider made earlier in this series')
 }

@@ -2,7 +2,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
-import { buildChoicePrompt, buildExamplesText, buildPrinciplesText, CHOICE_SYSTEM, CHOICE_SYSTEM_RULES, systemForArm, type ChoiceScenario } from './choice-prompts.ts'
+import { buildChoicePrompt, buildEarlierText, buildExamplesText, buildPrinciplesText, CHOICE_GOALS_METHOD, CHOICE_SYSTEM, CHOICE_SYSTEM_ALL, CHOICE_SYSTEM_RULES, systemForArm, type ChoiceScenario } from './choice-prompts.ts'
 
 const scenario: ChoiceScenario = {
   id: 's-test',
@@ -61,4 +61,28 @@ test('the rules arms put the provider\'s own principles first, with their priori
   assert.ok(CHOICE_SYSTEM_RULES.startsWith(CHOICE_SYSTEM))
   assert.match(CHOICE_SYSTEM_RULES, /take priority over general common sense/)
   assert.match(CHOICE_SYSTEM_RULES, /examples of how the provider applied these principles/)
+})
+
+test('the "all" arm joins principles, profile, examples and this set\'s earlier answers, in that order', () => {
+  const p = buildChoicePrompt('all', scenario, { principlesText: 'P', profileText: 'R', examplesText: 'E', earlierText: 'L' })
+  assert.ok(p.startsWith('P\n\nR\n\nE\n\nL\nIntent providers:'))
+  assert.ok(buildChoicePrompt('all', scenario, { examplesText: 'E' }).startsWith('E\nIntent providers:'), 'missing parts are skipped')
+  assert.equal(systemForArm('all'), CHOICE_SYSTEM_ALL)
+  assert.ok(CHOICE_SYSTEM_ALL.startsWith(CHOICE_SYSTEM))
+})
+
+test('--goals adds the goal-by-goal method to any system prompt and leaves the frozen ones alone without it', () => {
+  for (const arm of ['none', 'examples', 'rules', 'all'] as const) {
+    assert.equal(systemForArm(arm, { goals: true }), `${systemForArm(arm)}\n${CHOICE_GOALS_METHOD}`)
+  }
+  assert.equal(systemForArm('none'), CHOICE_SYSTEM)
+  assert.match(CHOICE_GOALS_METHOD, /each goal separately/)
+})
+
+test('rolling examples show only answered earlier scenarios, labeled as this series', () => {
+  assert.equal(buildEarlierText([], {}), '')
+  assert.equal(buildEarlierText([scenario], {}), '')
+  const t = buildEarlierText([scenario], { 's-test': { choice: 'b' } })
+  assert.ok(t.startsWith('Here are decisions this same provider made earlier in this series'))
+  assert.match(t, /They chose: b/)
 })
