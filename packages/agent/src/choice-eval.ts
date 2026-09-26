@@ -3,6 +3,16 @@
  *
  *   npm run aura:choices:model -- --profile <profile-answers.json> --choices <scenario-answers.json> [--detail]
  *
+ * Fresh set v2 (choice predictor v2): generate blind model picks, no answers read:
+ *
+ *   npm run aura:choices:model -- --set v2 --picks-out data/aura/v2-picks.json
+ *
+ * With --set v2 only the "none" arm runs (the arm frozen in
+ * aura/eval/choice-predictor-v2.json), unless --profile is given; the picks
+ * written are always from the "none" arm. --choices is optional there and, if
+ * given, is read only after every prediction is made. Without --set the
+ * behavior is the original set-v1 test.
+ *
  * The model is shown the scenarios and, in one arm, the provider's scored
  * intent profile. It is never shown the provider's scenario answers; those
  * are read only afterwards, to score the predictions. The prompts below were
@@ -13,7 +23,7 @@
  *   none     — no profile: what a general model would choose
  * Both answer files hold one person's answers: keep them out of the repo.
  */
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -35,14 +45,20 @@ const { assertAgentDispatch } = await import('./governance.ts')
 const { modelForRole, resolveId } = await import('./models.ts')
 
 const arg = (name: string) => { const i = process.argv.indexOf(name); return i > 0 ? process.argv[i + 1] : undefined }
-const profilePath = arg('--profile'), choicesPath = arg('--choices')
-if (!profilePath || !choicesPath) { console.log('Usage: --profile <profile-answers.json> --choices <scenario-answers.json> [--detail]'); process.exit(1) }
+const profilePath = arg('--profile'), choicesPath = arg('--choices'), picksOut = arg('--picks-out')
+const set = arg('--set') ?? 'v1'
+if (set !== 'v1' && set !== 'v2') { console.log('--set must be v1 or v2'); process.exit(1) }
+if (set === 'v1' ? !profilePath || !choicesPath : !picksOut && !choicesPath) {
+  console.log('Usage: --profile <profile-answers.json> --choices <scenario-answers.json> [--detail] [--picks-out <file>]\n   or: --set v2 --picks-out <file> [--profile <profile-answers.json>] [--choices <scenario-answers-v2.json>] [--detail]')
+  process.exit(1)
+}
 const base = process.env.INIT_CWD ?? process.cwd()
 const read = (p: string) => JSON.parse(readFileSync(resolve(base, p), 'utf8'))
 const evalDir = join(here, '..', '..', 'aura', 'eval')
 const instrument = read(join(evalDir, 'intent-profile-v1.json'))
-const scenarios = read(join(evalDir, 'choice-scenarios.json')).scenarios as Array<{ id: string; category: string; providers?: string; said: string; situation: string; decision: string; options: Record<string, string> }>
-const profile = scoreProfile(instrument, read(profilePath).answers)
+const scenarios = read(join(evalDir, set === 'v2' ? 'choice-scenarios-v2.json' : 'choice-scenarios.json')).scenarios as Array<{ id: string; category: string; providers?: string; said: string; situation: string; decision: string; options: Record<string, string> }>
+const profile = profilePath ? scoreProfile(instrument, read(profilePath).answers) : null
+const arms = (profile ? ['profile', 'none'] : ['none']) as Array<'profile' | 'none'>
 
 const SYSTEM = `You predict what an intent provider (a person, group or organization that an automated company acts for) would choose.
 Read what the provider said, the situation and the options. Pick the ONE option this provider would most want, given what they said and clearly meant.
@@ -51,12 +67,12 @@ Answer with the option id and one short reason.`
 
 const profileText = [
   'The provider took a short intent profile. Each reading runs from one pole to the other, with a confidence out of 10 (low confidence means their answers were split or depended on context):',
-  ...profile.dimensions.map((d) => `- ${d.left} vs ${d.right}: ${d.lean} (confidence ${d.confidence}/10)`),
+  ...(profile?.dimensions ?? []).map((d) => `- ${d.left} vs ${d.right}: ${d.lean} (confidence ${d.confidence}/10)`),
   'They listed no red lines beyond the law.',
 ].join('\n')
 
 const role = (process.env.QUICKSILVER_INTENT_ROLE || 'planner') as 'planner'
-console.log(`Model: ${resolveId(role, 'azure')} · ${scenarios.length} scenarios · two arms (profile, none)`)
+console.log(`Model: ${resolveId(role, 'azure')} · set ${set} · ${scenarios.length} scenarios · arms: ${arms.join(', ')}`)
 
 async function predict(s: (typeof scenarios)[number], withProfile: boolean): Promise<string | null> {
   assertAgentDispatch('nuera-quicksilver:intent', 'reasoning', 'low')
@@ -82,14 +98,25 @@ async function predict(s: (typeof scenarios)[number], withProfile: boolean): Pro
 
 const predictions: Record<'profile' | 'none', Record<string, string | null>> = { profile: {}, none: {} }
 for (const s of scenarios) {
-  predictions.profile[s.id] = await predict(s, true)
+  if (profile) predictions.profile[s.id] = await predict(s, true)
   predictions.none[s.id] = await predict(s, false)
 }
+
+// Blind picks from the "none" arm, written before any answers are read.
+if (picksOut) {
+  const out = resolve(base, picksOut)
+  mkdirSync(dirname(out), { recursive: true })
+  const picks = Object.fromEntries(scenarios.map((s) => [s.id, predictions.none[s.id] ?? null]))
+  writeFileSync(out, JSON.stringify({ set, arm: 'none', model: resolveId(role, 'azure'), createdAt: new Date().toISOString(), picks }, null, 1) + '\n')
+  const errors = Object.values(picks).filter((p) => p === null).length
+  console.log(`Wrote ${scenarios.length} blind picks (arm "none") to ${out}${errors ? `; ${errors} model errors recorded as null` : ''}`)
+}
+if (!choicesPath) process.exit(0)
 
 // Only now read the provider's answers, to score.
 const actual = Object.fromEntries(Object.entries(read(choicesPath).answers as Record<string, { choice?: string }>).filter(([, v]) => v?.choice).map(([k, v]) => [k, v.choice!]))
 const pct = (x: number) => `${(x * 100).toFixed(1)}%`
-for (const arm of ['profile', 'none'] as const) {
+for (const arm of arms) {
   const scored = scenarios.filter((s) => actual[s.id])
   const right = scored.filter((s) => predictions[arm][s.id] === actual[s.id]).length
   const failed = scored.filter((s) => predictions[arm][s.id] === null).length
