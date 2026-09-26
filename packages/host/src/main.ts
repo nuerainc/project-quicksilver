@@ -3,6 +3,7 @@
  *
  *   npm run host                      start the host (reads QUICKSILVER_HOST_CONFIG)
  *   npm run host -- check             validate config and environment, then exit
+ *   npm run host -- run <workflow> ["question"]   run one workflow now (no server), print the result
  *   npm run host -- vault keygen      print a new vault master key
  *   npm run host -- vault list        list secret names and versions
  *   npm run host -- vault put <name>  store or rotate a secret (value read from stdin)
@@ -16,7 +17,9 @@
  *   NEXT_PUBLIC_SANITY_PROJECT_ID + SANITY_AUTH_TOKEN enable durable evaluation records.
  */
 import { randomUUID } from 'node:crypto'
+import { existsSync, readFileSync } from 'node:fs'
 import { userInfo } from 'node:os'
+import { dirname, isAbsolute, join, resolve } from 'node:path'
 
 import { buildEvaluationRecord } from '@quicksilver/kernel'
 import { AccessController } from '@quicksilver/kernel/identity'
@@ -30,6 +33,34 @@ import { Logger, parseLogLevel } from './log.ts'
 import { SecretsVault, generateMasterKey } from './vault.ts'
 
 const LEGACY_CHALLENGE_PROJECT_ID = 'd280bqjc'
+
+/** Where the command was run from (npm sets INIT_CWD; workspace scripts run inside packages/host). */
+const baseDir = process.env.INIT_CWD ?? process.cwd()
+
+/**
+ * Load `.env` files from the invocation directory up to the filesystem root,
+ * nearest first. Real environment variables and nearer files win. Values are
+ * never printed.
+ */
+function loadEnvFiles(startDir: string): string[] {
+  const loaded: string[] = []
+  let dir = resolve(startDir)
+  for (let i = 0; i < 6; i++) {
+    const candidate = join(dir, '.env')
+    if (existsSync(candidate)) {
+      for (const line of readFileSync(candidate, 'utf8').split(/\r?\n/)) {
+        const match = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*?)\s*$/)
+        if (!match || process.env[match[1]!] !== undefined) continue
+        process.env[match[1]!] = match[2]!.replace(/^(["'])(.*)\1$/, '$2')
+      }
+      loaded.push(candidate)
+    }
+    const parent = dirname(dir)
+    if (parent === dir) break
+    dir = parent
+  }
+  return loaded
+}
 
 async function buildStore(config: HostConfig, log: Logger): Promise<{ store: WorkflowRunStore; close?: () => Promise<void>; ready?: () => Promise<boolean> }> {
   if (config.store.kind === 'memory') {
@@ -162,8 +193,11 @@ async function main(): Promise<void> {
     console.log(generateMasterKey())
     return
   }
-  const configPath = process.env.QUICKSILVER_HOST_CONFIG ?? 'quicksilver.host.json'
-  const config = await loadHostConfig(configPath)
+  const envFiles = loadEnvFiles(baseDir)
+  const configName = process.env.QUICKSILVER_HOST_CONFIG ?? 'quicksilver.host.json'
+  const configPath = isAbsolute(configName) ? configName : resolve(baseDir, configName)
+  const config = await loadHostConfig(configPath, { tenantId: process.env.QUICKSILVER_TENANT_ID?.trim() || 'default' })
+  if (args[0] !== 'vault') console.error(`Config: ${configPath}${envFiles.length ? ` · env: ${envFiles.join(', ')}` : ''}`)
   if (args[0] === 'vault') return vaultCommand(config, args.slice(1))
 
   const log = new Logger({ level: parseLogLevel(process.env.QUICKSILVER_LOG_LEVEL ?? config.log.level) })
@@ -178,6 +212,24 @@ async function main(): Promise<void> {
     ...(close ? { onStop: close } : {}),
     ...(ready ? { ready } : {}),
   })
+
+  if (args[0] === 'run') {
+    const workflowId = args[1]
+    if (!workflowId || !(workflowId in config.workflows)) {
+      throw new Error(`Usage: run <workflow> ["question"]. Configured workflows: ${Object.keys(config.workflows).join(', ') || 'none'}`)
+    }
+    const operator = { id: `cli:${userInfo().username.replace(/[^a-zA-Z0-9._-]/g, '_')}`, kind: 'human' as const, tenantId: config.tenantId, roles: ['operator'] }
+    const scheduled = config.schedules.find((s) => s.workflow === workflowId)?.input
+    const input = args[2] ? { question: args.slice(2).join(' ') } : (scheduled ?? null)
+    const enq = await host.queue.enqueue({ graph: config.workflows[workflowId]!, input, tenantId: config.tenantId, trigger: { kind: 'manual', source: operator.id }, principal: operator, maxAttempts: 1 })
+    if (!enq.accepted) throw new Error(`Run refused (${enq.code}): ${enq.reasons.join(' ')}`)
+    const [finished] = await host.worker.drain()
+    const run = finished ?? (await host.queue.get(enq.run.runId))
+    console.log(JSON.stringify({ runId: run?.runId, status: run?.status, steps: run?.result?.steps, outputs: run?.result?.outputs, error: run?.result?.error ?? run?.lastError }, null, 2))
+    await close?.()
+    process.exitCode = run?.status === 'completed' ? 0 : 1
+    return
+  }
 
   if (args[0] === 'check') {
     await host.vault?.open()

@@ -61,7 +61,12 @@ export function createHandlerFactory(options: HandlerFactoryOptions) {
     if (issues.length) throw new Error(`Workflow violates the host execution policy: ${issues.join(' ')}`)
     const log = options.log.child({ runId: run.runId, workflowId: run.workflowId })
     const steps = new Map<string, GovernedAgentStep>()
-    const subject = typeof run.input === 'string' ? run.input : JSON.stringify(run.input ?? null)
+    const input = run.input as { question?: unknown } | string | null | undefined
+    const subject = typeof input === 'string'
+      ? input
+      : typeof input?.question === 'string'
+        ? input.question
+        : JSON.stringify(input ?? null)
 
     return {
       async runAgent(node, context) {

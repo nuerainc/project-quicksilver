@@ -27,7 +27,7 @@ and 3.
 | M6: Operate | 0.7.0 | Steady-state operations, reinvestment, and bounded Genesis experiments inside a running business | 3 | M4, M5 |
 
 **Versioning:** the current version is 0.2.0 (Nuera RDL versioning standard): M1 is complete. Each milestone raises the minor version.
-M2 is code complete; the version moves to 0.3.0 after the host runs its first deployment.
+M2 is code complete. The host runs on the founder's computer for now (no cloud hosting yet); the version moves to 0.3.0 once it has run the Nuera daily brief on schedule with evaluations recorded.
 0.9.0 is the release candidate, when all three modes pass the parity gate in
 testing. **1.0.0 requires all three modes (Genesis, Onboard, Operate) to pass the
 parity gate with operational evidence.** See the

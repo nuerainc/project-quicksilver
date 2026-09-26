@@ -1,0 +1,21 @@
+{
+  "http": { "host": "127.0.0.1", "port": 8787, "metricsPublic": false },
+  "store": { "kind": "file", "path": "data/runs.jsonl" },
+  "worker": { "id": "local-1", "concurrency": 1, "pollIntervalMs": 2000 },
+  "queue": { "defaultMaxAttempts": 2 },
+  "execution": { "maxAgentSteps": 3, "allowedAgents": ["query"] },
+  "workflows": {
+    "daily-brief": { "file": "deploy/workflows/daily-brief.json" }
+  },
+  "services": [{ "id": "svc:scheduler", "roles": ["trigger"] }],
+  "schedules": [
+    {
+      "id": "morning-brief",
+      "workflow": "daily-brief",
+      "cron": "0 14 * * 1-5",
+      "principal": "svc:scheduler",
+      "input": { "question": "What changed in the company model since yesterday, and which decisions are waiting for approval?" }
+    }
+  ],
+  "log": { "level": "info" }
+}

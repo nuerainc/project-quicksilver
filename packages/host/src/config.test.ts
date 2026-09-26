@@ -100,3 +100,16 @@ test('loadHostConfig reads workflow files relative to the config and resolves pa
     await rm(dir, { recursive: true, force: true })
   }
 })
+
+test('a config without tenantId takes the tenant from the environment default', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'qs-config-'))
+  try {
+    await writeFile(join(dir, 'host.json'), JSON.stringify({ store: { kind: 'memory' } }))
+    assert.equal((await loadHostConfig(join(dir, 'host.json'), { tenantId: 'default' })).tenantId, 'default')
+    await writeFile(join(dir, 'host2.json'), JSON.stringify({ tenantId: 'nuera' }))
+    assert.equal((await loadHostConfig(join(dir, 'host2.json'), { tenantId: 'default' })).tenantId, 'nuera', 'an explicit tenantId wins')
+    await assert.rejects(loadHostConfig(join(dir, 'host.json')), ConfigError)
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})

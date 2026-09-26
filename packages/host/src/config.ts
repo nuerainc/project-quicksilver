@@ -79,13 +79,20 @@ const WEBHOOK_ID = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$/
 const SECRET_REF = /^(vault:[a-z0-9][a-z0-9._-]{0,127}|env:[A-Z_][A-Z0-9_]{0,127})$/
 const ENV_NAME = /^[A-Z_][A-Z0-9_]{0,127}$/
 
-/** Read and validate a config file. Workflow entries may be inline graphs or `{ "file": "relative.json" }`. */
-export async function loadHostConfig(path: string): Promise<HostConfig> {
+/**
+ * Read and validate a config file. Workflow entries may be inline graphs or `{ "file": "relative.json" }`.
+ * When the file has no `tenantId`, `defaults.tenantId` is used (the host passes `QUICKSILVER_TENANT_ID`,
+ * the same tenant the web app uses), so one `.env` configures both.
+ */
+export async function loadHostConfig(path: string, defaults: { tenantId?: string } = {}): Promise<HostConfig> {
   let raw: unknown
   try {
     raw = JSON.parse(await readFile(path, 'utf8'))
   } catch (error) {
     throw new ConfigError([`Could not read ${path}: ${(error as Error).message}`])
+  }
+  if (raw && typeof raw === 'object' && (raw as { tenantId?: unknown }).tenantId === undefined && defaults.tenantId) {
+    (raw as { tenantId?: string }).tenantId = defaults.tenantId
   }
   const base = dirname(resolve(path))
   const workflows = (raw as { workflows?: Record<string, unknown> })?.workflows

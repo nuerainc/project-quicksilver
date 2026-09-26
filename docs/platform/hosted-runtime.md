@@ -20,6 +20,31 @@ npm run host -- check                   # validate config and environment
 npm run host                            # start
 ```
 
+### On your own computer (Windows, macOS or Linux)
+
+The simplest setup: runs are kept in a local file and nothing is exposed to
+the network.
+
+```bash
+cp deploy/quicksilver.local.example.json quicksilver.host.json   # repo root; gitignored
+npm run host -- check                    # validate config and .env
+npm run host -- run daily-brief          # run the brief once, right now
+npm run host                             # start; Ctrl+C to stop
+```
+
+- The host reads the repo's `.env` (model keys, `SANITY_CONTEXT_*`,
+  `NEXT_PUBLIC_SANITY_PROJECT_ID`, `SANITY_AUTH_TOKEN`), so each step
+  evaluation is stored in Sanity like the web app's.
+- Without a `tenantId` in the config, the host uses `QUICKSILVER_TENANT_ID`
+  (default `default`), the same tenant as the web app.
+- Runs are kept in `data/runs.jsonl` (gitignored) and survive restarts.
+- Schedules are in UTC. `0 14 * * 1-5` is 8:00 in Mountain Daylight Time
+  (7:00 after the switch to standard time) on weekdays. A slot missed while
+  the computer was off runs when the host starts again, if it is less than an
+  hour late.
+- The API listens on `127.0.0.1:8787` only. Webhooks need a public address,
+  so the local example has none.
+
 With Docker and Postgres:
 
 ```bash
