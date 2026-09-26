@@ -38,11 +38,17 @@ variables depend on, constrain or inform which.
     credentials and personal or payment data, and is appended to the graph's
     history.
   - Updates never mutate the input graph.
-- **Impact (`scoreImpact`).**
-  `uncertainty × stakes × (1 + 0.1 × dependents, capped at 0.5)`.
-  - Stakes are the highest importance among the variable and everything that
-    depends on it, discounted 0.8 per hop.
+- **Impact (`scoreImpact`, scorer v2).**
+  `uncertainty × importance × (1 + leverage)`.
+  - Uncertainty is `1 − confidence`.
+  - Leverage is `0.5 × Σ importance` of the variables that rely on this one
+    (an edge `from → to` means `from` relies on `to`), discounted 0.8 per
+    extra hop and capped at 1. The root objective is left out, since
+    everything relies on it.
   - It is deterministic, and every score comes with its arithmetic.
+  - `IMPACT_SCORER_VERSION` is bumped whenever the formula or the mode slots
+    change, so human rankings collected against one version are never reused
+    silently against another.
 
 ## Entry point
 
@@ -70,6 +76,7 @@ correct only when every field matches. The charter's 0.4.0 target is ≥ 90%.
 ```bash
 npm run aura:eval                          # baseline: 42/52 (80.8%) on 2026-09-26
 npm run aura:eval:model -- --misses        # model parser on Azure (reads .env)
+npm run aura:agreement -- --detail         # impact ranking vs the founder's blind rankings
 npm run aura:test
 ```
 
@@ -80,9 +87,23 @@ npm run aura:test
 | ≥ 90% parsing accuracy | Baseline 80.8%; the model parser is measured on Azure |
 | 100% provenance tagging | Enforced by validation; true on all 52 labeled objectives |
 | 0 unsupported inferences | Enforced by validation; 0 on all 52 |
-| ≥ 80% top-3 agreement on impact ranking | Needs human rankings for the labeled set (to do) |
+| ≥ 80% top-3 agreement on impact ranking | Founder ranking the 32 objectives with 4+ open questions, blind, against scorer v2 (`eval/impact-rankings.json`, `npm run aura:agreement`) |
 | All inferred values explained | Enforced by validation |
 | Tests pass | `npm run aura:test` |
 
 Not yet built: Studio schemas for `intent` and `graphVariable`, the web entry
-point, persisting graphs, and human rankings for the impact criterion.
+point, and persisting graphs.
+
+## Human rankings for the impact criterion
+
+- Only objectives with more than three open questions count (32 of 52);
+  with three or fewer, every ranking agrees.
+- The founder ranks blind: questions are shown in a fixed shuffled order,
+  with no scores and no hint of Aura's order.
+- Agreement per objective is `|Aura top 3 ∩ human top 3| / 3`; order inside
+  the three is not scored. A pick that ties in score with Aura's third
+  question also counts, since Aura has no preference among tied questions.
+- The report also gives the chance baseline (`3/n` averaged), about 63% on
+  this set, so 80% is a real bar.
+- The scorer was frozen at v2 before ranking. Changing it afterwards means
+  new rankings, not a re-score against the old ones.

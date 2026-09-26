@@ -109,9 +109,9 @@ export async function createIntent(objective: string, options: CreateIntentOptio
     variables.push({ id: slot.id, label: slot.label, kind: 'unknown', provenance: 'AGENT_INFERRED', confidence: 0, importance: slot.importance, sources: [], updatedAt: at, updatedBy: 'aura:baseline-parser' })
     edges.push({ from: 'objective', to: slot.id, relation: 'depends-on' })
   }
-  // A budget without a risk tolerance: how much of it may be lost decides every experiment.
+  // How the budget is used depends on how much of it may be lost.
   if (variables.some((v) => v.id === 'risk_tolerance') && variables.some((v) => v.id === 'budget')) {
-    edges.push({ from: 'risk_tolerance', to: 'budget', relation: 'informs' })
+    edges.push({ from: 'budget', to: 'risk_tolerance', relation: 'depends-on' })
   }
 
   for (const c of parsed.constraints) {

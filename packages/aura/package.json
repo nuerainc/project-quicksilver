@@ -12,7 +12,8 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "eval": "node --experimental-strip-types --no-warnings src/eval-cli.ts"
+    "eval": "node --experimental-strip-types --no-warnings src/eval-cli.ts",
+    "agreement": "node --experimental-strip-types --no-warnings src/agreement-cli.ts"
   },
   "dependencies": {
     "@quicksilver/kernel": "*"

@@ -2,21 +2,26 @@ import type { GraphVariable, IntentGraph } from './types.ts'
 
 /**
  * Deterministic impact scoring for open unknowns and weak beliefs.
+ * Scorer version: IMPACT_SCORER_VERSION (recorded with human rankings, so an
+ * agreement score always names the scorer it measured).
  *
  * For each candidate variable (open unknowns, and inferences or observations
  * below `confidenceThreshold`):
  *
- *   impact = uncertainty × stakes × (1 + reachBonus)
+ *   impact = uncertainty × importance × (1 + leverage)
  *
  *   uncertainty = 1 − confidence            (open unknowns: 1)
- *   stakes      = max(own importance, importance of everything that depends
- *                 on it, directly or transitively, discounted 0.8 per hop)
- *   reachBonus  = 0.1 × number of dependents, capped at 0.5
+ *   importance  = the variable's own importance
+ *   leverage    = 0.5 × Σ importance of the variables that depend on it,
+ *                 discounted 0.8 per extra hop, capped at 1
  *
+ * The objective itself is excluded from leverage: every slot hangs off the
+ * objective, so counting it would give every question the same score.
  * The same inputs always give the same ranking, and every score comes with
- * the arithmetic that produced it, so a human can check why Aura asks what
- * it asks. The top items become targeted questions.
+ * the arithmetic that produced it. The top items become targeted questions.
  */
+
+export const IMPACT_SCORER_VERSION = 2
 
 export interface ImpactItem {
   variableId: string
@@ -63,30 +68,29 @@ export function scoreImpact(graph: IntentGraph, options: ImpactOptions = {}): Im
       }
       frontier = next
     }
-    const dependents = [...seen.keys()].sort()
-    let stakes = v.importance
-    let stakesFrom = v.id
-    for (const [id, hop] of seen) {
-      const s = (byId.get(id)?.importance ?? 0) * discount ** (hop - 1)
-      if (s > stakes) {
-        stakes = s
-        stakesFrom = id
-      }
+    const dependents = [...seen.keys()].filter((id) => byId.get(id)?.id !== 'objective').sort()
+    let leverage = 0
+    const leverageParts: string[] = []
+    for (const id of dependents) {
+      const d = byId.get(id)
+      const contribution = 0.5 * (d?.importance ?? 0) * discount ** ((seen.get(id) ?? 1) - 1)
+      leverage += contribution
+      leverageParts.push(`"${d?.label ?? id}" ${round(contribution)}`)
     }
+    leverage = Math.min(1, round(leverage))
     const uncertainty = open ? 1 : round(1 - v.confidence)
-    const reachBonus = Math.min(0.5, 0.1 * dependents.length)
-    const score = round(uncertainty * stakes * (1 + reachBonus))
+    const stakes = round(v.importance * (1 + leverage))
+    const score = round(uncertainty * stakes)
     items.push({
       variableId: v.id,
       label: v.label,
       score,
       uncertainty,
-      stakes: round(stakes),
+      stakes,
       dependents,
       explanation:
-        `uncertainty ${uncertainty} (${open ? 'open unknown' : `confidence ${v.confidence}`}) × stakes ${round(stakes)}` +
-        ` (${stakesFrom === v.id ? 'its own importance' : `via "${byId.get(stakesFrom)?.label ?? stakesFrom}"`})` +
-        ` × (1 + ${round(reachBonus)} for ${dependents.length} dependent${dependents.length === 1 ? '' : 's'}) = ${score}`,
+        `uncertainty ${uncertainty} (${open ? 'open unknown' : `confidence ${v.confidence}`}) × importance ${v.importance}` +
+        ` × (1 + leverage ${leverage}${leverageParts.length ? ` from ${leverageParts.join(', ')}` : ', nothing else depends on it'}) = ${score}`,
       question: questionFor(v),
     })
   }

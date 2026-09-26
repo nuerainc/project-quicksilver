@@ -12,6 +12,7 @@ import {
   parseObjectiveBaseline,
   provenanceReport,
   scoreImpact,
+  topThreeAgreement,
   targetedQuestions,
   validateIntentGraph,
   validateVariable,
@@ -90,7 +91,7 @@ test('impact scoring is deterministic, explained, and favors uncertain high-stak
   const b = scoreImpact(structuredClone(graph))
   assert.deepEqual(a, b)
   assert.equal(a[0]!.variableId, 'risk_tolerance', 'risk tolerance informs the stated budget, so it outranks other unknowns')
-  for (const item of a) assert.match(item.explanation, /uncertainty .* × stakes .* = /)
+  for (const item of a) assert.match(item.explanation, /uncertainty .* × importance .* × \(1 \+ leverage .*\) = /)
   assert.ok(a.every((item, i) => i === 0 || a[i - 1]!.score >= item.score))
   assert.equal(targetedQuestions(graph, 2).length, 2)
 })
@@ -154,4 +155,21 @@ test('evaluation harness scores the baseline parser and counts parser errors as 
   const broken = await evaluateParser(() => { throw new Error('model offline') }, set)
   assert.equal(broken.exactMatches, 0)
   assert.equal(broken.errors.length, 2)
+})
+
+test('top-3 agreement: set overlap per objective, skips small sets, flags missing rankings', () => {
+  const rank = (...ids: string[]) => ids.map((variableId, i) => ({ variableId, score: 1 - i / 10 }))
+  const aura = { a: rank('x', 'y', 'z', 'w'), b: rank('p', 'q', 'r', 's', 't'), c: rank('m', 'n', 'o'), d: rank('e', 'f', 'g', 'h') }
+  const r = topThreeAgreement(aura, { a: ['z', 'x', 'y'], b: ['p', 's', 't'], d: ['e', 'f'] })
+  assert.equal(r.objectives, 2)
+  assert.deepEqual(r.missing, ['d'])
+  assert.equal(r.perObjective.find((o) => o.id === 'a')!.agreement, 1, 'order inside the top three is not scored')
+  assert.equal(r.perObjective.find((o) => o.id === 'b')!.agreement, 1 / 3)
+  assert.equal(r.meanAgreement, 2 / 3)
+  assert.equal(r.chanceBaseline, (3 / 4 + 3 / 5) / 2)
+  assert.equal(r.meetsCharterTarget, false)
+  assert.equal(topThreeAgreement({ a: aura.a }, { a: ['x', 'y', 'z'] }).meetsCharterTarget, true)
+  assert.deepEqual(topThreeAgreement({ a: aura.a }, { a: ['x', 'y', 'nope'] }).missing, ['a'])
+  const tied = [{ variableId: 'x', score: 0.9 }, { variableId: 'y', score: 0.8 }, { variableId: 'z', score: 0.7 }, { variableId: 'w', score: 0.7 }]
+  assert.equal(topThreeAgreement({ a: tied }, { a: ['x', 'y', 'w'] }).meanAgreement, 1, 'a pick tied with Aura’s third counts')
 })
