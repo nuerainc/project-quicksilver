@@ -1,0 +1,626 @@
+{
+ "version": 1,
+ "note": "The question lists the founder actually ranked: set v1 (scorer v2 candidates, 2026-09-25) and set v3 (scorer v3 candidates, 2026-09-26). Used to train and cross-validate the learned question order.",
+ "sets": {
+  "v1": {
+   "obj-001": {
+    "text": "I have $500 and want to start a small online business that makes money in 30 days, digital only.",
+    "candidates": [
+     "weekly_hours",
+     "risk_tolerance",
+     "success_metric",
+     "skills"
+    ]
+   },
+   "obj-003": {
+    "text": "Start a business from scratch that can reach $1,000 a month in revenue within 6 months.",
+    "candidates": [
+     "budget",
+     "skills",
+     "weekly_hours",
+     "risk_tolerance"
+    ]
+   },
+   "obj-004": {
+    "text": "Launch a new online store selling printable planners. Budget $300. I can give it 10 hours a week.",
+    "candidates": [
+     "risk_tolerance",
+     "skills",
+     "success_metric",
+     "timeframe"
+    ]
+   },
+   "obj-005": {
+    "text": "I want to build a side hustle that earns $500 per month. Just advise me, don't do anything yet.",
+    "candidates": [
+     "timeframe",
+     "skills",
+     "risk_tolerance",
+     "budget",
+     "weekly_hours"
+    ]
+   },
+   "obj-006": {
+    "text": "Turn $500 into a profitable digital product business over the next 90 days.",
+    "candidates": [
+     "risk_tolerance",
+     "skills",
+     "success_metric",
+     "weekly_hours"
+    ]
+   },
+   "obj-007": {
+    "text": "Start a new consulting business with no debt and no employees.",
+    "candidates": [
+     "budget",
+     "skills",
+     "timeframe",
+     "weekly_hours",
+     "success_metric",
+     "risk_tolerance"
+    ]
+   },
+   "obj-008": {
+    "text": "Make money online. I only have 5 hours a week and a $150 budget.",
+    "candidates": [
+     "timeframe",
+     "risk_tolerance",
+     "skills",
+     "success_metric"
+    ]
+   },
+   "obj-009": {
+    "text": "Build a newsletter business from scratch, ask me before spending anything.",
+    "candidates": [
+     "weekly_hours",
+     "skills",
+     "timeframe",
+     "success_metric",
+     "budget",
+     "risk_tolerance"
+    ]
+   },
+   "obj-011": {
+    "text": "Start an Etsy shop for digital downloads with $100, online only.",
+    "candidates": [
+     "success_metric",
+     "risk_tolerance",
+     "skills",
+     "timeframe",
+     "weekly_hours"
+    ]
+   },
+   "obj-012": {
+    "text": "Help me start a lawn care business this spring with $1,500 and no loans.",
+    "candidates": [
+     "weekly_hours",
+     "timeframe",
+     "skills",
+     "success_metric",
+     "risk_tolerance"
+    ]
+   },
+   "obj-013": {
+    "text": "Start a business on nights and weekends with 8 hours a week.",
+    "candidates": [
+     "success_metric",
+     "timeframe",
+     "budget",
+     "risk_tolerance",
+     "skills"
+    ]
+   },
+   "obj-014": {
+    "text": "I'd like to make money from scratch with no inventory and no ads.",
+    "candidates": [
+     "skills",
+     "success_metric",
+     "timeframe",
+     "weekly_hours",
+     "budget",
+     "risk_tolerance"
+    ]
+   },
+   "obj-015": {
+    "text": "Launch a SaaS product and reach $3,000 MRR within 12 months.",
+    "candidates": [
+     "risk_tolerance",
+     "budget",
+     "weekly_hours",
+     "skills"
+    ]
+   },
+   "obj-017": {
+    "text": "Build a business that brings in $400 a month in 3 months, solo.",
+    "candidates": [
+     "skills",
+     "budget",
+     "risk_tolerance",
+     "weekly_hours"
+    ]
+   },
+   "obj-018": {
+    "text": "I want to start my own bakery business.",
+    "candidates": [
+     "risk_tolerance",
+     "skills",
+     "weekly_hours",
+     "timeframe",
+     "success_metric",
+     "budget"
+    ]
+   },
+   "obj-019": {
+    "text": "Create a side hustle selling templates, $50 to start with, digital-only.",
+    "candidates": [
+     "timeframe",
+     "skills",
+     "risk_tolerance",
+     "weekly_hours",
+     "success_metric"
+    ]
+   },
+   "obj-020": {
+    "text": "Start a business that earns $10k in its first year.",
+    "candidates": [
+     "weekly_hours",
+     "success_metric",
+     "skills",
+     "timeframe",
+     "risk_tolerance"
+    ]
+   },
+   "obj-021": {
+    "text": "Connect my farm's records and tell me where we lose money.",
+    "candidates": [
+     "success_metric",
+     "business_type",
+     "scope",
+     "revenue_model",
+     "data_sources"
+    ]
+   },
+   "obj-022": {
+    "text": "We sell hay and alfalfa to local ranchers. Help us understand our margins.",
+    "candidates": [
+     "business_type",
+     "scope",
+     "data_sources",
+     "revenue_model",
+     "success_metric"
+    ]
+   },
+   "obj-023": {
+    "text": "I run a small landscaping company. Onboard it and find quick wins, just advise.",
+    "candidates": [
+     "data_sources",
+     "scope",
+     "success_metric",
+     "revenue_model",
+     "business_type"
+    ]
+   },
+   "obj-024": {
+    "text": "Our restaurant loses money on Tuesdays. Figure out why within two weeks.",
+    "candidates": [
+     "scope",
+     "revenue_model",
+     "business_type",
+     "success_metric",
+     "data_sources"
+    ]
+   },
+   "obj-025": {
+    "text": "My shop sells used farm equipment. I want $5,000 more revenue per month.",
+    "candidates": [
+     "scope",
+     "data_sources",
+     "business_type",
+     "revenue_model",
+     "success_metric"
+    ]
+   },
+   "obj-026": {
+    "text": "Onboard our agency and don't email our customers.",
+    "candidates": [
+     "revenue_model",
+     "business_type",
+     "data_sources",
+     "scope",
+     "success_metric"
+    ]
+   },
+   "obj-027": {
+    "text": "We have an existing business selling irrigation parts; connect our books and inventory.",
+    "candidates": [
+     "success_metric",
+     "business_type",
+     "data_sources",
+     "revenue_model",
+     "scope"
+    ]
+   },
+   "obj-028": {
+    "text": "I own a coffee shop. Help me cut costs by $800 a month without hiring.",
+    "candidates": [
+     "scope",
+     "data_sources",
+     "business_type",
+     "revenue_model"
+    ]
+   },
+   "obj-029": {
+    "text": "Our company needs a clear picture of cash flow for the next quarter.",
+    "candidates": [
+     "revenue_model",
+     "business_type",
+     "data_sources",
+     "scope",
+     "success_metric"
+    ]
+   },
+   "obj-030": {
+    "text": "My practice has 3 staff. Map our operations; ask me first before changing anything.",
+    "candidates": [
+     "success_metric",
+     "scope",
+     "data_sources",
+     "business_type",
+     "revenue_model"
+    ]
+   },
+   "obj-031": {
+    "text": "We run a feed store. Set up Quicksilver for it with read-only access.",
+    "candidates": [
+     "success_metric",
+     "business_type",
+     "scope",
+     "revenue_model",
+     "data_sources"
+    ]
+   },
+   "obj-032": {
+    "text": "My studio makes $4,000 a month; I want to reach $6,000 in 6 months.",
+    "candidates": [
+     "scope",
+     "business_type",
+     "revenue_model",
+     "data_sources"
+    ]
+   },
+   "obj-033": {
+    "text": "I operate a food truck and want to know which menu items to drop.",
+    "candidates": [
+     "data_sources",
+     "business_type",
+     "success_metric",
+     "scope",
+     "revenue_model"
+    ]
+   },
+   "obj-034": {
+    "text": "Our farm wants to test a new direct-to-consumer channel with a $1,000 budget.",
+    "candidates": [
+     "scope",
+     "business_type",
+     "revenue_model",
+     "data_sources",
+     "success_metric"
+    ]
+   },
+   "obj-035": {
+    "text": "Bring my existing business into Quicksilver, no paid ads.",
+    "candidates": [
+     "revenue_model",
+     "business_type",
+     "success_metric",
+     "data_sources",
+     "scope"
+    ]
+   }
+  },
+  "v3": {
+   "hold-004": {
+    "text": "Start a side business tutoring math on weekends; I keep my full-time job.",
+    "candidates": [
+     "risk_tolerance",
+     "weekly_hours",
+     "budget",
+     "timeframe",
+     "success_metric",
+     "skills"
+    ]
+   },
+   "hold-005": {
+    "text": "I want to build an online course business from scratch, $400 budget, no paid ads, and ask me before you spend anything.",
+    "candidates": [
+     "skills",
+     "success_metric",
+     "timeframe",
+     "weekly_hours",
+     "risk_tolerance"
+    ]
+   },
+   "hold-006": {
+    "text": "Start a firewood delivery business and reach $3,000 in sales over the next 90 days.",
+    "candidates": [
+     "risk_tolerance",
+     "skills",
+     "weekly_hours",
+     "budget"
+    ]
+   },
+   "hold-007": {
+    "text": "Turn $1,000 into a small vending machine business. Just advise me for now.",
+    "candidates": [
+     "skills",
+     "success_metric",
+     "timeframe",
+     "weekly_hours",
+     "risk_tolerance"
+    ]
+   },
+   "hold-009": {
+    "text": "I'd like to make extra money selling seedlings in the spring, 12 hours a week, within 8 weeks.",
+    "candidates": [
+     "budget",
+     "success_metric",
+     "skills",
+     "risk_tolerance"
+    ]
+   },
+   "hold-016": {
+    "text": "We have an existing welding shop; bring it into Quicksilver and don't contact our customers.",
+    "candidates": [
+     "data_sources",
+     "success_metric",
+     "revenue_model",
+     "scope"
+    ]
+   },
+   "hold-019": {
+    "text": "Our farm stand needs a clear view of which products actually make money this season.",
+    "candidates": [
+     "budget",
+     "success_metric",
+     "skills",
+     "risk_tolerance",
+     "timeframe",
+     "weekly_hours"
+    ]
+   },
+   "rank3-01": {
+    "text": "Start a side business sharpening knives and garden tools; I keep my day job.",
+    "candidates": [
+     "timeframe",
+     "weekly_hours",
+     "skills",
+     "risk_tolerance",
+     "success_metric",
+     "budget"
+    ]
+   },
+   "rank3-02": {
+    "text": "I want to start a small business making goat milk soap.",
+    "candidates": [
+     "skills",
+     "success_metric",
+     "budget",
+     "timeframe",
+     "risk_tolerance",
+     "weekly_hours"
+    ]
+   },
+   "rank3-04": {
+    "text": "Help me start a mobile welding repair service from scratch.",
+    "candidates": [
+     "budget",
+     "timeframe",
+     "weekly_hours",
+     "risk_tolerance",
+     "success_metric",
+     "skills"
+    ]
+   },
+   "rank3-06": {
+    "text": "Start an online shop selling vintage western wear with a $600 budget.",
+    "candidates": [
+     "skills",
+     "success_metric",
+     "weekly_hours",
+     "risk_tolerance",
+     "timeframe"
+    ]
+   },
+   "rank3-14": {
+    "text": "Launch a small honey business from my 20 hives.",
+    "candidates": [
+     "risk_tolerance",
+     "skills",
+     "weekly_hours",
+     "budget",
+     "timeframe",
+     "success_metric"
+    ]
+   },
+   "rank3-18": {
+    "text": "Help me start a woodworking business selling cutting boards online.",
+    "candidates": [
+     "budget",
+     "risk_tolerance",
+     "weekly_hours",
+     "success_metric",
+     "timeframe",
+     "skills"
+    ]
+   },
+   "rank3-21": {
+    "text": "Start a small print shop making vinyl decals, part-time.",
+    "candidates": [
+     "budget",
+     "success_metric",
+     "risk_tolerance",
+     "timeframe",
+     "skills",
+     "weekly_hours"
+    ]
+   },
+   "rank3-25": {
+    "text": "Start a sewing alterations business from home with no advertising.",
+    "candidates": [
+     "budget",
+     "skills",
+     "timeframe",
+     "success_metric",
+     "weekly_hours",
+     "risk_tolerance"
+    ]
+   },
+   "rank3-29": {
+    "text": "We have a two-truck plumbing business; help us get paid faster.",
+    "candidates": [
+     "revenue_model",
+     "data_sources",
+     "success_metric",
+     "scope"
+    ]
+   },
+   "rank3-30": {
+    "text": "I own a boutique; bring it into Quicksilver and tell me what to fix first.",
+    "candidates": [
+     "revenue_model",
+     "data_sources",
+     "scope",
+     "business_type",
+     "success_metric"
+    ]
+   },
+   "rank3-33": {
+    "text": "Our auto body shop wants to grow repeat customers.",
+    "candidates": [
+     "revenue_model",
+     "business_type",
+     "data_sources",
+     "scope",
+     "success_metric"
+    ]
+   },
+   "rank3-35": {
+    "text": "We operate a car wash; figure out our slow days and what to do.",
+    "candidates": [
+     "success_metric",
+     "revenue_model",
+     "scope",
+     "data_sources",
+     "business_type"
+    ]
+   },
+   "rank3-37": {
+    "text": "We have a tree-trimming crew; help us schedule jobs better.",
+    "candidates": [
+     "revenue_model",
+     "data_sources",
+     "scope",
+     "success_metric",
+     "business_type"
+    ]
+   },
+   "rank3-38": {
+    "text": "I own a small gym; members keep canceling, find out why.",
+    "candidates": [
+     "scope",
+     "revenue_model",
+     "data_sources",
+     "success_metric",
+     "business_type"
+    ]
+   },
+   "rank3-41": {
+    "text": "We own a hardware store and want to add online ordering.",
+    "candidates": [
+     "data_sources",
+     "scope",
+     "revenue_model",
+     "success_metric"
+    ]
+   },
+   "rank3-42": {
+    "text": "Our cleaning company wants to win more commercial contracts.",
+    "candidates": [
+     "scope",
+     "business_type",
+     "success_metric",
+     "revenue_model",
+     "data_sources"
+    ]
+   },
+   "rank3-44": {
+    "text": "We run an equipment rental yard; find out what we should stop renting.",
+    "candidates": [
+     "success_metric",
+     "revenue_model",
+     "data_sources",
+     "business_type"
+    ]
+   },
+   "rank3-46": {
+    "text": "We run a small campground; help us fill the shoulder season.",
+    "candidates": [
+     "business_type",
+     "revenue_model",
+     "data_sources",
+     "success_metric"
+    ]
+   },
+   "rank3-47": {
+    "text": "I own a used bookstore; figure out what sells and what to stop buying.",
+    "candidates": [
+     "data_sources",
+     "business_type",
+     "revenue_model",
+     "scope",
+     "success_metric"
+    ]
+   },
+   "rank3-48": {
+    "text": "We operate a mobile vet clinic; help us cut drive time between calls.",
+    "candidates": [
+     "scope",
+     "revenue_model",
+     "success_metric",
+     "data_sources"
+    ]
+   },
+   "rank3-49": {
+    "text": "Our pizza shop wants fewer wasted ingredients at close.",
+    "candidates": [
+     "business_type",
+     "scope",
+     "success_metric",
+     "data_sources",
+     "revenue_model"
+    ]
+   },
+   "rank3-51": {
+    "text": "I own a nail salon; help me keep clients coming back.",
+    "candidates": [
+     "data_sources",
+     "success_metric",
+     "scope",
+     "revenue_model"
+    ]
+   },
+   "rank3-54": {
+    "text": "Start a small business selling sourdough starter kits online.",
+    "candidates": [
+     "timeframe",
+     "skills",
+     "budget",
+     "risk_tolerance",
+     "weekly_hours",
+     "success_metric"
+    ]
+   }
+  }
+ }
+}

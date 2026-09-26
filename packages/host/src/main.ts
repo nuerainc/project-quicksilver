@@ -112,7 +112,9 @@ async function buildIntent(config: HostConfig, log: Logger) {
     if (agent.isLlmConfigured()) parser = (text) => parseObjectiveGuarded(text)
     else log.warn('QUICKSILVER_INTENT_PARSER=model but no model provider is configured; using the rule-based parser')
   }
-  return { graphs, ledger, ...(parser ? { parser } : {}) }
+  const { fileRankerStore, memoryRankerStore } = await import('./ranker-store.ts')
+  const ranker = config.store.kind === 'file' ? fileRankerStore(join(dirname(config.store.path), 'intent', 'ranker.json')) : memoryRankerStore()
+  return { graphs, ledger, ranker, ...(parser ? { parser } : {}) }
 }
 
 /**

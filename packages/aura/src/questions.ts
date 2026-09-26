@@ -1,4 +1,5 @@
 import { scoreImpact } from './impact.ts'
+import { orderQuestions, type RankerState } from './rank-learn.ts'
 import type { IntentGraph, QuestionFeedback } from './types.ts'
 
 /**
@@ -24,19 +25,27 @@ export function recordQuestionFeedback(
   variableId: string,
   outcome: QuestionFeedback['outcome'],
   now: Date = new Date(),
+  ranker?: RankerState | null,
 ): { ok: true; graph: IntentGraph; feedback: QuestionFeedback } | { ok: false; reason: string } {
   if (actor.kind !== 'human') return { ok: false, reason: 'Only the provider (a human) answers or dismisses Aura’s questions.' }
-  const open = openQuestions(graph)
+  const open = openQuestions(graph, ranker)
   const i = open.findIndex((q) => q.variableId === variableId)
   if (i < 0) return { ok: false, reason: `"${variableId}" is not an open question on this intent (answered, dismissed, or never asked).` }
   const feedback: QuestionFeedback = { variableId, outcome, rank: i + 1, openQuestions: open.length, at: now.toISOString(), by: actor.id }
   return { ok: true, graph: { ...graph, questionFeedback: [...(graph.questionFeedback ?? []), feedback] }, feedback }
 }
 
-/** Questions the provider dismissed are no longer asked. */
-export function openQuestions(graph: IntentGraph) {
+/**
+ * Open questions in the order Aura will ask them. Questions the provider
+ * dismissed are no longer asked. With a trained ranker (this provider's
+ * learned order) the order is theirs; without one, the fixed scorer's.
+ */
+export function openQuestions(graph: IntentGraph, ranker?: RankerState | null) {
   const dismissed = new Set((graph.questionFeedback ?? []).filter((f) => f.outcome === 'not-worth-asking').map((f) => f.variableId))
-  return scoreImpact(graph).filter((q) => !dismissed.has(q.variableId))
+  const items = scoreImpact(graph).filter((q) => !dismissed.has(q.variableId))
+  if (!ranker || !ranker.pairs) return items
+  const order = orderQuestions(ranker, graph, items.map((i) => i.variableId))
+  return order.map((id) => items.find((i) => i.variableId === id)!)
 }
 
 export interface QuestionQuality {

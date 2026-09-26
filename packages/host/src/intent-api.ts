@@ -11,6 +11,9 @@ import {
   recordChange,
   replay,
   openQuestions,
+  learnFromAnswer,
+  learnFromDismissal,
+  type RankerState,
   questionQuality,
   recordQuestionFeedback,
   validateIntentGraph,
@@ -45,6 +48,8 @@ export interface IntentApiDeps {
   /** Defaults to the rule-based baseline parser. */
   parser?: ObjectiveParser
   now?: () => number
+  /** The provider's learned question order (Aura inference); updated from answers and dismissals. */
+  ranker?: { load(): Promise<RankerState | null>; save(state: RankerState): Promise<void> }
 }
 
 export interface IntentApiContext {
@@ -58,8 +63,8 @@ export interface IntentApiContext {
 
 type Response = { status: number; body: unknown }
 
-function summary(graph: IntentGraph) {
-  const impact = openQuestions(graph)
+function summary(graph: IntentGraph, ranker?: RankerState | null) {
+  const impact = openQuestions(graph, ranker)
   return {
     id: graph.id,
     objective: graph.objective,
@@ -81,6 +86,7 @@ export async function handleIntentRoute(ctx: IntentApiContext, deps: IntentApiDe
     return d.allowed ? undefined : { status: 403, body: { error: d.reasons.join(' ') } }
   }
   const now = () => new Date(deps.now?.() ?? Date.now())
+  const ranker = (await deps.ranker?.load().catch(() => null)) ?? null
 
   if (parts[1] === 'intents') {
     if (parts.length === 2 && method === 'POST') {
@@ -101,7 +107,7 @@ export async function handleIntentRoute(ctx: IntentApiContext, deps: IntentApiDe
         ...(autonomyDepth ? { autonomyDepth: autonomyDepth as IntentGraph['autonomyDepth'] } : {}),
       } as Parameters<typeof createIntent>[1])
       await deps.graphs.put(result.graph)
-      return { status: 201, body: { intent: summary(result.graph) } }
+      return { status: 201, body: { intent: summary(result.graph, ranker) } }
     }
     if (parts.length === 2 && method === 'GET') {
       const denied = allow('decision:read')
@@ -113,7 +119,7 @@ export async function handleIntentRoute(ctx: IntentApiContext, deps: IntentApiDe
       const denied = allow('decision:read')
       if (denied) return denied
       const graph = await deps.graphs.get(parts[2]!).catch(() => undefined)
-      return graph ? { status: 200, body: { intent: summary(graph), graph } } : { status: 404, body: { error: 'No such intent.' } }
+      return graph ? { status: 200, body: { intent: summary(graph, ranker), graph } } : { status: 404, body: { error: 'No such intent.' } }
     }
     if (parts.length === 4 && parts[3] === 'answers' && method === 'POST') {
       const denied = allow('intent:provide')
@@ -126,7 +132,8 @@ export async function handleIntentRoute(ctx: IntentApiContext, deps: IntentApiDe
       if (typeof variableId !== 'string' || typeof answer !== 'string' || !answer.trim() || answer.length > 1_000) return { status: 422, body: { error: 'variableId and a 1 to 1,000 character answer are required.' } }
       const numeric = /^\s*\$?\s*-?\d[\d,]*(\.\d+)?\s*$/.test(answer) ? Number(answer.replace(/[$,\s]/g, '')) : undefined
       // Question quality (charter revision 2): note the question's rank before the answer closes it.
-      const fb = principal.kind === 'human' ? recordQuestionFeedback(graph, { id: principal.id, kind: 'human' }, variableId, 'answered', now()) : undefined
+      const fb = principal.kind === 'human' ? recordQuestionFeedback(graph, { id: principal.id, kind: 'human' }, variableId, 'answered', now(), ranker) : undefined
+      const openBefore = openQuestions(graph, ranker).map((q) => q.variableId)
       const result = applyBeliefUpdate(fb?.ok ? fb.graph : graph, { id: principal.id, kind: 'human' }, {
         variableId,
         value: numeric ?? answer.trim(),
@@ -136,7 +143,8 @@ export async function handleIntentRoute(ctx: IntentApiContext, deps: IntentApiDe
       }, now())
       if (!result.accepted) return { status: 422, body: { error: 'The answer was not accepted.', reasons: result.reasons } }
       await deps.graphs.put(result.graph)
-      return { status: 200, body: { intent: summary(result.graph), change: result.change } }
+      if (deps.ranker && fb?.ok && ranker) await deps.ranker.save(learnFromAnswer(ranker, graph, variableId, openBefore))
+      return { status: 200, body: { intent: summary(result.graph, ranker), change: result.change } }
     }
     if (parts.length === 4 && parts[3] === 'dismiss' && method === 'POST') {
       const denied = allow('intent:provide')
@@ -147,10 +155,12 @@ export async function handleIntentRoute(ctx: IntentApiContext, deps: IntentApiDe
       if (!body.ok) return { status: body.status, body: { error: body.error } }
       const { variableId } = (body.value ?? {}) as Record<string, unknown>
       if (typeof variableId !== 'string') return { status: 422, body: { error: 'variableId is required.' } }
-      const r = recordQuestionFeedback(graph, { id: principal.id, kind: principal.kind === 'human' ? 'human' : principal.kind === 'agent' ? 'agent' : 'service' }, variableId, 'not-worth-asking', now())
+      const r = recordQuestionFeedback(graph, { id: principal.id, kind: principal.kind === 'human' ? 'human' : principal.kind === 'agent' ? 'agent' : 'service' }, variableId, 'not-worth-asking', now(), ranker)
       if (!r.ok) return { status: principal.kind === 'human' ? 422 : 403, body: { error: r.reason } }
       await deps.graphs.put(r.graph)
-      return { status: 200, body: { intent: summary(r.graph), feedback: r.feedback } }
+      let learned = ranker
+      if (deps.ranker) { learned = learnFromDismissal(ranker ?? { version: 1, weights: {}, pairs: 0, baseWeight: 1 }, graph, variableId, openQuestions(graph, ranker).map((q) => q.variableId)); await deps.ranker.save(learned) }
+      return { status: 200, body: { intent: summary(r.graph, learned), feedback: r.feedback } }
     }
     return { status: 404, body: { error: 'Not found.' } }
   }

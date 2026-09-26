@@ -40,6 +40,9 @@ import {
   openQuestions,
   questionQuality,
   recordQuestionFeedback,
+  learnFromAnswer,
+  learnFromDismissal,
+  newRanker,
   learnFromVerdict,
   newVerdictLearner,
   predictAccept,
@@ -49,6 +52,7 @@ import {
 } from '@quicksilver/aura'
 import { availableTransitions, nextAutomaticTransition, type Facts } from '@quicksilver/kernel/process'
 import { validatePlaybook, type PlaybookDefinition } from '@quicksilver/kernel/playbooks'
+import { fileRankerStore } from './ranker-store.ts'
 import { judge, recommend, recordOutcome, shadowFacts, shadowReport, type Outcome, type ShadowLog, type Verdict } from '@quicksilver/kernel/playbooks/shadow'
 
 const root = process.env.INIT_CWD ?? process.cwd()
@@ -58,6 +62,9 @@ const actorId = process.env.QUICKSILVER_ONBOARD_ACTOR || 'entity-founder'
 const human = { id: actorId, kind: 'human' as const }
 const tenantId = process.env.QUICKSILVER_TENANT_ID || 'nuera'
 const ledgerStore = new FileLedgerStore(join(dir, 'ledger'))
+// The provider's learned question order (train it with: npm run aura:rank -- train --out data/intent/ranker.json).
+const rankerStore = fileRankerStore(join(dir, 'ranker.json'))
+const ranker = await rankerStore.load()
 // The local, trusted command line acts as the founder's principal.
 const principal = { id: actorId, kind: 'human' as const, tenantId, roles: ['intent-provider'] }
 const [cmd, ...args] = process.argv.slice(2)
@@ -79,10 +86,10 @@ switch (cmd) {
   case 'start': {
     const objective = positional[0]
     if (!objective) fail('Usage: start "<objective>"')
-    const { graph, impact } = await createIntent(objective, { requestedBy: actorId, id: `intent-${Date.now().toString(36)}`, mode: 'onboard' })
+    const { graph } = await createIntent(objective, { requestedBy: actorId, id: `intent-${Date.now().toString(36)}`, mode: 'onboard' })
     await graphs.put(graph)
     console.log(`Intent ${graph.id} (onboard).`)
-    for (const q of impact.slice(0, 3)) console.log(`  ? ${q.variableId}: ${q.question}`)
+    for (const q of openQuestions(graph, ranker).slice(0, 3)) console.log(`  ? ${q.variableId}: ${q.question}`)
     break
   }
   case 'answer': {
@@ -90,23 +97,27 @@ switch (cmd) {
     if (!id || !variableId || !answer?.trim()) fail('Usage: answer <intentId> <variableId> "<your answer>"')
     const graph = await graphOrFail(id)
     const numeric = /^\s*\$?\s*-?\d[\d,]*(\.\d+)?\s*$/.test(answer) ? Number(answer.replace(/[$,\s]/g, '')) : undefined
-    const fb = recordQuestionFeedback(graph, human, variableId, 'answered')
+    const fb = recordQuestionFeedback(graph, human, variableId, 'answered', new Date(), ranker)
+    const openBefore = openQuestions(graph, ranker).map((q) => q.variableId)
     const r = applyBeliefUpdate(fb.ok ? fb.graph : graph, human, { variableId, value: numeric ?? answer.trim(), provenance: 'HUMAN_SPECIFIED', confidence: 1, sources: [{ type: 'human', ref: actorId, quote: answer.trim() }] })
     if (!r.accepted) fail(r.reasons.join(' '))
     await graphs.put(r.graph)
+    if (fb.ok && ranker) await rankerStore.save(learnFromAnswer(ranker, graph, variableId, openBefore))
     console.log(`Recorded your answer for ${variableId}.`)
-    for (const q of openQuestions(r.graph).slice(0, 3)) console.log(`  ? ${q.variableId}: ${q.question}`)
+    for (const q of openQuestions(r.graph, ranker).slice(0, 3)) console.log(`  ? ${q.variableId}: ${q.question}`)
     break
   }
   case 'dismiss': {
     const [id, variableId] = positional
     if (!id || !variableId) fail('Usage: dismiss <intentId> <variableId>')
     const graph = await graphOrFail(id)
-    const r = recordQuestionFeedback(graph, human, variableId, 'not-worth-asking')
+    const r = recordQuestionFeedback(graph, human, variableId, 'not-worth-asking', new Date(), ranker)
     if (!r.ok) fail(r.reason)
     await graphs.put(r.graph)
+    const learned = learnFromDismissal(ranker ?? newRanker(), graph, variableId, openQuestions(graph, ranker).map((q) => q.variableId))
+    await rankerStore.save(learned)
     console.log(`Noted: "${variableId}" was not worth asking (it was Aura's #${r.feedback.rank} of ${r.feedback.openQuestions}).`)
-    for (const q of openQuestions(r.graph).slice(0, 3)) console.log(`  ? ${q.variableId}: ${q.question}`)
+    for (const q of openQuestions(r.graph, learned).slice(0, 3)) console.log(`  ? ${q.variableId}: ${q.question}`)
     break
   }
   case 'connect': {
@@ -183,7 +194,7 @@ switch (cmd) {
     const facts: Facts = {
       'connectors.connected': connectors.connected.length,
       'observed.variables': graph.variables.filter((x) => x.provenance === 'OBSERVED').length,
-      'aura.openQuestions': openQuestions(graph).length,
+      'aura.openQuestions': openQuestions(graph, ranker).length,
       ...(backtest ? { 'backtest.passed': backtest.passed === true } : {}),
       ...shadowFacts(shadow),
     }
@@ -200,7 +211,7 @@ switch (cmd) {
     console.log(`Intent ${id}: ${graph.objective}`)
     console.log(`Playbook stage: ${stage}`)
     console.log('Facts:', facts)
-    const open = openQuestions(graph).slice(0, 3)
+    const open = openQuestions(graph, ranker).slice(0, 3)
     const qq = questionQuality(await graphs.list())
     if (qq.scored) console.log(`Question quality: ${qq.answered}/${qq.scored} of Aura's top-3 questions answered rather than dismissed (target 80%).`)
     if (open.length) { console.log('Open questions (answer with: npm run onboard -- answer <intentId> <variableId> "..."):'); for (const q of open) console.log(`  ? ${q.variableId}: ${q.question}`) }

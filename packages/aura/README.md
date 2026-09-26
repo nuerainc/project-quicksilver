@@ -505,6 +505,42 @@ as questions are actually asked:
 The frozen v3 predictions below stay in the repository as a record. That
 test was retired before any ranking was collected, so it has no result.
 
+## Learned question order (per provider, 2026-09-26)
+
+The fixed scorer asks every provider the same questions in the same order.
+The learned order (`src/rank-learn.ts`) learns one provider's order:
+
+- **From rankings:** pairwise logistic regression on each ranking (1st >
+  2nd > 3rd > the rest). Features: the question's slot, the slot within the
+  mode, and the slot given what the objective already states.
+- **From real use:** "not worth asking" pushes that question below the
+  others. An answer gives a weak push up.
+- **Scope:** it only reorders questions. The weights are Aura's inference
+  (`ranker.json` next to the intent data), never provider intent.
+
+Honest accuracy, always on objectives the learner did not train on
+(`npm run aura:rank -- cv`; founder rankings from sets v1 and v3, 62 objectives):
+
+| Test | Learned | Fixed scorer v4 | Chance |
+|---|---|---|---|
+| Leave-one-out, all | **75.3%** | 66.1% | 62.1% |
+| Leave-one-out, existing businesses (onboard) | **84.4%** | 74.4% | 64.5% |
+| Leave-one-out, new businesses (genesis) | 66.7% | 58.3% | 59.8% |
+| Trained on set v3, tested on set v1 | **74.0%** (onboard 82.2%) | 68.8% | 63.0% |
+| Trained on set v1, tested on set v3 | 61.1% (onboard 73.3%) | not comparable (v4 was fitted to v3) | 61.2% |
+
+- **Onboard (existing businesses):** the founder's order is consistent and
+  learnable. "Where are the records?" comes first in 29 of 30. The learned
+  order clears the 80% bar on held-out objectives.
+- **Genesis (new businesses):** his first question varies (goal, hours,
+  time, budget or skills), and nothing in the objective text predicts which.
+  The learned order is only a little better than chance there. More context
+  would be needed, such as what he is trying to protect.
+
+To use it: `npm run aura:rank -- train --out data/intent/ranker.json`. The
+onboard commands and the local host read that file, and every answer or
+dismissal updates it. Real-use question quality (revision 2) is the check.
+
 ## Fresh impact-ranking test for scorer v3 (frozen 2026-09-26; retired, not run)
 
 Scorer v3 (implied intent) was never tested on rankings it had not seen. The

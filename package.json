@@ -31,14 +31,15 @@
     "typecheck": "npm run typecheck --workspaces --if-present",
     "seed:test": "node --experimental-strip-types --no-warnings --test apps/studio/seed/policies.test.ts",
     "host:test": "node --experimental-strip-types --no-warnings --test packages/host/src/host.test.ts packages/host/src/vault.test.ts packages/host/src/observability.test.ts packages/host/src/config.test.ts packages/host/src/intent-api.test.ts packages/host/src/shadow-api.test.ts packages/host/src/sanity-stores.test.ts packages/host/src/genesis-api.test.ts packages/host/src/genesis-reviews.test.ts",
-    "aura:test": "node --experimental-strip-types --no-warnings --test packages/aura/src/aura.test.ts packages/aura/src/ledger.test.ts packages/aura/src/profile.test.ts packages/aura/src/store.test.ts packages/aura/src/predict.test.ts packages/aura/src/onboard.test.ts packages/aura/src/learn.test.ts packages/aura/src/predict-v2.test.ts packages/aura/src/impact-v3.test.ts packages/aura/src/questions.test.ts",
+    "aura:test": "node --experimental-strip-types --no-warnings --test packages/aura/src/aura.test.ts packages/aura/src/ledger.test.ts packages/aura/src/profile.test.ts packages/aura/src/store.test.ts packages/aura/src/predict.test.ts packages/aura/src/onboard.test.ts packages/aura/src/learn.test.ts packages/aura/src/predict-v2.test.ts packages/aura/src/impact-v3.test.ts packages/aura/src/questions.test.ts packages/aura/src/rank-learn.test.ts",
     "aura:eval": "node --experimental-strip-types --no-warnings packages/aura/src/eval-cli.ts",
     "aura:choices:model": "npm run choices:eval --workspace=@quicksilver/agent --",
     "aura:choices": "node --experimental-strip-types --no-warnings packages/aura/src/choice-cli.ts",
     "aura:choices:v2": "node --experimental-strip-types --no-warnings packages/aura/src/choice-v2-cli.ts",
     "aura:agreement": "node --experimental-strip-types --no-warnings packages/aura/src/agreement-cli.ts",
     "aura:eval:model": "npm run intent:eval --workspace=@quicksilver/agent --",
-    "genesis": "npm run genesis --workspace=@quicksilver/host --"
+    "genesis": "npm run genesis --workspace=@quicksilver/host --",
+    "aura:rank": "node --experimental-strip-types --no-warnings packages/aura/src/rank-cli.ts"
   },
   "engines": {
     "node": ">=20"
