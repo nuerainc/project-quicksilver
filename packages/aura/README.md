@@ -209,6 +209,39 @@ The only blind check left on these answers is the model:
 `npm run aura:choices:model` gives the Azure model the scenarios with and
 without the profile, never the answers.
 
+### Blind model test result (2026-09-26): 60.5% with the profile, 63.2% without
+
+Run by the founder on Azure (`qs-planner`):
+
+| Arm | Agreement | Versus chance (25%) |
+|---|---|---|
+| Profile readings in the prompt | **23/38 (60.5%)** | 2.4× |
+| No profile | **24/38 (63.2%)** | 2.5× |
+
+- **Blindness:** the model never saw the answers. The prompt was written
+  after they existed, by an author who had seen the earlier analyses, but
+  it contains no pattern taken from them. It is the most blind result on
+  this set, not a pre-registered one.
+- **The strongest predictor so far.** It is 4× the frozen v1 and above the
+  exploratory learner (42–53%).
+- **It passes the 2× chance bar but not the 70% bar.** The charter needs
+  both, so the criterion is still not met.
+- **The profile did not help.** Adding it cost one scenario. This is the
+  third sign (after v1 and the learner's prior) that the six-dimension
+  readings do not carry over to concrete choices.
+- **Misses shared by both arms:** 10 of them (cs-01, 03, 07, 10, 15, 17,
+  20, 22, 31, 32), mostly in the *implied*, *ambiguity*, *drift* and
+  *autonomy* categories.
+  - A general model misreads what this founder leaves unsaid.
+  - It also misreads when this founder would rather act than be asked.
+  - That is what learning from the provider's own verdicts is meant to fix.
+
+**Next method (to be frozen before a fresh test):** the model's pick becomes
+the starting point, and the learner adjusts it from the provider's own
+choices. The model's choice is one feature, alongside `compromise`, `ask`
+and per-category terms. The combination is scored predict-then-learn on
+fresh scenarios and on pilot verdicts, never on these 38.
+
 v1 stays recorded as failed; it is not retuned. v2 changes the method:
 requirements eliminate options first, then the least-sacrifice option wins
 (no goal badly sacrificed), with extremes only for strong profile leans. It
@@ -340,7 +373,7 @@ Azure run on the development set (2026-09-26, before these fixes): baseline
 
 | Criterion | Status |
 |---|---|
-| Choice agreement ≥ 70% and ≥ 2× chance (primary, revised charter) | **Not met: predictor v1 scored 6/38 (15.8%)**, below 25% chance, 2026-09-26. v2 needs a fresh scenario set |
+| Choice agreement ≥ 70% and ≥ 2× chance (primary, revised charter) | **Not met.** Frozen predictor v1: 6/38 (15.8%). Blind model test: 24/38 (63.2%) without the profile, 23/38 (60.5%) with it; passes 2× chance, misses 70%. Next: model plus learner, frozen, on fresh scenarios and pilot verdicts |
 | ≥ 90% parsing accuracy | **Met on the held-out set:** model parser 27/30 (90.0%) on Azure, 2026-09-26. Confirm on a larger fresh set |
 | 100% provenance tagging | Enforced by validation; true on all 52 labeled objectives |
 | 0 unsupported inferences | Enforced by validation; 0 on all 52 |
