@@ -19,6 +19,7 @@
   },
   "dependencies": {
     "@quicksilver/agent": "*",
+    "@quicksilver/aura": "*",
     "@quicksilver/kernel": "*",
     "@sanity/client": "^6.22.5",
     "pg": "^8.13.1"

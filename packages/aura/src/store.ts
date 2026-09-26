@@ -1,4 +1,4 @@
-import { appendFile, mkdir, readFile } from 'node:fs/promises'
+import { appendFile, mkdir, readdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import type { KeyObject } from 'node:crypto'
 
@@ -280,5 +280,62 @@ export function fromSanityIntentGraph(doc: SanityIntentGraphDocument): IntentGra
       return e
     }),
     history: JSON.parse(doc.historyJson) as IntentGraph['history'],
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Intent graph stores (latest version of each graph; its history travels inside it)
+
+export interface IntentGraphStore {
+  get(id: string): Promise<IntentGraph | undefined>
+  put(graph: IntentGraph): Promise<void>
+  list(): Promise<IntentGraph[]>
+}
+
+const GRAPH_ID = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$/
+
+export class MemoryIntentGraphStore implements IntentGraphStore {
+  private readonly graphs = new Map<string, IntentGraph>()
+  async get(id: string) { const g = this.graphs.get(id); return g ? structuredClone(g) : undefined }
+  async put(graph: IntentGraph) { if (!GRAPH_ID.test(graph.id)) throw new Error(`Invalid graph id "${graph.id}".`); this.graphs.set(graph.id, structuredClone(graph)) }
+  async list() { return [...this.graphs.values()].map((g) => structuredClone(g)) }
+}
+
+/** One JSON file per graph, replaced atomically (write then rename). */
+export class FileIntentGraphStore implements IntentGraphStore {
+  private readonly dir: string
+  constructor(dir: string) {
+    this.dir = dir
+  }
+  private path(id: string): string {
+    if (!GRAPH_ID.test(id)) throw new Error(`Invalid graph id "${id}".`)
+    return join(this.dir, `${id}.intent-graph.json`)
+  }
+  async get(id: string): Promise<IntentGraph | undefined> {
+    try {
+      return JSON.parse(await readFile(this.path(id), 'utf8')) as IntentGraph
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined
+      throw error
+    }
+  }
+  async put(graph: IntentGraph): Promise<void> {
+    const path = this.path(graph.id)
+    await mkdir(this.dir, { recursive: true })
+    const tmp = `${path}.${process.pid}.tmp`
+    await writeFile(tmp, JSON.stringify(graph), { encoding: 'utf8', mode: 0o600 })
+    await rename(tmp, path)
+  }
+  async list(): Promise<IntentGraph[]> {
+    let names: string[]
+    try {
+      names = await readdir(this.dir)
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return []
+      throw error
+    }
+    const out: IntentGraph[] = []
+    for (const n of names.filter((f) => f.endsWith('.intent-graph.json'))) out.push(JSON.parse(await readFile(join(this.dir, n), 'utf8')) as IntentGraph)
+    return out
   }
 }

@@ -189,3 +189,24 @@ limit.
   keeps runs safe across processes.
 - Traces and dashboards. Logs and metrics are the M2 baseline.
 - Effectful tool execution (playbook milestone).
+
+## Aura intent API (M3)
+
+The host serves the Aura intent entry point and the intent ledger. With a file
+run store they are kept next to it under `intent/`; otherwise they are held in
+memory.
+
+| Route | Permission | Does |
+|---|---|---|
+| `POST /api/intents` `{ objective, mode?, autonomyDepth? }` | `intent:provide` | Parses the objective into an intent graph and returns the top questions |
+| `GET /api/intents`, `GET /api/intents/:id` | `decision:read` | Lists intents, or returns one with its graph |
+| `POST /api/intents/:id/answers` `{ variableId, answer }` | `intent:provide` | Records the answer as the provider's own (`HUMAN_SPECIFIED`, with the quote) and returns the next questions |
+| `GET /api/intent-ledger/:company` | `decision:read` | Returns the ledger, its verification result, and the current state |
+| `POST /api/intent-ledger/:company` `{ change, reason? }` | `intent:provide` or `intent:rules`, checked by Aura | Appends one change under the provider operating rules |
+
+- Give the founder's principal the `intent-provider` role in
+  `QUICKSILVER_PRINCIPALS`. Give an admin the `intent-admin` role.
+- By default objectives are read with the rule-based parser.
+  `QUICKSILVER_INTENT_PARSER=model` uses the model parser (see the Aura
+  README), which needs a model provider.
+- Nothing here proposes or executes an action.

@@ -22,6 +22,12 @@ import { Logger } from './log.ts'
 import { SecretsVault, generateMasterKey } from './vault.ts'
 
 const TENANT = 'nuera'
+/**
+ * The schedule fires 12 hours from now. A fixed hour (it was 07:00 UTC) put the
+ * scheduler's one-hour catch-up window inside the test run for an hour each
+ * day, adding an unexpected run.
+ */
+const SCHEDULE_HOUR = (new Date().getUTCHours() + 12) % 24
 
 const briefGraph: WorkflowGraph = {
   schemaVersion: 1, id: 'daily-brief', version: 1, entryNodeId: 'start',
@@ -90,7 +96,7 @@ async function startHost(overrides: Record<string, unknown> = {}, extra: { agent
     queue: { defaultMaxAttempts: 1 },
     workflows: { 'daily-brief': briefGraph, 'send-email': toolGraph },
     services: [{ id: 'svc:scheduler', roles: ['trigger'] }, { id: 'svc:erp-webhook', roles: ['trigger'] }],
-    schedules: [{ id: 'morning', workflow: 'daily-brief', cron: '0 7 * * *', principal: 'svc:scheduler', input: { topic: 'overnight' } }],
+    schedules: [{ id: 'morning', workflow: 'daily-brief', cron: `0 ${SCHEDULE_HOUR} * * *`, principal: 'svc:scheduler', input: { topic: 'overnight' } }],
     webhooks: [{ id: 'erp-orders', workflow: 'daily-brief', secret: 'env:ERP_WEBHOOK_SECRET', principal: 'svc:erp-webhook' }],
     ...overrides,
   })
@@ -365,7 +371,7 @@ test('schedules and webhooks are listed without secrets', async () => {
   try {
     const schedules = await (await api(h, '/api/schedules', { token: h.tokens.viewer })).json() as { schedules: Array<{ id: string; nextRunAt: string }> }
     assert.equal(schedules.schedules[0]!.id, 'morning')
-    assert.match(schedules.schedules[0]!.nextRunAt, /T07:00:00/)
+    assert.match(schedules.schedules[0]!.nextRunAt, new RegExp(`T${String(SCHEDULE_HOUR).padStart(2, '0')}:00:00`))
     const hooks = await (await api(h, '/api/webhooks', { token: h.tokens.viewer })).text()
     assert.ok(hooks.includes('erp-orders') && !hooks.includes(h.webhookSecret))
     const workflows = await (await api(h, '/api/workflows', { token: h.tokens.viewer })).json() as { workflows: unknown[] }

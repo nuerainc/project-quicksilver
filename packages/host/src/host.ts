@@ -18,6 +18,7 @@ import { createHandlerFactory, type AgentRunner, type EvaluationSink } from './h
 import { Logger, redactValue } from './log.ts'
 import { createHostMetrics, type HostMetrics } from './metrics.ts'
 import { SecretsVault, VaultError } from './vault.ts'
+import { handleIntentRoute, type IntentApiDeps } from './intent-api.ts'
 
 /**
  * The single-tenant Quicksilver host: one process that runs the governed
@@ -45,6 +46,8 @@ export interface HostDependencies {
   onStop?: () => Promise<void> | void
   /** Store readiness probe; defaults to listing running runs. */
   ready?: () => Promise<boolean>
+  /** Aura intent entry point and ledger (M3). Routes return 404 when absent. */
+  intent?: IntentApiDeps
 }
 
 const RUN_STATUSES: readonly WorkflowRunStatus[] = ['queued', 'running', 'completed', 'blocked', 'cancelled', 'dead-lettered']
@@ -310,6 +313,15 @@ export class QuicksilverHost {
     // GET /api/whoami
     if (method === 'GET' && path === '/api/whoami') return { status: 200, body: { id: principal.id, kind: principal.kind, tenantId: principal.tenantId, roles: principal.roles } }
 
+    // Aura intents and the intent ledger
+    if ((parts[1] === 'intents' || parts[1] === 'intent-ledger') && this.deps.intent) {
+      const handled = await handleIntentRoute({
+        method, parts, principal, tenantId: this.config.tenantId, access: this.access,
+        readBody: () => readJson(req, this.config.http.maxBodyBytes),
+      }, { ...this.deps.intent, ...(this.deps.now ? { now: this.deps.now } : {}) })
+      if (handled) return handled
+    }
+
     // Runs
     if (path === '/api/runs' && method === 'GET') {
       const denied = this.authorize(principal, 'run:read')
@@ -485,8 +497,8 @@ function headerValue(req: IncomingMessage, name: string): string | null {
 
 function routeLabel(method: string, path: string): string {
   if (path.startsWith('/webhooks/')) return `${method} /webhooks/:id`
-  const normalized = path.replace(/^\/api\/runs\/[^/]+/, '/api/runs/:id').replace(/^\/api\/secrets\/[^/]+/, '/api/secrets/:name')
-  const known = ['/healthz', '/readyz', '/metrics', '/api/whoami', '/api/runs', '/api/runs/:id', '/api/runs/:id/cancel', '/api/runs/:id/redrive', '/api/dead-letters', '/api/stats', '/api/schedules', '/api/webhooks', '/api/workflows', '/api/secrets', '/api/secrets/:name', '/api/admin/reload-secrets']
+  const normalized = path.replace(/^\/api\/runs\/[^/]+/, '/api/runs/:id').replace(/^\/api\/secrets\/[^/]+/, '/api/secrets/:name').replace(/^\/api\/intents\/[^/]+/, '/api/intents/:id').replace(/^\/api\/intent-ledger\/[^/]+/, '/api/intent-ledger/:company')
+  const known = ['/healthz', '/readyz', '/metrics', '/api/whoami', '/api/runs', '/api/runs/:id', '/api/runs/:id/cancel', '/api/runs/:id/redrive', '/api/dead-letters', '/api/stats', '/api/schedules', '/api/webhooks', '/api/workflows', '/api/secrets', '/api/secrets/:name', '/api/admin/reload-secrets', '/api/intents', '/api/intents/:id', '/api/intents/:id/answers', '/api/intent-ledger/:company']
   return known.includes(normalized) ? `${method} ${normalized}` : `${method} other`
 }
 

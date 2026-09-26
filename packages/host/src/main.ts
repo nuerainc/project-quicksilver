@@ -85,6 +85,32 @@ async function buildStore(config: HostConfig, log: Logger): Promise<{ store: Wor
   }
 }
 
+/**
+ * Aura intent stores: next to the run store for a file store, in memory otherwise.
+ * QUICKSILVER_INTENT_PARSER=combined uses the rules plus the model (needs a model provider).
+ */
+async function buildIntent(config: HostConfig, log: Logger) {
+  const aura = await import('@quicksilver/aura')
+  let graphs, ledger
+  if (config.store.kind === 'file') {
+    const dir = join(dirname(config.store.path), 'intent')
+    graphs = new aura.FileIntentGraphStore(join(dir, 'graphs'))
+    ledger = new aura.FileLedgerStore(join(dir, 'ledger'))
+  } else {
+    log.warn('intent graphs and the intent ledger are kept in memory; use a file store to keep them')
+    graphs = new aura.MemoryIntentGraphStore()
+    ledger = new aura.MemoryLedgerStore()
+  }
+  let parser: import('@quicksilver/aura').ObjectiveParser | undefined
+  if (process.env.QUICKSILVER_INTENT_PARSER === 'combined') {
+    const agent = await import('@quicksilver/agent')
+    const { parseObjectiveCombined } = await import('@quicksilver/agent/intent')
+    if (agent.isLlmConfigured()) parser = (text) => parseObjectiveCombined(text)
+    else log.warn('QUICKSILVER_INTENT_PARSER=combined but no model provider is configured; using the rule-based parser')
+  }
+  return { graphs, ledger, ...(parser ? { parser } : {}) }
+}
+
 async function buildAgentRunner(log: Logger): Promise<AgentRunner | undefined> {
   if (!process.env.SANITY_CONTEXT_MCP_URL || !process.env.SANITY_CONTEXT_TOKEN) {
     log.warn('Sanity Context MCP is not configured; agent steps will fail closed')
@@ -209,6 +235,7 @@ async function main(): Promise<void> {
     logger: log,
     agentRunner: await buildAgentRunner(log),
     evaluationSink: await buildEvaluationSink(log),
+    intent: await buildIntent(config, log),
     ...(close ? { onStop: close } : {}),
     ...(ready ? { ready } : {}),
   })
