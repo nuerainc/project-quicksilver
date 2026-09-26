@@ -84,6 +84,7 @@ npm run aura:test
 
 | Criterion | Status |
 |---|---|
+| Choice agreement ≥ 70% and ≥ 2× chance (primary, revised charter) | 38 blind scenarios in `eval/choice-scenarios.json`; founder labels pending |
 | ≥ 90% parsing accuracy | Baseline 80.8%; the model parser is measured on Azure |
 | 100% provenance tagging | Enforced by validation; true on all 52 labeled objectives |
 | 0 unsupported inferences | Enforced by validation; 0 on all 52 |
