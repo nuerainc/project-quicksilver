@@ -215,3 +215,13 @@ test('combined parser: money from the model, durations from the rules, constrain
 test('baseline reads "the next quarter" as a 90-day timeframe', () => {
   assert.equal(parseObjectiveBaseline('Our company needs a clear picture of cash flow for the next quarter.').timeframeDays?.value, 90)
 })
+
+test('production parser: the model\'s parse, except it can never grant acting alone', async () => {
+  const { guardModelParse } = await import('./index.ts')
+  const text = 'Keep the books tidy.'
+  const rules = parseObjectiveBaseline(text)
+  const model = { ...rules, mode: { value: 'operate' as const, cue: { text: 'Keep', index: 0 } }, autonomy: { value: 'act-within-limits' as const, cue: { text: 'Keep', index: 0 } } }
+  const g = guardModelParse(rules, model)
+  assert.equal(g.mode?.value, 'operate', 'the model\'s other fields are kept')
+  assert.equal(g.autonomy, null)
+})

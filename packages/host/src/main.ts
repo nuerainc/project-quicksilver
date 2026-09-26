@@ -87,7 +87,7 @@ async function buildStore(config: HostConfig, log: Logger): Promise<{ store: Wor
 
 /**
  * Aura intent stores: next to the run store for a file store, in memory otherwise.
- * QUICKSILVER_INTENT_PARSER=combined uses the rules plus the model (needs a model provider).
+ * QUICKSILVER_INTENT_PARSER=model uses the production parser: the model with the autonomy guard (needs a model provider).
  */
 async function buildIntent(config: HostConfig, log: Logger) {
   const aura = await import('@quicksilver/aura')
@@ -102,11 +102,11 @@ async function buildIntent(config: HostConfig, log: Logger) {
     ledger = new aura.MemoryLedgerStore()
   }
   let parser: import('@quicksilver/aura').ObjectiveParser | undefined
-  if (process.env.QUICKSILVER_INTENT_PARSER === 'combined') {
+  if (process.env.QUICKSILVER_INTENT_PARSER === 'model') {
     const agent = await import('@quicksilver/agent')
-    const { parseObjectiveCombined } = await import('@quicksilver/agent/intent')
-    if (agent.isLlmConfigured()) parser = (text) => parseObjectiveCombined(text)
-    else log.warn('QUICKSILVER_INTENT_PARSER=combined but no model provider is configured; using the rule-based parser')
+    const { parseObjectiveGuarded } = await import('@quicksilver/agent/intent')
+    if (agent.isLlmConfigured()) parser = (text) => parseObjectiveGuarded(text)
+    else log.warn('QUICKSILVER_INTENT_PARSER=model but no model provider is configured; using the rule-based parser')
   }
   return { graphs, ledger, ...(parser ? { parser } : {}) }
 }

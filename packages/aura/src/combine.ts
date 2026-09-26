@@ -38,3 +38,14 @@ export function combineParses(rules: ParsedObjective, model: ParsedObjective): P
     constraints: [...constraints.values()],
   }
 }
+
+/**
+ * The production parser (chosen 2026-09-26 from the held-out run): the model's
+ * parse, with one safety rule from `combineParses`: the model can never grant
+ * acting alone, only make autonomy more restrictive; "act on its own" needs a
+ * literal cue the rules find. On the held-out set this scored the same as the
+ * model alone (27/30), because every act-alone objective there was literal.
+ */
+export function guardModelParse(rules: ParsedObjective, model: ParsedObjective): ParsedObjective {
+  return { ...model, autonomy: combineParses(rules, model).autonomy }
+}

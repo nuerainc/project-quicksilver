@@ -207,6 +207,6 @@ memory.
 - Give the founder's principal the `intent-provider` role in
   `QUICKSILVER_PRINCIPALS`. Give an admin the `intent-admin` role.
 - By default objectives are read with the rule-based parser.
-  `QUICKSILVER_INTENT_PARSER=model` uses the model parser (see the Aura
+  `QUICKSILVER_INTENT_PARSER=model` uses the production parser (the model with the autonomy guard; see the Aura
   README), which needs a model provider.
 - Nothing here proposes or executes an action.

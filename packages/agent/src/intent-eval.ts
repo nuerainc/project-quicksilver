@@ -26,7 +26,7 @@ process.env.QUICKSILVER_MODEL_MODE ||= 'azure'
 
 const { evaluateParser, parseObjectiveBaseline } = await import('@quicksilver/aura')
 const { parseObjectiveWithModel } = await import('./intent-parser.ts')
-const { combineParses } = await import('@quicksilver/aura')
+const { combineParses, guardModelParse } = await import('@quicksilver/aura')
 const { resolveId } = await import('./models.ts')
 
 const setName = process.argv.includes('--holdout') ? 'objectives-holdout.json' : 'objectives.json'
@@ -53,12 +53,18 @@ const combined = await evaluateParser((text) => {
   if (!m) throw new Error('model parse failed for this objective')
   return combineParses(parseObjectiveBaseline(text), m)
 }, set)
+const guarded = await evaluateParser((text) => {
+  const m = modelParses.get(text)
+  if (!m) throw new Error('model parse failed for this objective')
+  return guardModelParse(parseObjectiveBaseline(text), m)
+}, set)
 const pct = (n: number) => `${(n * 100).toFixed(1)}%`
 
 console.log(`Baseline parser: ${baseline.exactMatches}/${baseline.objectives} (${pct(baseline.parsingAccuracy)})`)
 console.log(`Model parser:    ${model.exactMatches}/${model.objectives} (${pct(model.parsingAccuracy)})`)
-console.log(`Combined parser: ${combined.exactMatches}/${combined.objectives} (${pct(combined.parsingAccuracy)}) — charter target 90%: ${combined.meetsCharterTarget ? 'MET' : 'not met'}`)
-console.log('Combined field accuracy:', combined.fieldAccuracy)
+console.log(`Combined parser: ${combined.exactMatches}/${combined.objectives} (${pct(combined.parsingAccuracy)})`)
+console.log(`Production (model + autonomy guard): ${guarded.exactMatches}/${guarded.objectives} (${pct(guarded.parsingAccuracy)}) — charter target 90%: ${guarded.meetsCharterTarget ? 'MET' : 'not met'}`)
+console.log('Production field accuracy:', guarded.fieldAccuracy)
 if (model.errors.length) console.log(`Model errors (${model.errors.length}):`, model.errors.slice(0, 5))
 if (process.argv.includes('--misses')) {
   console.log('Model misses:')

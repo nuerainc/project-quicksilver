@@ -13,7 +13,7 @@
 import { generateText, Output } from 'ai'
 import { z } from 'zod'
 
-import { AUTONOMY_DEPTHS, CONSTRAINT_TYPES, OPERATING_MODES, combineParses, parseObjectiveBaseline, type ParsedObjective, type Span } from '@quicksilver/aura'
+import { AUTONOMY_DEPTHS, CONSTRAINT_TYPES, OPERATING_MODES, combineParses, guardModelParse, parseObjectiveBaseline, type ParsedObjective, type Span } from '@quicksilver/aura'
 
 import { assertAgentDispatch } from './governance.ts'
 import { modelForRole, type QuicksilverModelRole } from './models.ts'
@@ -87,6 +87,11 @@ export function toParsedObjective(objective: string, raw: IntentParse): ParsedOb
     })).values()],
     dropped,
   }
+}
+
+/** The production parser: the model's parse with the autonomy guard (see @quicksilver/aura guardModelParse). */
+export async function parseObjectiveGuarded(objective: string, options: { role?: QuicksilverModelRole; signal?: AbortSignal } = {}): Promise<ParsedObjective> {
+  return guardModelParse(parseObjectiveBaseline(objective), await parseObjectiveWithModel(objective, options))
 }
 
 /** The combined parser (see @quicksilver/aura combineParses): rules and model, field by field. */
