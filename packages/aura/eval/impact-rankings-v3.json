@@ -1,0 +1,158 @@
+{
+ "scorerVersion": 3,
+ "rankedBy": "founder",
+ "rankedAt": "2026-09-26",
+ "method": "Blind: shuffled order, no scores, Aura's order hidden and frozen in impact-predictions-v3.json before ranking. Collected on the Aura Question Ranking v3 page. Ranked after charter revision 2 retired this test; recorded as supporting evidence, not the charter measure.",
+ "rankings": {
+  "hold-004": [
+   "success_metric",
+   "timeframe",
+   "budget"
+  ],
+  "hold-005": [
+   "success_metric",
+   "skills",
+   "weekly_hours"
+  ],
+  "hold-006": [
+   "weekly_hours",
+   "budget",
+   "risk_tolerance"
+  ],
+  "hold-007": [
+   "weekly_hours",
+   "success_metric",
+   "timeframe"
+  ],
+  "hold-009": [
+   "budget",
+   "risk_tolerance",
+   "skills"
+  ],
+  "hold-016": [
+   "data_sources",
+   "success_metric",
+   "scope"
+  ],
+  "hold-019": [
+   "success_metric",
+   "budget",
+   "weekly_hours"
+  ],
+  "rank3-01": [
+   "timeframe",
+   "weekly_hours",
+   "risk_tolerance"
+  ],
+  "rank3-02": [
+   "success_metric",
+   "weekly_hours",
+   "timeframe"
+  ],
+  "rank3-04": [
+   "budget",
+   "timeframe",
+   "weekly_hours"
+  ],
+  "rank3-06": [
+   "success_metric",
+   "weekly_hours",
+   "timeframe"
+  ],
+  "rank3-14": [
+   "weekly_hours",
+   "budget",
+   "timeframe"
+  ],
+  "rank3-18": [
+   "weekly_hours",
+   "budget",
+   "risk_tolerance"
+  ],
+  "rank3-21": [
+   "timeframe",
+   "risk_tolerance",
+   "success_metric"
+  ],
+  "rank3-25": [
+   "weekly_hours",
+   "risk_tolerance",
+   "timeframe"
+  ],
+  "rank3-29": [
+   "data_sources",
+   "scope",
+   "success_metric"
+  ],
+  "rank3-30": [
+   "data_sources",
+   "scope",
+   "business_type"
+  ],
+  "rank3-33": [
+   "data_sources",
+   "success_metric",
+   "scope"
+  ],
+  "rank3-35": [
+   "success_metric",
+   "data_sources",
+   "scope"
+  ],
+  "rank3-37": [
+   "data_sources",
+   "success_metric",
+   "scope"
+  ],
+  "rank3-38": [
+   "data_sources",
+   "scope",
+   "revenue_model"
+  ],
+  "rank3-41": [
+   "data_sources",
+   "success_metric",
+   "scope"
+  ],
+  "rank3-42": [
+   "data_sources",
+   "success_metric",
+   "revenue_model"
+  ],
+  "rank3-44": [
+   "data_sources",
+   "success_metric",
+   "revenue_model"
+  ],
+  "rank3-46": [
+   "data_sources",
+   "success_metric",
+   "revenue_model"
+  ],
+  "rank3-47": [
+   "data_sources",
+   "success_metric",
+   "scope"
+  ],
+  "rank3-48": [
+   "data_sources",
+   "success_metric",
+   "revenue_model"
+  ],
+  "rank3-49": [
+   "data_sources",
+   "success_metric",
+   "scope"
+  ],
+  "rank3-51": [
+   "data_sources",
+   "success_metric",
+   "scope"
+  ],
+  "rank3-54": [
+   "weekly_hours",
+   "success_metric",
+   "timeframe"
+  ]
+ }
+}
