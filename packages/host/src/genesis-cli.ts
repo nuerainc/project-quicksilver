@@ -14,7 +14,9 @@
  *   npm run genesis -- status
  *
  * These commands RECORD money that has already moved and apply the fixed
- * rules. They never move money. Data lives in data/genesis/<runId>/ (gitignored).
+ * rules. They never move money. Data lives in data/genesis/<runId>/ (gitignored),
+ * or in Sanity with QUICKSILVER_GENESIS_STORE=sanity (moneyEntry and
+ * experimentRecord documents; see genesis-store.ts).
  * You act as QUICKSILVER_GENESIS_ACTOR (default entity-founder), a human;
  * `evaluate` acts as the kernel, which may only kill, continue or close.
  */
@@ -32,7 +34,6 @@ import {
   MONEY_SOURCES,
   recordMeasurement,
   startExperiment,
-  verifyMoneyLedger,
   type Experiment,
   type ExperimentDefinition,
   type MoneyEntryInput,
@@ -42,6 +43,7 @@ import {
 import { decideSpend, genesisBlockers, genesisFacts, validateGenesisConfig, type GenesisRunConfig } from '@quicksilver/kernel/playbooks/genesis'
 
 import { loadHostConfig } from './config.ts'
+import { genesisStoresFromEnv, MoneyLedgerIntegrityError, runStartedAt } from './genesis-store.ts'
 import { SecretsVault } from './vault.ts'
 
 const root = process.env.INIT_CWD ?? process.cwd()
@@ -67,13 +69,26 @@ async function writeJson(path: string, value: unknown) {
 const config = JSON.parse(await readFile(configPath, 'utf8')) as GenesisRunConfig
 const configErrors = validateGenesisConfig(config)
 if (configErrors.length) fail(`The run config is invalid:\n  - ${configErrors.join('\n  - ')}`)
-const dir = resolve(root, process.env.QUICKSILVER_GENESIS_DIR ?? 'data/genesis', config.runId)
-const paths = { ledger: join(dir, 'ledger.json'), experiments: join(dir, 'experiments.json'), run: join(dir, 'run.json') }
-const ledger = await readJson<MoneyLedger>(paths.ledger, { runId: config.runId, budgetUsd: config.budgetUsd, entries: [] })
-const experiments = await readJson<Experiment[]>(paths.experiments, [])
-const run = await readJson<{ startedAt: string | null }>(paths.run, { startedAt: null })
-const v = verifyMoneyLedger(ledger)
-if (!v.valid) fail(`The money ledger does not verify: ${v.errors.join(' ')}`)
+const dataDir = resolve(root, process.env.QUICKSILVER_GENESIS_DIR ?? 'data/genesis')
+const stores = await genesisStoresFromEnv({ dir: dataDir, budgetUsd: config.budgetUsd }).catch((e: Error) => fail(e.message))
+const runPath = join(dataDir, config.runId, 'run.json')
+let entries: MoneyLedger['entries']
+try {
+  entries = await stores.ledger.load(config.runId)
+} catch (error) {
+  if (error instanceof MoneyLedgerIntegrityError) fail(error.message)
+  throw error
+}
+const ledger: MoneyLedger = { runId: config.runId, budgetUsd: config.budgetUsd, entries }
+const experiments = await stores.experiments.list(config.runId)
+// The file layout keeps run.json; Sanity derives the start from the first experiment started.
+const run = stores.kind === 'file'
+  ? await readJson<{ startedAt: string | null }>(runPath, { startedAt: runStartedAt(experiments) })
+  : { startedAt: runStartedAt(experiments) }
+async function saveExperiment(i: number, exp: Experiment) {
+  await stores.experiments.put(config.runId, exp)
+  experiments[i] = exp
+}
 
 async function vaultNames(): Promise<{ names: string[]; note?: string }> {
   try {
@@ -125,8 +140,7 @@ switch (cmd) {
       if (experiments.some((e) => e.definition.id === def.id)) fail(`Experiment "${def.id}" already exists; a changed experiment needs a new id.`)
       const d = draftExperiment(def)
       if (!d.ok) fail(d.reasons.join(' '))
-      experiments.push(d.experiment)
-      await writeJson(paths.experiments, experiments)
+      await saveExperiment(experiments.length, d.experiment)
       console.log(`Drafted ${def.id} (digest ${d.experiment.digest.slice(0, 12)}…). Start it with: npm run genesis -- experiment start ${def.id}`)
     } else if (sub === 'start') {
       const [exp, i] = findExperiment(arg)
@@ -137,9 +151,8 @@ switch (cmd) {
       if (run.startedAt && genesisFacts(config, ledger, experiments, new Date(run.startedAt), now)['run.daysLeft'] as number <= 0) fail('The run has ended.')
       const s = startExperiment(exp, founder, now, { remainingBudgetUsd: moneyTotals(ledger).remainingUsd })
       if (!s.ok) fail(s.reasons.join(' '))
-      experiments[i] = s.experiment
-      await writeJson(paths.experiments, experiments)
-      if (!run.startedAt) await writeJson(paths.run, { startedAt: now.toISOString() })
+      await saveExperiment(i, s.experiment)
+      if (!run.startedAt && stores.kind === 'file') await writeJson(runPath, { startedAt: now.toISOString() })
       console.log(`Started ${exp.definition.id}. Its thresholds are fixed until ${s.experiment.endsAt}.`)
     } else fail('Usage: experiment draft <file.json> | experiment start <experimentId>')
     break
@@ -149,8 +162,7 @@ switch (cmd) {
     const [exp, i] = findExperiment(id)
     const r = recordMeasurement(exp, Number(raw), founder, source ?? '', new Date())
     if (!r.ok) fail(r.reasons.join(' '))
-    experiments[i] = r.experiment
-    await writeJson(paths.experiments, experiments)
+    await saveExperiment(i, r.experiment)
     console.log(`Recorded ${exp.definition.metric.label}: ${raw}. Evaluate with: npm run genesis -- evaluate ${exp.definition.id}`)
     break
   }
@@ -167,8 +179,7 @@ switch (cmd) {
     }
     const r = applyEvaluation(exp, ev, cmd === 'decide' ? founder : kernelActor, new Date(), note)
     if (!r.ok) fail(r.reasons.join(' '))
-    experiments[i] = r.experiment
-    await writeJson(paths.experiments, experiments)
+    await saveExperiment(i, r.experiment)
     console.log(`Applied: ${exp.definition.id} is now ${r.experiment.status}.`)
     break
   }
@@ -193,7 +204,7 @@ switch (cmd) {
     }
     const r = appendMoney(ledger, { kind: cmd as MoneyKind, amountUsd, category, description, source: parseSource(), ...(experimentId ? { experimentId } : {}) }, founder, now)
     if (!r.ok) fail(r.reasons.join(' '))
-    await writeJson(paths.ledger, r.ledger)
+    await stores.ledger.append(config.runId, r.entry)
     const t = moneyTotals(r.ledger)
     console.log(`Recorded ${cmd} ${usd(amountUsd)} (entry ${r.entry.seq}). Capital used ${usd(t.capitalUsedUsd)} of ${usd(t.budgetUsd)}; revenue ${usd(t.revenueUsd)}.`)
     break

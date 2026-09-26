@@ -15,6 +15,8 @@
  *   DATABASE_URL              Postgres URL when store.kind is "postgres" (name configurable)
  *   Model provider and SANITY_CONTEXT_* variables enable the read-only query agent.
  *   NEXT_PUBLIC_SANITY_PROJECT_ID + SANITY_AUTH_TOKEN enable durable evaluation records.
+ *   QUICKSILVER_SHADOW_STORE=sanity keeps shadow recommendations and Aura's verdict
+ *     learner in Sanity (shadowRecommendation, auraVerdictLearner) instead of files.
  */
 import { randomUUID } from 'node:crypto'
 import { existsSync, readFileSync } from 'node:fs'
@@ -30,10 +32,10 @@ import { ConfigError, loadHostConfig, type HostConfig } from './config.ts'
 import type { AgentRunner, EvaluationSink } from './handlers.ts'
 import { QuicksilverHost } from './host.ts'
 import { Logger, parseLogLevel } from './log.ts'
-import { FileShadowStore, MemoryShadowStore, type ShadowApiDeps } from './shadow-api.ts'
+import { createSanityStoreClient, sanityConfigFromEnv } from './sanity-client.ts'
+import { FileShadowStore, MemoryShadowStore, type ShadowApiDeps, type ShadowStore } from './shadow-api.ts'
+import { SanityShadowStore } from './shadow-store-sanity.ts'
 import { SecretsVault, generateMasterKey } from './vault.ts'
-
-const LEGACY_CHALLENGE_PROJECT_ID = 'd280bqjc'
 
 /** Where the command was run from (npm sets INIT_CWD; workspace scripts run inside packages/host). */
 const baseDir = process.env.INIT_CWD ?? process.cwd()
@@ -115,12 +117,25 @@ async function buildIntent(config: HostConfig, log: Logger) {
 /**
  * Shadow mode (M4): the log and Aura's verdict learner sit next to the intent
  * graphs (<intent>/onboard/<intentId>/), where `npm run onboard` keeps them too.
+ * QUICKSILVER_SHADOW_STORE=sanity keeps them in Sanity instead (one shadowRecommendation
+ * per recommendation, one auraVerdictLearner per intent), through the same client
+ * configuration as evaluation records; the legacy challenge project is refused.
  * The shadow-stage agent needs a model provider; without one, proposals are entered by hand.
  */
-async function buildShadow(config: HostConfig, log: Logger, graphs: import('@quicksilver/aura').IntentGraphStore): Promise<ShadowApiDeps> {
-  const store = config.store.kind === 'file'
+async function buildShadowStore(config: HostConfig, log: Logger): Promise<ShadowStore> {
+  if ((process.env.QUICKSILVER_SHADOW_STORE ?? '').trim() === 'sanity') {
+    const client = await createSanityStoreClient()
+    if (!client) throw new Error('QUICKSILVER_SHADOW_STORE=sanity needs NEXT_PUBLIC_SANITY_PROJECT_ID and SANITY_AUTH_TOKEN.')
+    log.info('shadow records are kept in Sanity')
+    return new SanityShadowStore(client)
+  }
+  return config.store.kind === 'file'
     ? new FileShadowStore(join(dirname(config.store.path), 'intent', 'onboard'))
     : new MemoryShadowStore()
+}
+
+async function buildShadow(config: HostConfig, log: Logger, graphs: import('@quicksilver/aura').IntentGraphStore): Promise<ShadowApiDeps> {
+  const store = await buildShadowStore(config, log)
   const agent = await import('@quicksilver/agent')
   if (!agent.isLlmConfigured()) {
     log.warn('no model provider is configured; shadow recommendations can only be entered by hand')
@@ -164,21 +179,14 @@ async function buildAgentRunner(log: Logger): Promise<AgentRunner | undefined> {
 }
 
 async function buildEvaluationSink(log: Logger): Promise<EvaluationSink | undefined> {
-  const projectId = process.env.NEXT_PUBLIC_SANITY_PROJECT_ID
-  const token = process.env.SANITY_AUTH_TOKEN
-  if (!projectId || !token) {
+  // Throws for the legacy challenge project.
+  const sanity = sanityConfigFromEnv()
+  if (!sanity) {
     log.warn('Sanity is not configured; step evaluations are logged but not stored as evaluationRecord documents')
     return undefined
   }
-  if (projectId === LEGACY_CHALLENGE_PROJECT_ID) throw new Error('The legacy challenge Sanity project is blocked. Configure the dedicated Nuera Quicksilver project.')
   const { createClient } = await import('@sanity/client')
-  const client = createClient({
-    projectId,
-    dataset: process.env.NEXT_PUBLIC_SANITY_DATASET ?? 'production',
-    apiVersion: process.env.NEXT_PUBLIC_SANITY_API_VERSION ?? '2024-10-01',
-    useCdn: false,
-    token,
-  })
+  const client = createClient({ ...sanity, useCdn: false })
   return async (entries) => {
     const now = new Date().toISOString()
     const docs = entries.map((e) => buildEvaluationRecord({

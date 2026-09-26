@@ -52,10 +52,30 @@ npm run genesis -- revenue <amount> "<what>" --source payment-processor:<ref>
 npm run genesis -- status
 ```
 
-Data lives in `data/genesis/` (gitignored). `spend` records nothing the kernel
+Data lives in `data/genesis/` (gitignored) unless you choose Sanity (see Persistence). `spend` records nothing the kernel
 refuses. When the founder must decide, you confirm the spend with `--confirm`.
 The command only records money that has already moved: it never moves money
 itself.
+
+## Persistence
+
+By default the run's records are files under `data/genesis/<runId>/`
+(`QUICKSILVER_GENESIS_DIR` changes the parent): `ledger.json`,
+`experiments.json` and `run.json`. This is the layout earlier versions wrote,
+so existing data still loads. Every write is atomic.
+
+Set `QUICKSILVER_GENESIS_STORE=sanity` to keep them in Sanity instead. The
+command needs `NEXT_PUBLIC_SANITY_PROJECT_ID`, `NEXT_PUBLIC_SANITY_DATASET`
+and `SANITY_AUTH_TOKEN` in its environment, and refuses the legacy challenge
+project. The run's start is then the first experiment's start.
+
+| Document type | One per | Id | Rules |
+|---|---|---|---|
+| `moneyEntry` | ledger entry | `money-entry.<runId>.<seq>` | Append-only. A seq that is already taken, or an entry that does not follow the last one, is refused as a conflict. Every load verifies the hash chain and stops if it does not verify. |
+| `experimentRecord` | experiment | `experiment-record.<runId>.<experimentId>` | The definition and digest are fixed once the experiment leaves draft. The start is set once. Measurements and decisions are only added. A racing writer loses on the revision check. |
+
+Both stores enforce the same rules on files. Both types are read-only in
+Studio. After pulling, deploy the schema with `npm run schema:deploy -- --login`.
 
 ## What the run reports
 

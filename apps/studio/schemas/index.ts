@@ -13,6 +13,10 @@ import evaluationRecord from './evaluation-record'
 import intentGraph from './intent-graph'
 import intentLedgerEntry from './intent-ledger-entry'
 import playbook from './playbook'
+import shadowRecommendation from './shadow-recommendation'
+import auraVerdictLearner from './aura-verdict-learner'
+import moneyEntry from './money-entry'
+import experimentRecord from './experiment-record'
 
 export const schemaTypes = [
   organization,
@@ -30,4 +34,8 @@ export const schemaTypes = [
   intentGraph,
   intentLedgerEntry,
   playbook,
+  shadowRecommendation,
+  auraVerdictLearner,
+  moneyEntry,
+  experimentRecord,
 ]

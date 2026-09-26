@@ -30,7 +30,7 @@
     "lint": "npm run lint --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "seed:test": "node --experimental-strip-types --no-warnings --test apps/studio/seed/policies.test.ts",
-    "host:test": "node --experimental-strip-types --no-warnings --test packages/host/src/host.test.ts packages/host/src/vault.test.ts packages/host/src/observability.test.ts packages/host/src/config.test.ts packages/host/src/intent-api.test.ts packages/host/src/shadow-api.test.ts",
+    "host:test": "node --experimental-strip-types --no-warnings --test packages/host/src/host.test.ts packages/host/src/vault.test.ts packages/host/src/observability.test.ts packages/host/src/config.test.ts packages/host/src/intent-api.test.ts packages/host/src/shadow-api.test.ts packages/host/src/sanity-stores.test.ts",
     "aura:test": "node --experimental-strip-types --no-warnings --test packages/aura/src/aura.test.ts packages/aura/src/ledger.test.ts packages/aura/src/profile.test.ts packages/aura/src/store.test.ts packages/aura/src/predict.test.ts packages/aura/src/onboard.test.ts packages/aura/src/learn.test.ts",
     "aura:eval": "node --experimental-strip-types --no-warnings packages/aura/src/eval-cli.ts",
     "aura:choices:model": "npm run choices:eval --workspace=@quicksilver/agent --",
