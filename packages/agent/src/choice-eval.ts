@@ -50,7 +50,7 @@
  *   rules+examples  — both
  * All prompts live in choice-prompts.ts; the none, profile and examples prompts
  * are byte-identical to those frozen earlier (pinned by choice-prompts.test.ts).
- * The answer, picks and principles files hold one person's answers: keep them out of the repo.
+ * The founder's answer files are in the repo (packages/aura/eval/founder/, his decision 2026-09-26).
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'

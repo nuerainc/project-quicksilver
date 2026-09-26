@@ -267,7 +267,7 @@ v1 stays recorded as failed; it is not retuned. v2 changes the method:
 requirements eliminate options first, then the least-sacrifice option wins
 (no goal badly sacrificed), with extremes only for strong profile leans. It
 will be frozen before it is tested on a fresh scenario set, since these 38
-are now seen. The founder's raw answers are kept out of the repository.
+are now seen. The founder's answers are in `eval/founder/` (his decision, 2026-09-26).
 
 ### Learning predictor (`src/learn.ts`, exploratory)
 
@@ -368,7 +368,7 @@ for reference. Nothing is claimed until all 30 are answered.
    npm run aura:choices:v2 -- data/aura/scenario-answers-v2.json data/aura/v2-picks.json [--detail]
    ```
 
-Both files hold one person's data and stay out of the repository. The same
+The founder's answer files are in `eval/founder/`. The same
 combiner is meant to be scored the same way on pilot verdicts.
 
 ### v2 result (2026-09-26): 10/30 (33.3%), not met
@@ -536,8 +536,9 @@ Ten items touch two dimensions.
 
 **Its value is not claimed.** It will be tested on held-out decisions: pilot
 verdicts, scored predict-then-learn, with and without the v2 examples or
-prior. The answer page stores answers in the `profile2` collection. Like
-every provider's raw answers, they stay out of the repository.
+prior. The answer page stores answers in the `profile2` collection. The
+founder chose to keep his own answers in the repository (`eval/founder/`).
+Other providers' answers stay private unless they choose the same.
 
 ## Entry point
 

@@ -1,0 +1,125 @@
+{
+ "instrument": "intent-profile-v2",
+ "answers": {
+  "p2-17": {
+   "choice": "b",
+   "confidence": "sure",
+   "note": "mistakes happen, dont deliver the wrong stuff, that wont help"
+  },
+  "p2-13": {
+   "choice": "a",
+   "confidence": "sure",
+   "note": "quoted means estimated, but fixed means it wont change. technically the estimate wouldnt change but the final cost would for sure. we would try to get more money to cover the costs, thats fair, but if we have too, we take the loss."
+  },
+  "p2-05": {
+   "choice": "b",
+   "confidence": "leaning",
+   "note": "Leaning because it depends on the available budget of course but if this was a smaller portion of the budget, even say 50% cutting runway in half. obviously it would be measured against other variables but as for overall strategy, we would go for it if we could."
+  },
+  "p2-m4": {
+   "choice": "b",
+   "confidence": "sure",
+   "note": "Try to, let them know that we are making changes. but if there is friction, keep taking the calls its a fraction of time and much is still saved while retaining customers.."
+  },
+  "p2-09": {
+   "choice": "c",
+   "confidence": "sure",
+   "note": "Providing certain agreements, they have to have enough volume to make up and even counteract the 30% less."
+  },
+  "p2-04": {
+   "choice": "a",
+   "confidence": "sure",
+   "note": "Utilize a loan to build credit, remain operational and know the hour between the two crews saved will pay for the new purchase in short order, with savings realized day one with the new vehicle when that changover hour becomes 4-8 more usable man hours (based on crew size)"
+  },
+  "p2-19": {
+   "choice": "c",
+   "confidence": "sure",
+   "note": "Relationships are important but so are profits, with more money maybe we can give them more niche but larger purchases. Obviously relationships between humans are case to case, its not a generalization exactly though it feels like one."
+  },
+  "p2-11": {
+   "choice": "b",
+   "confidence": "sure",
+   "note": "We hold the slot one time for the two months, if they do not pay we sell the slot and bill them afte rthe two months."
+  },
+  "p2-20": {
+   "choice": "c",
+   "confidence": "sure",
+   "note": "try to explain that things are changing, if theres friction, we avoid it"
+  },
+  "p2-14": {
+   "choice": "b",
+   "confidence": "sure",
+   "note": "if they have a problem be willing to refund the differences or better yet offer discounts on future purchases."
+  },
+  "p2-02": {
+   "choice": "a",
+   "confidence": "sure",
+   "note": "This improves it without too much change in such a short period, a new system will require 2 weeks of training at least,  causing just as many problems as crashes so find the happy medium."
+  },
+  "p2-18": {
+   "choice": "b",
+   "confidence": "sure",
+   "note": "the time to meet the neighbor to conduct business is small compared to the intrinsic RELATIONSHIP value."
+  },
+  "p2-01": {
+   "choice": "c",
+   "confidence": "sure",
+   "note": "get the money, but be honest about it."
+  },
+  "p2-06": {
+   "choice": "b",
+   "confidence": "sure",
+   "note": "We wont commit to a possible losing move, the numbers and risk has to make sense, if they dont understand that its probably malicious or overly risky at minimum."
+  },
+  "p2-12": {
+   "choice": "c",
+   "confidence": "sure",
+   "note": "We can take the shorterm costs on a longer timeline, and build that kind of thing onto our data so we are prepared for those kinds of things."
+  },
+  "p2-07": {
+   "choice": "c",
+   "confidence": "sure",
+   "note": "there's alot of variables here, be safe if we cant have some sort of surety."
+  },
+  "p2-m2": {
+   "choice": "c",
+   "confidence": "sure",
+   "note": "we made an agreement, follow through on it but try to get the customer to see reason and get the loss out of them. whats fair is fair."
+  },
+  "p2-08": {
+   "choice": "c",
+   "confidence": "sure",
+   "note": "only if this is a quick wham bam thank you mam situation, where the extra work or project materials wont cost much if anything (less than a few bucks and maybe 15 mins max?), pay the crew member who does the extra work."
+  },
+  "p2-m3": {
+   "choice": "c",
+   "confidence": "sure",
+   "note": "there no problem, get the business, we do hair, so do hair, and they are a long time client, it seems important to take care of that relationship."
+  },
+  "p2-16": {
+   "choice": "a",
+   "confidence": "sure",
+   "note": "dont see no problem, dont make no problem, wont be no problem. just affirm with the customer that this is not a standard thing the shop does, the stylist is doing a favor."
+  },
+  "p2-03": {
+   "choice": "c",
+   "confidence": "sure",
+   "note": "grow to fit the demand when possible"
+  },
+  "p2-10": {
+   "choice": "ask",
+   "confidence": "sure",
+   "note": "depends on the employee, ask them what happened and suggest they go back a nd fix it at lunch on their time if it can be fixed."
+  },
+  "p2-15": {
+   "choice": "b",
+   "confidence": "sure",
+   "note": "remain operational but not at crazy costs."
+  },
+  "p2-m1": {
+   "choice": "a",
+   "confidence": "sure",
+   "note": "this would be measured against many variables but this is probably the direction we would go."
+  }
+ }
+}

@@ -7,7 +7,7 @@
  * picks:   { "picks":   { "cs2-01": "a", ... } }                 (from `npm run aura:choices:model -- --set v2 --picks-out <file>`)
  *
  * Offline: no model is called here. Relative paths resolve from the directory
- * npm was run in. Both files hold one person's data: keep them out of the repo.
+ * npm was run in. The founder's answers are also in eval/founder/.
  */
 import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'

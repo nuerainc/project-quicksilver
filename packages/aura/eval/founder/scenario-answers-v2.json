@@ -1,0 +1,155 @@
+{
+ "setVersion": 2,
+ "answers": {
+  "cs2-01": {
+   "choice": "c",
+   "confidence": "sure",
+   "note": ""
+  },
+  "cs2-02": {
+   "choice": "b",
+   "confidence": "sure",
+   "note": ""
+  },
+  "cs2-03": {
+   "choice": "c",
+   "confidence": "sure",
+   "note": ""
+  },
+  "cs2-04": {
+   "choice": "b",
+   "confidence": "sure",
+   "note": ""
+  },
+  "cs2-05": {
+   "choice": "ask",
+   "confidence": "sure",
+   "note": ""
+  },
+  "cs2-06": {
+   "choice": "c",
+   "confidence": "sure",
+   "note": ""
+  },
+  "cs2-07": {
+   "choice": "ask",
+   "confidence": "sure",
+   "note": ""
+  },
+  "cs2-08": {
+   "choice": "a",
+   "confidence": "sure",
+   "note": ""
+  },
+  "cs2-09": {
+   "choice": "b",
+   "confidence": "sure",
+   "note": ""
+  },
+  "cs2-10": {
+   "choice": "ask",
+   "confidence": "sure",
+   "note": ""
+  },
+  "cs2-11": {
+   "choice": "b",
+   "confidence": "sure",
+   "note": ""
+  },
+  "cs2-12": {
+   "choice": "c",
+   "confidence": "sure",
+   "note": ""
+  },
+  "cs2-13": {
+   "choice": "c",
+   "confidence": "sure",
+   "note": ""
+  },
+  "cs2-14": {
+   "choice": "c",
+   "confidence": "sure",
+   "note": "as long as its in budget"
+  },
+  "cs2-15": {
+   "choice": "b",
+   "confidence": "sure",
+   "note": ""
+  },
+  "cs2-16": {
+   "choice": "a",
+   "confidence": "sure",
+   "note": ""
+  },
+  "cs2-17": {
+   "choice": "c",
+   "confidence": "sure",
+   "note": ""
+  },
+  "cs2-18": {
+   "choice": "b",
+   "confidence": null,
+   "note": ""
+  },
+  "cs2-19": {
+   "choice": "c",
+   "confidence": "sure",
+   "note": ""
+  },
+  "cs2-20": {
+   "choice": "c",
+   "confidence": "sure",
+   "note": ""
+  },
+  "cs2-21": {
+   "choice": "c",
+   "confidence": "sure",
+   "note": ""
+  },
+  "cs2-22": {
+   "choice": "c",
+   "confidence": "sure",
+   "note": ""
+  },
+  "cs2-23": {
+   "choice": "c",
+   "confidence": "sure",
+   "note": ""
+  },
+  "cs2-24": {
+   "choice": "c",
+   "confidence": "sure",
+   "note": ""
+  },
+  "cs2-25": {
+   "choice": "b",
+   "confidence": "sure",
+   "note": ""
+  },
+  "cs2-26": {
+   "choice": "b",
+   "confidence": "sure",
+   "note": ""
+  },
+  "cs2-27": {
+   "choice": "b",
+   "confidence": "sure",
+   "note": ""
+  },
+  "cs2-28": {
+   "choice": "b",
+   "confidence": "sure",
+   "note": ""
+  },
+  "cs2-29": {
+   "choice": "c",
+   "confidence": "sure",
+   "note": ""
+  },
+  "cs2-30": {
+   "choice": "b",
+   "confidence": "sure",
+   "note": ""
+  }
+ }
+}

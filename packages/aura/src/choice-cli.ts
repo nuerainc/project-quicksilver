@@ -3,7 +3,7 @@
  *   npm run aura:choices -- --profile profile-answers.json --choices scenario-answers.json [--detail]
  * Both files are the JSON the pages' "Copy answers" buttons produce (or the
  * same shape exported from their stores). They hold one person's answers, so
- * keep them out of the repository.
+ * the founder's are committed in eval/founder/ (his decision, 2026-09-26).
  */
 import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
