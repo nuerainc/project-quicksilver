@@ -10,7 +10,7 @@
 
 import { createClient, type SanityClient } from '@sanity/client'
 import { seedOrder, seed } from './index'
-import { processToSanityFields } from '../../../packages/kernel/src/process-document.ts'
+import { conditionToSanity, processToSanityFields } from '../../../packages/kernel/src/process-document.ts'
 import type {
   CapabilitySeed,
   DecisionSeed,
@@ -143,6 +143,9 @@ function policyToSanity(s: PolicySeed) {
     supersedes: refArray(s.supersedesIds),
     appliesTo: refArray([]),
     approvalRequirements: refArray(s.approvalRequirementIds),
+    ...(s.effect ? { effect: s.effect } : {}),
+    ...(s.maxRiskLevel !== undefined ? { maxRiskLevel: s.maxRiskLevel } : {}),
+    ...(s.whenAll?.length ? { whenAll: s.whenAll.map((c, i) => conditionToSanity(c, i)) } : {}),
   }
 }
 

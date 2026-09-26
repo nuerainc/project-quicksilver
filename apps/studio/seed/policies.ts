@@ -6,6 +6,12 @@
  *   - Emergency Policy 4: automatic changes permitted under emergency conditions
  *
  * When Quicksilver proposes a parameter change, the kernel must surface this conflict.
+ *
+ * Structured effects (M1 resolver): Ops 17 requires approval; Emergency 4 allows
+ * changes up to risk 2, only when incident.classification is "emergency". A
+ * permissive policy whose fact is missing does not apply (fail closed), so outside a
+ * declared emergency Ops 17 governs. Budget 3 requires approval above $50,000
+ * (and, failing closed, when the exposure is unknown).
  */
 
 import type { PolicySeed } from './types'
@@ -24,6 +30,7 @@ export const policies: PolicySeed[] = [
     effectiveDate: '2026-01-15',
     expirationDate: null,
     supersedesIds: [],
+    effect: 'require-approval',
     approvalRequirementIds: ['entity-diego-ruiz', 'entity-marcus-webb'],
   },
   {
@@ -39,6 +46,9 @@ export const policies: PolicySeed[] = [
     effectiveDate: '2026-02-01',
     expirationDate: null,
     supersedesIds: [],
+    effect: 'allow',
+    maxRiskLevel: 2,
+    whenAll: [{ fact: 'incident.classification', op: 'eq', value: 'emergency' }],
     approvalRequirementIds: ['entity-sarah-chen', 'entity-diego-ruiz'],
   },
   {
@@ -53,6 +63,7 @@ export const policies: PolicySeed[] = [
     effectiveDate: '2026-03-10',
     expirationDate: null,
     supersedesIds: [],
+    effect: 'require-approval',
     approvalRequirementIds: ['entity-tom-bradley'],
   },
   {
@@ -67,6 +78,8 @@ export const policies: PolicySeed[] = [
     effectiveDate: '2026-01-01',
     expirationDate: null,
     supersedesIds: [],
+    effect: 'require-approval',
+    whenAll: [{ fact: 'action.financialExposure', op: 'gt', value: 50000 }],
     approvalRequirementIds: ['entity-amara-okafor', 'entity-sarah-chen'],
   },
   {
@@ -81,6 +94,7 @@ export const policies: PolicySeed[] = [
     effectiveDate: '2026-01-20',
     expirationDate: null,
     supersedesIds: [],
+    effect: 'require-approval',
     approvalRequirementIds: ['entity-lisa-park'],
   },
   {
@@ -94,6 +108,7 @@ export const policies: PolicySeed[] = [
     effectiveDate: '2024-06-01',
     expirationDate: '2026-01-14',
     supersedesIds: [],
+    effect: 'require-approval',
     approvalRequirementIds: ['entity-jin-tanaka'],
   },
 ]

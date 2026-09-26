@@ -59,9 +59,12 @@ Still to build:
 - the parser reaching 90%
 
 **Carried into M3 (found by the first live host run, 2026-09-26):**
-- The seed policies in `f87t11g1` have no structured `effect`, so live
-  decisions still use the free-text conflict path instead of the M1 resolver.
-  Give the seeded policies structured effects and re-seed.
+- Done: the seed policies now carry structured effects (`apps/studio/seed/policies.ts`, tested by `npm run seed:test`):
+  - Ops 17 requires approval.
+  - Emergency 4 allows changes up to risk 2, only when `incident.classification` is `emergency`. Because it loosens Ops 17, the kernel still routes those changes to a human.
+  - Budget 3 requires approval above $50,000, and also when the exposure is unknown.
+  - The kernel now passes `action.financialExposure` as a fact.
+  - Re-seed `f87t11g1` with `npm run seed` to apply them live.
 - The seed decision predates `requestedBy` and `proposedBy`; decisions created
   since M1 carry both.
 0.9.0 is the release candidate, when all three modes pass the parity gate in

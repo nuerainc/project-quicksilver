@@ -39,7 +39,7 @@ export interface SanityProcessDocument {
   }> | null
 }
 
-function conditionToSanity(c: GuardCondition, i: number): SanityGuardCondition {
+export function conditionToSanity(c: GuardCondition, i: number): SanityGuardCondition {
   const out: SanityGuardCondition = { _key: `c${i}`, fact: c.fact, op: c.op }
   const v = c.value
   if (Array.isArray(v)) out.valueList = v.map(String)

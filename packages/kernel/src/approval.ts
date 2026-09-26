@@ -85,7 +85,12 @@ export function authorize(args: AuthorizeArgs): AuthorizeResult {
     riskLevel,
     governingScopes: capability?.policyScopes ?? [],
     actorId: actor.id,
-    facts: { 'action.riskLevel': riskLevel, 'action.reversible': action.reversible, ...(facts ?? {}) },
+    facts: {
+      'action.riskLevel': riskLevel,
+      'action.reversible': action.reversible,
+      ...(typeof action.financialExposure === 'number' ? { 'action.financialExposure': action.financialExposure } : {}),
+      ...(facts ?? {}),
+    },
   })
   const evidenceConf = averageEvidenceConfidence(actionEvidence)
 

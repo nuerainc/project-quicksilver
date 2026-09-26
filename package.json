@@ -28,6 +28,7 @@
     "agent:test": "node --experimental-strip-types --no-warnings --test packages/agent/src/models.test.ts packages/agent/src/schemas.test.ts packages/agent/src/contracts.test.ts",
     "lint": "npm run lint --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",
+    "seed:test": "node --experimental-strip-types --no-warnings --test apps/studio/seed/policies.test.ts",
     "host:test": "node --experimental-strip-types --no-warnings --test packages/host/src/host.test.ts packages/host/src/vault.test.ts packages/host/src/observability.test.ts packages/host/src/config.test.ts",
     "aura:test": "node --experimental-strip-types --no-warnings --test packages/aura/src/aura.test.ts packages/aura/src/ledger.test.ts packages/aura/src/profile.test.ts packages/aura/src/store.test.ts packages/aura/src/predict.test.ts",
     "aura:eval": "node --experimental-strip-types --no-warnings packages/aura/src/eval-cli.ts",

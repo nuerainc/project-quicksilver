@@ -77,6 +77,12 @@ export interface PolicySeed {
   expirationDate: string | null
   supersedesIds: string[]
   approvalRequirementIds: string[]
+  /** Structured effect for the kernel's resolver (M1). Absent = free-text only. */
+  effect?: 'allow' | 'require-approval' | 'deny'
+  /** For "allow": the highest risk it permits. */
+  maxRiskLevel?: 0 | 1 | 2 | 3 | 4 | 5
+  /** Every condition must hold for the policy to apply. */
+  whenAll?: Array<{ fact: string; op: 'eq' | 'neq' | 'gt' | 'gte' | 'lt' | 'lte' | 'in' | 'notIn' | 'exists'; value?: string | number | boolean | string[] }>
 }
 
 export interface EvidenceSeed {
