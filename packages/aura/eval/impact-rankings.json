@@ -1,0 +1,168 @@
+{
+ "scorerVersion": 2,
+ "rankedBy": "founder",
+ "rankedAt": "2026-09-25",
+ "method": "Blind: shuffled order, no scores, Aura's order hidden. Collected on the Aura Question Ranking page.",
+ "rankings": {
+  "obj-001": [
+   "success_metric",
+   "risk_tolerance",
+   "skills"
+  ],
+  "obj-003": [
+   "budget",
+   "risk_tolerance",
+   "skills"
+  ],
+  "obj-004": [
+   "timeframe",
+   "risk_tolerance",
+   "success_metric"
+  ],
+  "obj-005": [
+   "weekly_hours",
+   "skills",
+   "timeframe"
+  ],
+  "obj-006": [
+   "success_metric",
+   "risk_tolerance",
+   "skills"
+  ],
+  "obj-007": [
+   "skills",
+   "timeframe",
+   "success_metric"
+  ],
+  "obj-008": [
+   "timeframe",
+   "risk_tolerance",
+   "success_metric"
+  ],
+  "obj-009": [
+   "timeframe",
+   "skills",
+   "weekly_hours"
+  ],
+  "obj-011": [
+   "weekly_hours",
+   "risk_tolerance",
+   "success_metric"
+  ],
+  "obj-012": [
+   "success_metric",
+   "weekly_hours",
+   "timeframe"
+  ],
+  "obj-013": [
+   "skills",
+   "budget",
+   "risk_tolerance"
+  ],
+  "obj-014": [
+   "skills",
+   "weekly_hours",
+   "budget"
+  ],
+  "obj-015": [
+   "risk_tolerance",
+   "weekly_hours",
+   "skills"
+  ],
+  "obj-017": [
+   "weekly_hours",
+   "skills",
+   "risk_tolerance"
+  ],
+  "obj-018": [
+   "weekly_hours",
+   "budget",
+   "risk_tolerance"
+  ],
+  "obj-019": [
+   "success_metric",
+   "risk_tolerance",
+   "timeframe"
+  ],
+  "obj-020": [
+   "skills",
+   "weekly_hours",
+   "risk_tolerance"
+  ],
+  "obj-021": [
+   "data_sources",
+   "scope",
+   "revenue_model"
+  ],
+  "obj-022": [
+   "data_sources",
+   "scope",
+   "success_metric"
+  ],
+  "obj-023": [
+   "data_sources",
+   "scope",
+   "success_metric"
+  ],
+  "obj-024": [
+   "data_sources",
+   "success_metric",
+   "scope"
+  ],
+  "obj-025": [
+   "data_sources",
+   "success_metric",
+   "scope"
+  ],
+  "obj-026": [
+   "data_sources",
+   "scope",
+   "revenue_model"
+  ],
+  "obj-027": [
+   "data_sources",
+   "scope",
+   "success_metric"
+  ],
+  "obj-028": [
+   "data_sources",
+   "scope",
+   "revenue_model"
+  ],
+  "obj-029": [
+   "data_sources",
+   "scope",
+   "revenue_model"
+  ],
+  "obj-030": [
+   "data_sources",
+   "scope",
+   "revenue_model"
+  ],
+  "obj-031": [
+   "data_sources",
+   "scope",
+   "revenue_model"
+  ],
+  "obj-032": [
+   "data_sources",
+   "revenue_model",
+   "scope"
+  ],
+  "obj-033": [
+   "data_sources",
+   "scope",
+   "success_metric"
+  ],
+  "obj-034": [
+   "data_sources",
+   "revenue_model",
+   "success_metric"
+  ],
+  "obj-035": [
+   "data_sources",
+   "revenue_model",
+   "scope"
+  ]
+ }
+}

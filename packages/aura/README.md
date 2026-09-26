@@ -87,7 +87,7 @@ npm run aura:test
 | ≥ 90% parsing accuracy | Baseline 80.8%; the model parser is measured on Azure |
 | 100% provenance tagging | Enforced by validation; true on all 52 labeled objectives |
 | 0 unsupported inferences | Enforced by validation; 0 on all 52 |
-| ≥ 80% top-3 agreement on impact ranking | Founder ranking the 32 objectives with 4+ open questions, blind, against scorer v2 (`eval/impact-rankings.json`, `npm run aura:agreement`) |
+| ≥ 80% top-3 agreement on impact ranking | **Not met: 56.3%** (chance 63.0%) on 32 objectives, founder rankings vs scorer v2, 2026-09-25 |
 | All inferred values explained | Enforced by validation |
 | Tests pass | `npm run aura:test` |
 
@@ -107,3 +107,21 @@ point, and persisting graphs.
   this set, so 80% is a real bar.
 - The scorer was frozen at v2 before ranking. Changing it afterwards means
   new rankings, not a re-score against the old ones.
+
+### First result (2026-09-25): 56.3%, below chance
+
+`npm run aura:agreement -- --detail` shows two consistent disagreements:
+
+- **Aura asks what the text already implies.** "We run a feed store" and
+  "My shop sells used farm equipment" leave `business_type` open, because
+  only literal values are extracted, so Aura ranks it first. The founder
+  never picked it; he went to data sources and scope.
+- **Different priorities for new ventures.** Aura leads with risk tolerance
+  and budget; the founder mostly leads with skills, weekly hours and
+  timeframe (what the person can actually put in).
+
+The scorer is **not** retuned against these rankings; that would fit the
+test to its answers. The finding feeds the charter revision: Aura must model
+implied intent, not only literal slots, and the primary measure moves to
+choice agreement (`eval/choice-scenarios.json`). Any new scorer version is
+checked against fresh, held-out rankings.
