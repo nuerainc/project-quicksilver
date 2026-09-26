@@ -1,0 +1,1137 @@
+{
+ "version": 2,
+ "createdAt": "2026-09-26",
+ "note": "Situational intent profile. Written fresh, without reference to any provider’s answers to earlier profiles or choice scenarios. Tags are the designer’s annotation of what each option expresses; they are never shown to the person answering.",
+ "instructions": "You run each of these small businesses. For each situation, pick what you would actually do, or want done, from the options given. Some describe work you have handed to someone else; there, checking with you first is one of the choices. Neither option is wrong. Say how sure you are, and add a note if you like.",
+ "estimatedMinutes": 10,
+ "dimensions": [
+  {
+   "id": "horizon",
+   "left": "Short term",
+   "right": "Long term"
+  },
+  {
+   "id": "risk",
+   "left": "Safe",
+   "right": "Bold"
+  },
+  {
+   "id": "reputation",
+   "left": "Reputation",
+   "right": "Revenue"
+  },
+  {
+   "id": "customer",
+   "left": "Customer interest",
+   "right": "Company interest"
+  },
+  {
+   "id": "autonomy",
+   "left": "Decide yourself",
+   "right": "Ask me first"
+  },
+  {
+   "id": "relationships",
+   "left": "Relationships",
+   "right": "Efficiency"
+  }
+ ],
+ "order": [
+  "p2-05",
+  "p2-13",
+  "p2-16",
+  "p2-18",
+  "p2-01",
+  "p2-08",
+  "p2-11",
+  "p2-04",
+  "p2-15",
+  "p2-19",
+  "p2-02",
+  "p2-09",
+  "p2-m1",
+  "p2-12",
+  "p2-06",
+  "p2-m2",
+  "p2-17",
+  "p2-20",
+  "p2-m3",
+  "p2-03",
+  "p2-10",
+  "p2-m4",
+  "p2-14",
+  "p2-07"
+ ],
+ "items": [
+  {
+   "id": "p2-01",
+   "domain": "farm",
+   "primary": "horizon",
+   "situation": "Your farm stand’s sweet corn came in early, but the ears are small this week. Next week’s pick will be full size.",
+   "decision": "What do you do this weekend?",
+   "options": {
+    "a": {
+     "text": "Sell the small ears at the normal price",
+     "tags": [
+      {
+       "dimension": "horizon",
+       "pole": "left",
+       "weight": 1
+      },
+      {
+       "dimension": "reputation",
+       "pole": "right",
+       "weight": 0.5
+      }
+     ],
+     "compromise": false,
+     "ask": false
+    },
+    "b": {
+     "text": "Hold off on corn until next week’s full-size pick",
+     "tags": [
+      {
+       "dimension": "horizon",
+       "pole": "right",
+       "weight": 1
+      },
+      {
+       "dimension": "reputation",
+       "pole": "left",
+       "weight": 0.5
+      }
+     ],
+     "compromise": false,
+     "ask": false,
+     "requirementsFirst": true
+    },
+    "c": {
+     "text": "Sell the small ears at a lower price, with a sign saying why",
+     "tags": [],
+     "compromise": true,
+     "ask": false
+    }
+   }
+  },
+  {
+   "id": "p2-02",
+   "domain": "retail",
+   "primary": "horizon",
+   "situation": "Your hardware store’s checkout system is slow and crashes a few times a week. A better one costs $3,000 and two weekends of setup, and the busy spring season starts next month.",
+   "decision": "What do you do?",
+   "options": {
+    "a": {
+     "text": "Replace the one register that crashes most now, and the rest after spring",
+     "tags": [],
+     "compromise": true,
+     "ask": false
+    },
+    "b": {
+     "text": "Switch now, before spring",
+     "tags": [
+      {
+       "dimension": "horizon",
+       "pole": "right",
+       "weight": 1
+      }
+     ],
+     "compromise": false,
+     "ask": false,
+     "requirementsFirst": true
+    },
+    "c": {
+     "text": "Live with it through spring, then decide",
+     "tags": [
+      {
+       "dimension": "horizon",
+       "pole": "left",
+       "weight": 1
+      }
+     ],
+     "compromise": false,
+     "ask": false
+    }
+   }
+  },
+  {
+   "id": "p2-03",
+   "domain": "services",
+   "primary": "horizon",
+   "situation": "A property manager offers your house-cleaning company 30 move-out cleanings this month at good pay. Taking them means pausing new regular clients for four weeks, in your usual growth season.",
+   "decision": "What do you do?",
+   "options": {
+    "a": {
+     "text": "Turn it down and keep signing up regular clients",
+     "tags": [
+      {
+       "dimension": "horizon",
+       "pole": "right",
+       "weight": 1
+      }
+     ],
+     "compromise": false,
+     "ask": false
+    },
+    "b": {
+     "text": "Take 15 of them and keep signing up new clients at a slower pace",
+     "tags": [],
+     "compromise": true,
+     "ask": false
+    },
+    "c": {
+     "text": "Take all 30 cleanings",
+     "tags": [
+      {
+       "dimension": "horizon",
+       "pole": "left",
+       "weight": 1
+      }
+     ],
+     "compromise": false,
+     "ask": false
+    }
+   }
+  },
+  {
+   "id": "p2-04",
+   "domain": "trades",
+   "primary": "risk",
+   "situation": "Your two electrical crews share one van and lose about an hour a day to it. A second van would take most of your cash now; saving for a year would buy it without cutting things close.",
+   "decision": "What do you do?",
+   "options": {
+    "a": {
+     "text": "Buy the second van now",
+     "tags": [
+      {
+       "dimension": "risk",
+       "pole": "right",
+       "weight": 1
+      }
+     ],
+     "compromise": false,
+     "ask": false
+    },
+    "b": {
+     "text": "Save and buy it next year",
+     "tags": [
+      {
+       "dimension": "risk",
+       "pole": "left",
+       "weight": 1
+      }
+     ],
+     "compromise": false,
+     "ask": false
+    },
+    "c": {
+     "text": "Lease a used van for a year, then decide",
+     "tags": [],
+     "compromise": true,
+     "ask": false
+    }
+   }
+  },
+  {
+   "id": "p2-05",
+   "domain": "online",
+   "primary": "risk",
+   "situation": "Your online candle shop sells steadily on one marketplace. A second marketplace would reach a new audience, but needs new photos, new listings and about $1,500 up front.",
+   "decision": "What do you do?",
+   "options": {
+    "a": {
+     "text": "List your five best sellers there for two months and see how they do",
+     "tags": [],
+     "compromise": true,
+     "ask": false
+    },
+    "b": {
+     "text": "List the whole catalog on the new marketplace",
+     "tags": [
+      {
+       "dimension": "risk",
+       "pole": "right",
+       "weight": 1
+      }
+     ],
+     "compromise": false,
+     "ask": false
+    },
+    "c": {
+     "text": "Stay on the one marketplace",
+     "tags": [
+      {
+       "dimension": "risk",
+       "pole": "left",
+       "weight": 1
+      }
+     ],
+     "compromise": false,
+     "ask": false
+    }
+   }
+  },
+  {
+   "id": "p2-06",
+   "domain": "farm",
+   "primary": "risk",
+   "situation": "A restaurant group wants your farm to grow a specialty lettuce for all six of its locations. It would take a third of your field, and you have never grown it.",
+   "decision": "What do you do?",
+   "options": {
+    "a": {
+     "text": "Say no and stick with your usual crops",
+     "tags": [
+      {
+       "dimension": "risk",
+       "pole": "left",
+       "weight": 1
+      }
+     ],
+     "compromise": false,
+     "ask": false
+    },
+    "b": {
+     "text": "Grow one test bed this season and supply one location",
+     "tags": [],
+     "compromise": true,
+     "ask": false
+    },
+    "c": {
+     "text": "Plant a third of the field and sign the deal",
+     "tags": [
+      {
+       "dimension": "risk",
+       "pole": "right",
+       "weight": 1
+      }
+     ],
+     "compromise": false,
+     "ask": false
+    }
+   }
+  },
+  {
+   "id": "p2-07",
+   "domain": "retail",
+   "primary": "risk",
+   "situation": "A supplier offers your bike shop a new e-bike brand at a great margin. There is no local service network for it yet, and parts take three weeks to arrive.",
+   "decision": "What do you do?",
+   "options": {
+    "a": {
+     "text": "Carry the brand in full now",
+     "tags": [
+      {
+       "dimension": "risk",
+       "pole": "right",
+       "weight": 1
+      },
+      {
+       "dimension": "reputation",
+       "pole": "right",
+       "weight": 0.5
+      }
+     ],
+     "compromise": false,
+     "ask": false
+    },
+    "b": {
+     "text": "Pass until parts and service are reliable",
+     "tags": [
+      {
+       "dimension": "risk",
+       "pole": "left",
+       "weight": 1
+      },
+      {
+       "dimension": "reputation",
+       "pole": "left",
+       "weight": 0.5
+      }
+     ],
+     "compromise": false,
+     "ask": false,
+     "requirementsFirst": true
+    },
+    "c": {
+     "text": "Order two demo bikes and a spare-parts kit before stocking more",
+     "tags": [],
+     "compromise": true,
+     "ask": false
+    }
+   }
+  },
+  {
+   "id": "p2-08",
+   "domain": "trades",
+   "primary": "reputation",
+   "situation": "While finishing a roof, your crew sees the customer’s gutters pulling loose. The customer didn’t ask about gutters. A proper fix would be a $900 add-on.",
+   "decision": "What do you do?",
+   "options": {
+    "a": {
+     "text": "Send them photos and a note, and let them decide later with no pressure",
+     "tags": [],
+     "compromise": true,
+     "ask": false
+    },
+    "b": {
+     "text": "Quote the $900 gutter repair",
+     "tags": [
+      {
+       "dimension": "reputation",
+       "pole": "right",
+       "weight": 1
+      }
+     ],
+     "compromise": false,
+     "ask": false
+    },
+    "c": {
+     "text": "Refasten the loose gutters for free while the ladder is up",
+     "tags": [
+      {
+       "dimension": "reputation",
+       "pole": "left",
+       "weight": 1
+      },
+      {
+       "dimension": "customer",
+       "pole": "left",
+       "weight": 0.5
+      }
+     ],
+     "compromise": false,
+     "ask": false,
+     "protectsAtCost": true
+    }
+   }
+  },
+  {
+   "id": "p2-09",
+   "domain": "retail",
+   "primary": "reputation",
+   "situation": "A grocery chain wants to sell your jams under its own store label. It’s a large, steady order, but your name won’t be on the jar and you’d earn 30% less per jar.",
+   "decision": "What do you do?",
+   "options": {
+    "a": {
+     "text": "Decline and keep selling under your own name",
+     "tags": [
+      {
+       "dimension": "reputation",
+       "pole": "left",
+       "weight": 1
+      },
+      {
+       "dimension": "horizon",
+       "pole": "right",
+       "weight": 0.5
+      }
+     ],
+     "compromise": false,
+     "ask": false
+    },
+    "b": {
+     "text": "Try one flavor under their label for a season",
+     "tags": [],
+     "compromise": true,
+     "ask": false
+    },
+    "c": {
+     "text": "Take the store-label deal",
+     "tags": [
+      {
+       "dimension": "reputation",
+       "pole": "right",
+       "weight": 1
+      },
+      {
+       "dimension": "horizon",
+       "pole": "left",
+       "weight": 0.5
+      }
+     ],
+     "compromise": false,
+     "ask": false
+    }
+   }
+  },
+  {
+   "id": "p2-10",
+   "domain": "services",
+   "primary": "reputation",
+   "situation": "Your landscaping crew lead tells you a new worker did sloppy edging on a job. The customer hasn’t noticed and has paid in full.",
+   "decision": "What should the crew lead do?",
+   "options": {
+    "a": {
+     "text": "Leave it; the customer is happy and it’s paid",
+     "tags": [
+      {
+       "dimension": "reputation",
+       "pole": "right",
+       "weight": 1
+      }
+     ],
+     "compromise": false,
+     "ask": false
+    },
+    "b": {
+     "text": "Send a crew back this week to redo it at your cost",
+     "tags": [
+      {
+       "dimension": "reputation",
+       "pole": "left",
+       "weight": 1
+      }
+     ],
+     "compromise": false,
+     "ask": false,
+     "requirementsFirst": true
+    },
+    "c": {
+     "text": "Fix it at no charge on the next scheduled visit",
+     "tags": [
+      {
+       "dimension": "reputation",
+       "pole": "left",
+       "weight": 0.5
+      }
+     ],
+     "compromise": true,
+     "ask": false
+    },
+    "ask": {
+     "text": "Check with me before doing anything",
+     "tags": [
+      {
+       "dimension": "autonomy",
+       "pole": "right",
+       "weight": 1
+      }
+     ],
+     "compromise": false,
+     "ask": true
+    }
+   }
+  },
+  {
+   "id": "p2-11",
+   "domain": "services",
+   "primary": "customer",
+   "situation": "A long-time client of your dog-walking business lost their job and asks to pause payment for two months but keep their weekday slot. There is a waiting list for that slot.",
+   "decision": "What should your scheduler tell them?",
+   "options": {
+    "a": {
+     "text": "Keep the slot at half the walks, paid when they can",
+     "tags": [],
+     "compromise": true,
+     "ask": false
+    },
+    "b": {
+     "text": "Hold their slot, unpaid, for two months",
+     "tags": [
+      {
+       "dimension": "customer",
+       "pole": "left",
+       "weight": 1
+      },
+      {
+       "dimension": "relationships",
+       "pole": "left",
+       "weight": 0.5
+      }
+     ],
+     "compromise": false,
+     "ask": false,
+     "protectsAtCost": true
+    },
+    "c": {
+     "text": "Give the slot to the waiting list and offer them the next opening",
+     "tags": [
+      {
+       "dimension": "customer",
+       "pole": "right",
+       "weight": 1
+      },
+      {
+       "dimension": "relationships",
+       "pole": "right",
+       "weight": 0.5
+      }
+     ],
+     "compromise": false,
+     "ask": false
+    },
+    "ask": {
+     "text": "Check with me before answering",
+     "tags": [
+      {
+       "dimension": "autonomy",
+       "pole": "right",
+       "weight": 1
+      }
+     ],
+     "compromise": false,
+     "ask": true
+    }
+   }
+  },
+  {
+   "id": "p2-12",
+   "domain": "retail",
+   "primary": "customer",
+   "situation": "A customer’s $240 space heater broke 10 days after your 30-day return window closed. The manufacturer’s warranty covers it but takes weeks. Your clerk is at the counter with them.",
+   "decision": "What should the clerk do?",
+   "options": {
+    "a": {
+     "text": "Give them the manufacturer’s warranty contact",
+     "tags": [
+      {
+       "dimension": "customer",
+       "pole": "right",
+       "weight": 1
+      }
+     ],
+     "compromise": false,
+     "ask": false
+    },
+    "b": {
+     "text": "Lend them a heater while their warranty claim goes through",
+     "tags": [],
+     "compromise": true,
+     "ask": false
+    },
+    "c": {
+     "text": "Swap it from stock now and handle the warranty claim yourselves",
+     "tags": [
+      {
+       "dimension": "customer",
+       "pole": "left",
+       "weight": 1
+      }
+     ],
+     "compromise": false,
+     "ask": false,
+     "protectsAtCost": true
+    },
+    "ask": {
+     "text": "Call me before deciding",
+     "tags": [
+      {
+       "dimension": "autonomy",
+       "pole": "right",
+       "weight": 1
+      }
+     ],
+     "compromise": false,
+     "ask": true
+    }
+   }
+  },
+  {
+   "id": "p2-13",
+   "domain": "trades",
+   "primary": "customer",
+   "situation": "Your plumbing company quoted a fixed $2,800 for a bathroom job. Halfway through, it’s turning out to be much more work than expected. The contract lets you stop and re-quote.",
+   "decision": "What do you do?",
+   "options": {
+    "a": {
+     "text": "Finish at $2,800 and take the loss",
+     "tags": [
+      {
+       "dimension": "customer",
+       "pole": "left",
+       "weight": 1
+      },
+      {
+       "dimension": "reputation",
+       "pole": "left",
+       "weight": 0.5
+      }
+     ],
+     "compromise": false,
+     "ask": false,
+     "protectsAtCost": true
+    },
+    "b": {
+     "text": "Stop and re-quote for the extra work",
+     "tags": [
+      {
+       "dimension": "customer",
+       "pole": "right",
+       "weight": 1
+      },
+      {
+       "dimension": "reputation",
+       "pole": "right",
+       "weight": 0.5
+      }
+     ],
+     "compromise": false,
+     "ask": false
+    },
+    "c": {
+     "text": "Finish the job and ask the customer to split the extra cost",
+     "tags": [],
+     "compromise": true,
+     "ask": false
+    }
+   }
+  },
+  {
+   "id": "p2-14",
+   "domain": "farm",
+   "primary": "customer",
+   "situation": "Members of your farm’s vegetable-box program prepaid for 20 weeks. Hail destroyed a third of the crop, so boxes will be light for about a month.",
+   "decision": "What do you do?",
+   "options": {
+    "a": {
+     "text": "Send lighter boxes now and add two free weeks at the end of the season",
+     "tags": [],
+     "compromise": true,
+     "ask": false
+    },
+    "b": {
+     "text": "Send lighter boxes and explain; members share the farm’s risk",
+     "tags": [
+      {
+       "dimension": "customer",
+       "pole": "right",
+       "weight": 1
+      }
+     ],
+     "compromise": false,
+     "ask": false
+    },
+    "c": {
+     "text": "Buy produce from a neighboring farm to fill the boxes, at your cost",
+     "tags": [
+      {
+       "dimension": "customer",
+       "pole": "left",
+       "weight": 1
+      }
+     ],
+     "compromise": false,
+     "ask": false,
+     "protectsAtCost": true
+    }
+   }
+  },
+  {
+   "id": "p2-15",
+   "domain": "retail",
+   "primary": "autonomy",
+   "situation": "Your assistant handles the shop’s supply orders. The usual receipt paper is out of stock. Another brand fits the printers and costs 5% more.",
+   "decision": "What should your assistant do?",
+   "options": {
+    "a": {
+     "text": "Ask me before ordering",
+     "tags": [
+      {
+       "dimension": "autonomy",
+       "pole": "right",
+       "weight": 1
+      }
+     ],
+     "compromise": false,
+     "ask": true
+    },
+    "b": {
+     "text": "Order one week’s worth now and ask me about the rest",
+     "tags": [],
+     "compromise": true,
+     "ask": false
+    },
+    "c": {
+     "text": "Order the other brand",
+     "tags": [
+      {
+       "dimension": "autonomy",
+       "pole": "left",
+       "weight": 1
+      }
+     ],
+     "compromise": false,
+     "ask": false
+    }
+   }
+  },
+  {
+   "id": "p2-16",
+   "domain": "services",
+   "primary": "autonomy",
+   "situation": "Your assistant books appointments for your hair salon. A regular asks to move her standing appointment to a day the salon is normally closed. One stylist says they’d come in for it.",
+   "decision": "What should your assistant do?",
+   "options": {
+    "a": {
+     "text": "Book it",
+     "tags": [
+      {
+       "dimension": "autonomy",
+       "pole": "left",
+       "weight": 1
+      }
+     ],
+     "compromise": false,
+     "ask": false
+    },
+    "b": {
+     "text": "Check with me first",
+     "tags": [
+      {
+       "dimension": "autonomy",
+       "pole": "right",
+       "weight": 1
+      }
+     ],
+     "compromise": false,
+     "ask": true
+    },
+    "c": {
+     "text": "Offer her the nearest open day, and pass the closed-day request to me",
+     "tags": [],
+     "compromise": true,
+     "ask": false
+    }
+   }
+  },
+  {
+   "id": "p2-17",
+   "domain": "online",
+   "primary": "autonomy",
+   "situation": "Your assistant runs the online shop’s listings. A product photo turns out to show the wrong color, and three orders came in based on it.",
+   "decision": "What should your assistant do?",
+   "options": {
+    "a": {
+     "text": "Fix the photo now, and check with me before contacting the buyers",
+     "tags": [],
+     "compromise": true,
+     "ask": false
+    },
+    "b": {
+     "text": "Fix the photo and email the three buyers offering a free return",
+     "tags": [
+      {
+       "dimension": "autonomy",
+       "pole": "left",
+       "weight": 1
+      }
+     ],
+     "compromise": false,
+     "ask": false
+    },
+    "c": {
+     "text": "Check with me before changing anything or contacting buyers",
+     "tags": [
+      {
+       "dimension": "autonomy",
+       "pole": "right",
+       "weight": 1
+      }
+     ],
+     "compromise": false,
+     "ask": true
+    }
+   }
+  },
+  {
+   "id": "p2-18",
+   "domain": "farm",
+   "primary": "relationships",
+   "situation": "For years you’ve sold hay to a neighboring rancher by phone call and handshake. A new online ordering system would handle every buyer’s orders and payments and save you about three hours a week.",
+   "decision": "What do you do?",
+   "options": {
+    "a": {
+     "text": "Skip the system and keep taking orders by phone",
+     "tags": [
+      {
+       "dimension": "relationships",
+       "pole": "left",
+       "weight": 1
+      }
+     ],
+     "compromise": false,
+     "ask": false,
+     "protectsAtCost": true
+    },
+    "b": {
+     "text": "Use the system for other buyers and keep the neighbor on the phone",
+     "tags": [],
+     "compromise": true,
+     "ask": false
+    },
+    "c": {
+     "text": "Move every buyer onto the online system, the neighbor too",
+     "tags": [
+      {
+       "dimension": "relationships",
+       "pole": "right",
+       "weight": 1
+      }
+     ],
+     "compromise": false,
+     "ask": false
+    }
+   }
+  },
+  {
+   "id": "p2-19",
+   "domain": "trades",
+   "primary": "relationships",
+   "situation": "Your electrical shop has always bought from a local supply house where the counter staff know your jobs. An online supplier is 12% cheaper, with next-day delivery.",
+   "decision": "What do you do?",
+   "options": {
+    "a": {
+     "text": "Switch everything to the online supplier",
+     "tags": [
+      {
+       "dimension": "relationships",
+       "pole": "right",
+       "weight": 1
+      }
+     ],
+     "compromise": false,
+     "ask": false
+    },
+    "b": {
+     "text": "Stay with the local supply house",
+     "tags": [
+      {
+       "dimension": "relationships",
+       "pole": "left",
+       "weight": 1
+      }
+     ],
+     "compromise": false,
+     "ask": false
+    },
+    "c": {
+     "text": "Buy bulk basics online; keep specialty and rush orders local",
+     "tags": [],
+     "compromise": true,
+     "ask": false
+    }
+   }
+  },
+  {
+   "id": "p2-20",
+   "domain": "services",
+   "primary": "relationships",
+   "situation": "Your insurance agency’s longest-standing client wants to go over their policies in person every month. Every other client gets a short emailed summary, which takes a fraction of the time.",
+   "decision": "What do you do?",
+   "options": {
+    "a": {
+     "text": "Meet every three months and email the summary in between",
+     "tags": [],
+     "compromise": true,
+     "ask": false
+    },
+    "b": {
+     "text": "Keep meeting them monthly",
+     "tags": [
+      {
+       "dimension": "relationships",
+       "pole": "left",
+       "weight": 1
+      },
+      {
+       "dimension": "customer",
+       "pole": "left",
+       "weight": 0.5
+      }
+     ],
+     "compromise": false,
+     "ask": false,
+     "protectsAtCost": true
+    },
+    "c": {
+     "text": "Move them to the emailed summary like everyone else",
+     "tags": [
+      {
+       "dimension": "relationships",
+       "pole": "right",
+       "weight": 1
+      },
+      {
+       "dimension": "customer",
+       "pole": "right",
+       "weight": 0.5
+      }
+     ],
+     "compromise": false,
+     "ask": false
+    }
+   }
+  },
+  {
+   "id": "p2-m1",
+   "domain": "online",
+   "primary": "risk",
+   "mirrors": "p2-05",
+   "situation": "Your candle shop does well on one online marketplace. Opening on a second one would mean about $1,500 up front, plus new photos and listings, for the chance at new buyers.",
+   "decision": "How do you handle it?",
+   "options": {
+    "a": {
+     "text": "Put a handful of best sellers on the second marketplace as a two-month trial",
+     "tags": [],
+     "compromise": true,
+     "ask": false
+    },
+    "b": {
+     "text": "Keep selling on the one marketplace only",
+     "tags": [
+      {
+       "dimension": "risk",
+       "pole": "left",
+       "weight": 1
+      }
+     ],
+     "compromise": false,
+     "ask": false
+    },
+    "c": {
+     "text": "Open on the second marketplace with every product",
+     "tags": [
+      {
+       "dimension": "risk",
+       "pole": "right",
+       "weight": 1
+      }
+     ],
+     "compromise": false,
+     "ask": false
+    }
+   }
+  },
+  {
+   "id": "p2-m2",
+   "domain": "trades",
+   "primary": "customer",
+   "mirrors": "p2-13",
+   "situation": "You gave a homeowner a flat $2,800 price to redo their bathroom plumbing. The job has turned out far bigger than planned, and your contract allows a new quote.",
+   "decision": "How do you handle it?",
+   "options": {
+    "a": {
+     "text": "Pause and give them a new quote for the added work",
+     "tags": [
+      {
+       "dimension": "customer",
+       "pole": "right",
+       "weight": 1
+      },
+      {
+       "dimension": "reputation",
+       "pole": "right",
+       "weight": 0.5
+      }
+     ],
+     "compromise": false,
+     "ask": false
+    },
+    "b": {
+     "text": "Complete the work and propose splitting the overrun with them",
+     "tags": [],
+     "compromise": true,
+     "ask": false
+    },
+    "c": {
+     "text": "Complete it for the $2,800 you quoted and absorb the difference",
+     "tags": [
+      {
+       "dimension": "customer",
+       "pole": "left",
+       "weight": 1
+      },
+      {
+       "dimension": "reputation",
+       "pole": "left",
+       "weight": 0.5
+      }
+     ],
+     "compromise": false,
+     "ask": false,
+     "protectsAtCost": true
+    }
+   }
+  },
+  {
+   "id": "p2-m3",
+   "domain": "services",
+   "primary": "autonomy",
+   "mirrors": "p2-16",
+   "situation": "A longtime salon client asks your booking assistant to move her regular appointment to a day you’re usually closed. A stylist has offered to come in that day.",
+   "decision": "How should your assistant handle it?",
+   "options": {
+    "a": {
+     "text": "Ask me before booking anything",
+     "tags": [
+      {
+       "dimension": "autonomy",
+       "pole": "right",
+       "weight": 1
+      }
+     ],
+     "compromise": false,
+     "ask": true
+    },
+    "b": {
+     "text": "Offer the closest open day and send me the closed-day request",
+     "tags": [],
+     "compromise": true,
+     "ask": false
+    },
+    "c": {
+     "text": "Go ahead and book the closed day",
+     "tags": [
+      {
+       "dimension": "autonomy",
+       "pole": "left",
+       "weight": 1
+      }
+     ],
+     "compromise": false,
+     "ask": false
+    }
+   }
+  },
+  {
+   "id": "p2-m4",
+   "domain": "farm",
+   "primary": "relationships",
+   "mirrors": "p2-18",
+   "situation": "An online ordering system could take hay orders and payments from all your buyers and free up about three hours a week. One buyer, a nearby rancher, has ordered by phone from you for years.",
+   "decision": "How do you handle it?",
+   "options": {
+    "a": {
+     "text": "Put the other buyers on the system and keep taking the rancher’s calls",
+     "tags": [],
+     "compromise": true,
+     "ask": false
+    },
+    "b": {
+     "text": "Put all buyers on the system, including the rancher",
+     "tags": [
+      {
+       "dimension": "relationships",
+       "pole": "right",
+       "weight": 1
+      }
+     ],
+     "compromise": false,
+     "ask": false
+    },
+    "c": {
+     "text": "Pass on the system and keep taking orders by phone",
+     "tags": [
+      {
+       "dimension": "relationships",
+       "pole": "left",
+       "weight": 1
+      }
+     ],
+     "compromise": false,
+     "ask": false,
+     "protectsAtCost": true
+    }
+   }
+  }
+ ]
+}

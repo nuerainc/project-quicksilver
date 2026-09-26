@@ -424,6 +424,79 @@ npm run aura:choices:model -- --set v1 --examples data/aura/scenario-answers-v2.
 - Offline check, same data (cross-set warm start of the v2 learner, no
   model): set 2 went from 11/30 cold to 13/30 after learning on set 1.
 
+## Intent profile v2 (situational)
+
+**Why.** The v1 profile asked abstract questions, and its readings did not
+carry over to concrete choices. It read the founder as clearly
+company-first, while his concrete choices were often customer-friendly. A
+model given the profile did no better than one without it. The signal was in
+concrete decisions, so v2 asks for decisions.
+
+**What it is.** `eval/intent-profile-v2.json` holds 24 short dilemmas (about
+10 minutes). Each is two or three sentences from a small farm, shop, trade,
+service or online business.
+
+- **Items:** 20 dilemmas plus 4 mirrors. A mirror restates an earlier
+  dilemma in other words, with the letters rearranged, at least 10 items
+  later.
+- **Options:** each item has three: two poles and a middle or test-first
+  option. Seven also offer "check with me first".
+- **Tags:** each option is tagged with the dimension(s) it expresses (pole
+  and weight). Flags mark the compromise, an ask, requirements-first (do it
+  right before fast), and protecting a customer or relationship at a cost.
+  - The tags are the designer's annotation and are never shown to the
+    person answering.
+- **Written fresh:** the items were written without seeing any provider's
+  answers. A test checks that they share no six-word run with the choice
+  scenarios.
+
+| Dimension | Primary items | Items touching it |
+|---|---|---|
+| Short vs long term | 3 | 4 |
+| Safe vs bold | 4 + 1 mirror | 5 |
+| Reputation vs revenue | 3 | 7 |
+| Customer vs company interest | 4 + 1 mirror | 7 |
+| Decide yourself vs ask me first | 3 + 1 mirror | 7 |
+| Relationships vs efficiency | 3 + 1 mirror | 5 |
+
+Ten items touch two dimensions.
+
+**What it measures (`src/profile-v2.ts`).** `scoreProfileV2` returns:
+
+- **A lean per dimension,** from −1 to +1, with the v1 readings and v1's
+  0–10 confidence. The score is the confidence-weighted mean of each
+  item's chosen load: sure 1, leaning 0.5, coin flip 0.25.
+  - A middle choice reads as 0 and counts against agreement. A lean read
+    from a few sided answers among many middle ones therefore gets low
+    confidence.
+  - Where an item offers "ask", choosing to act reads as "decide yourself"
+    at half weight.
+- **Behavior rates,** each given as chosen / offered:
+  - compromise
+  - ask
+  - requirements-first
+  - protect at a cost
+  - consistency on the four mirrors
+
+**How it will be used:**
+
+- **As examples for the model.** `profileV2AsExamples(instrument, answers)`
+  renders the answered items as worked examples: situation, options, the
+  choice, how sure, and the note, with no tags. The text has the same shape
+  as the choice eval's `--examples` arm and can stand in for it.
+  `choice-eval.ts` is not changed here. A flag such as
+  `--examples-profile-v2 <answers.json>` would set
+  `examplesText = profileV2AsExamples(instrument, read(path).answers)`.
+- **As a prior for the learner.** The rates and leans can set starting
+  weights for `compromise`, `ask` and `dim.*`. The mapping is still to be
+  fixed and frozen before any test.
+- **Not as the predictor.** Its readings are never scored as predictions.
+
+**Its value is not claimed.** It will be tested on held-out decisions: pilot
+verdicts, scored predict-then-learn, with and without the v2 examples or
+prior. The answer page stores answers in the `profile2` collection. Like
+every provider's raw answers, they stay out of the repository.
+
 ## Entry point
 
 ```ts
