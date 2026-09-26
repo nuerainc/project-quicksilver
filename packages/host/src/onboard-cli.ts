@@ -20,7 +20,7 @@
  *
  * You act as QUICKSILVER_ONBOARD_ACTOR (default entity-founder).
  */
-import { mkdir, readFile, writeFile } from 'node:fs/promises'
+import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 
 import {
@@ -50,6 +50,7 @@ import {
   type LearnerState,
   type Transaction,
 } from '@quicksilver/aura'
+import { decisionsAsExamples, FileDecisionStore, newDecisionId, prequentialOnDecisions, recordDecision, verdictsAsDecisions, type Decision } from '@quicksilver/aura'
 import { availableTransitions, nextAutomaticTransition, type Facts } from '@quicksilver/kernel/process'
 import { validatePlaybook, type PlaybookDefinition } from '@quicksilver/kernel/playbooks'
 import { fileRankerStore } from './ranker-store.ts'
@@ -246,6 +247,42 @@ switch (cmd) {
     const r = await recordChange(ledgerStore, companyId, principal, { type: 'autonomy.set', goalId, depth: depth as (typeof AUTONOMY_DEPTHS)[number] }, reason ? { reason } : {})
     if (!r.ok) fail(r.reasons.join(' '))
     console.log(`Recorded: ${department} may now ${depth}. Entry ${r.entry.seq}, hash ${r.entry.hash.slice(0, 12)}…`)
+    break
+  }
+  // ── Decision journal (Aura learns from real decisions) ─────────────────
+  //   npm run onboard -- decide "<situation>" "<option a>" "<option b>" [...up to 5] --chose <n> [--note "..."] [--category <tag>]
+  //   npm run onboard -- decisions [--export examples|json] [--no-shadow]
+  // Journal: data/intent/decisions.jsonl (append-only). Judged shadow verdicts are included as decisions.
+  case 'decide': {
+    const [situation, ...optionTexts] = positional
+    const chose = flag('--chose')
+    if (!situation || optionTexts.length < 2 || !chose) fail('Usage: decide "<situation>" "<option a>" "<option b>" [...up to 5] --chose <n> [--note "..."] [--category <tag>]')
+    const store = new FileDecisionStore(join(dir, 'decisions.jsonl'))
+    const now = new Date()
+    const r = recordDecision(human, { situation, options: optionTexts, chosen: /^\d+$/.test(chose) ? Number(chose) : chose, note: flag('--note'), category: flag('--category'), source: 'journal' }, { id: newDecisionId(now), now })
+    if (!r.ok) fail(r.reason)
+    await store.append(r.decision)
+    const all = await store.list()
+    console.log(`Logged ${r.decision.id}: you chose ${r.decision.chosen}) ${r.decision.options.find((o) => o.id === r.decision.chosen)!.text}. ${all.length} decision(s) in your journal.`)
+    break
+  }
+  case 'decisions': {
+    const exportAs = flag('--export')
+    if (exportAs !== undefined && exportAs !== 'examples' && exportAs !== 'json') fail('Usage: decisions [--export examples|json] [--no-shadow]')
+    const journal = await new FileDecisionStore(join(dir, 'decisions.jsonl')).list()
+    const shadow: Decision[] = []
+    if (!args.includes('--no-shadow')) {
+      const ids = await readdir(join(dir, 'onboard')).catch(() => [] as string[])
+      for (const id of ids) shadow.push(...verdictsAsDecisions(await readJsonFile<ShadowLog>(join(dir, 'onboard', id, 'shadow.json'), { recommendations: [] }), { intentId: id }))
+    }
+    const all = [...journal, ...shadow].sort((a, b) => a.at.localeCompare(b.at) || a.id.localeCompare(b.id))
+    if (exportAs === 'examples') { console.log(decisionsAsExamples(all)); break }
+    if (exportAs === 'json') { console.log(JSON.stringify({ decisions: all }, null, 1)); break }
+    console.log(`${all.length} decision(s): ${journal.length} logged, ${shadow.length} from shadow verdicts.`)
+    for (const d of all.slice(-10).reverse()) console.log(`  ${d.at.slice(0, 10)} [${d.source}${d.category ? `, ${d.category}` : ''}] ${d.situation.slice(0, 90)}${d.situation.length > 90 ? '…' : ''} → ${d.chosen}`)
+    const b = prequentialOnDecisions(all)
+    if (b.decisions) console.log(`Running accuracy (baseline, predict-then-learn): ${Math.round(b.accuracy! * 100)}% over ${b.decisions}; chance ${Math.round(b.chance! * 100)}%; second half ${Math.round(b.laterAccuracy! * 100)}%.`)
+    console.log('Export for choice-eval: npm run -s onboard -- decisions --export examples > data/aura/decision-examples.txt')
     break
   }
   default:

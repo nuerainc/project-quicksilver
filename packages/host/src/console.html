@@ -18,6 +18,7 @@ input, textarea, select { width: 100%; font: inherit; padding: 7px 9px; border: 
 textarea { min-height: 70px; }
 button { font: inherit; padding: 6px 12px; border-radius: 6px; border: 1px solid var(--accent); background: var(--accent); color: #fff; cursor: pointer; margin-top: 8px; }
 button.ghost { background: transparent; color: var(--accent); }
+button:disabled { opacity: .45; cursor: default; }
 .row { display:flex; gap: 8px; flex-wrap: wrap; align-items: end; } .row > * { flex: 1 1 160px; }
 .item { border-top: 1px solid var(--line); padding: 10px 0; } .item:first-child { border-top: 0; }
 .tag { display:inline-block; font-size: 12px; padding: 1px 7px; border-radius: 10px; border: 1px solid var(--line); color: var(--muted); margin-right: 4px; }
@@ -37,6 +38,14 @@ input[type=checkbox] { width: auto; margin: 0 6px 0 0; vertical-align: middle; }
 .stat .k { font-size: 12px; color: var(--muted); } .stat .v { font-size: 16px; font-variant-numeric: tabular-nums; }
 .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
 h3 { font-size: 14px; margin: 12px 0 4px; }
+.badge { display:inline-block; min-width: 1.6em; text-align:center; font-size: 12px; padding: 1px 7px; border-radius: 10px; background: var(--warn); color: var(--bg); margin-left: 6px; vertical-align: middle; }
+.badge.zero { background: var(--line); color: var(--muted); }
+.pending { border-left: 3px solid var(--warn); padding-left: 10px; }
+.opt { display:flex; gap: 8px; align-items: center; margin-top: 6px; }
+.opt input[type=text] { flex: 1 1 auto; min-width: 0; }
+.opt input[type=radio] { width: auto; margin: 0; flex: 0 0 auto; }
+.opt button { margin-top: 0; flex: 0 0 auto; }
+.chosen { font-weight: 600; }
 </style>
 </head>
 <body>
@@ -59,6 +68,25 @@ h3 { font-size: 14px; margin: 12px 0 4px; }
     <div class="msg" id="create-msg"></div>
   </section>
 
+  <section id="decide-section" hidden>
+    <h2>Log a decision</h2>
+    <p class="msg">A real decision you made, in Quicksilver or outside it. Aura learns how you decide from these; each one becomes a worked example and a test of its predictions.</p>
+    <label for="d-situation">Situation</label>
+    <textarea id="d-situation" maxlength="1000" placeholder="A regular asked for 30-day terms on a large order."></textarea>
+    <label>Options (2 to 5) — select the one you chose</label>
+    <div id="d-options" role="radiogroup" aria-label="Options"></div>
+    <button id="d-add" class="ghost">Add option</button>
+    <div class="row">
+      <div><label for="d-note">Why (optional)</label><input id="d-note" maxlength="1000" autocomplete="off"></div>
+      <div style="flex:0 1 180px"><label for="d-category">Area (optional)</label><input id="d-category" maxlength="40" placeholder="pricing" autocomplete="off"></div>
+    </div>
+    <button id="d-log">Log decision</button>
+    <div class="msg" id="d-msg"></div>
+    <h3>Recent decisions</h3>
+    <div class="msg" id="d-baseline"></div>
+    <div id="d-list"></div>
+  </section>
+
   <section>
     <h2>Intents</h2>
     <div id="intents" class="msg">Sign in to see intents.</div>
@@ -69,7 +97,7 @@ h3 { font-size: 14px; margin: 12px 0 4px; }
     <div id="detail-meta" class="msg"></div>
     <h2 style="margin-top:12px">Aura still needs to know</h2>
     <div id="questions"></div>
-    <h2 style="margin-top:12px">Shadow recommendations</h2>
+    <h2 style="margin-top:12px">Shadow recommendations <span id="pending-count" class="badge zero" title="Waiting for your verdict">0</span></h2>
     <div id="shadow-summary" class="msg"></div>
     <div class="row">
       <input id="gen-depts" value="finance, operations, sales" aria-label="Departments">
@@ -153,7 +181,7 @@ h3 { font-size: 14px; margin: 12px 0 4px; }
   async function signIn() {
     token = $('token').value.trim()
     try { sessionStorage.setItem('qs-token', token) } catch {}
-    try { const me = await api('/api/whoami'); say('who', 'Signed in as ' + me.id + ' (' + me.roles.join(', ') + ')', 'ok'); $('ledger-section').hidden = false; await loadIntents(); await loadGenesis() }
+    try { const me = await api('/api/whoami'); say('who', 'Signed in as ' + me.id + ' (' + me.roles.join(', ') + ')', 'ok'); $('ledger-section').hidden = false; $('decide-section').hidden = false; await loadIntents(); await loadDecisions(); await loadGenesis() }
     catch (e) { say('who', e.message, 'bad') }
   }
   async function loadIntents() {
@@ -185,16 +213,23 @@ h3 { font-size: 14px; margin: 12px 0 4px; }
       const s = await api('/api/shadow/' + encodeURIComponent(id))
       const p = s.aura.predictions
       say('shadow-summary', s.recommendations.length + ' recommendations · ' + s.facts['shadow.recommendations'] + ' judged · agreement ' + Math.round(s.facts['shadow.agreement'] * 100) + '%' + (p.scored ? ' · Aura predicted your verdict ' + p.agreed + '/' + p.scored : ''))
-      $('recs').replaceChildren(...s.recommendations.slice().reverse().map((r) => {
+      // Pending verdicts first (oldest first, so the queue drains in order), then judged ones, newest first.
+      const pending = s.recommendations.filter((r) => !r.verdict)
+      const judged = s.recommendations.filter((r) => r.verdict).reverse()
+      const badge = $('pending-count')
+      badge.textContent = String(pending.length)
+      badge.className = 'badge' + (pending.length ? '' : ' zero')
+      badge.setAttribute('aria-label', pending.length + ' waiting for your verdict')
+      $('recs').replaceChildren(...(pending.length ? [el('h3', {}, 'Waiting for your verdict')] : []), ...pending.concat(judged).map((r, i) => {
         const verdict = r.verdict ? el('span', { class: 'tag ' + (r.verdict.value === 'rejected' ? 'bad' : 'ok') }, r.verdict.value) : null
         const kcls = r.kernel.recommendation === 'execute-autonomously' ? 'ok' : r.kernel.recommendation === 'reject' ? 'bad' : 'warn'
-        const buttons = r.verdict ? [] : ['accepted', 'modified', 'rejected'].map((v) => el('button', { class: 'ghost', style: 'flex:0 0 auto', onclick: async () => { try { await api('/api/shadow/' + encodeURIComponent(id) + '/recommendations/' + r.id + '/verdict', { value: v }); await loadShadow(id) } catch (e) { alertBox.textContent = e.message } } }, v))
+        const buttons = r.verdict ? [] : ['accepted', 'modified', 'rejected'].map((v) => el('button', { class: 'ghost', style: 'flex:0 0 auto', onclick: async () => { try { await api('/api/shadow/' + encodeURIComponent(id) + '/recommendations/' + r.id + '/verdict', { value: v }); await loadShadow(id); loadDecisions() } catch (e) { alertBox.textContent = e.message } } }, v))
         const alertBox = el('div', { class: 'msg bad' })
-        return el('div', { class: 'item' },
+        return el('div', { class: 'item' + (r.verdict ? '' : ' pending'), 'data-rec': r.id },
           el('div', {}, r.description),
           el('div', {}, el('span', { class: 'tag' }, r.department), el('span', { class: 'tag ' + kcls }, 'kernel: ' + r.kernel.recommendation + ', risk ' + r.kernel.riskLevel), r.prediction ? el('span', { class: 'tag' }, 'Aura: ' + Math.round(r.prediction.accept * 100) + '% accept') : '', verdict || ''),
           buttons.length ? el('div', { class: 'row' }, ...buttons) : '', alertBox)
-      }))
+      }).flatMap((node, i) => (i === pending.length && pending.length && judged.length ? [el('h3', {}, 'Judged'), node] : [node])))
     } catch (e) { say('shadow-summary', e.message, 'bad') }
   }
 
@@ -209,6 +244,69 @@ h3 { font-size: 14px; margin: 12px 0 4px; }
     try { const r = await api('/api/shadow/' + encodeURIComponent(current.id) + '/generate', { departments }); say('shadow-summary', 'The agent proposed ' + r.added.length + (r.refused && r.refused.length ? ' (' + r.refused.length + ' refused)' : '') + '. Nothing was executed.', 'ok'); setTimeout(() => loadShadow(current.id), 800) }
     catch (e) { say('shadow-summary', e.message, 'bad') }
   })
+
+  // ── Decision journal ───────────────────────────────────────────────────
+  let optSeq = 0
+  function addOption(text = '') {
+    const box = $('d-options')
+    if (box.children.length >= 5) return
+    const n = ++optSeq
+    const radio = el('input', { type: 'radio', name: 'd-chosen', id: 'd-opt-r' + n, 'aria-label': 'I chose this option' })
+    const input = el('input', { type: 'text', maxlength: '300', autocomplete: 'off', 'aria-label': 'Option text' })
+    input.value = text
+    const remove = el('button', { class: 'ghost', type: 'button', onclick: () => { if (box.children.length > 2) { row.remove(); renumber() } } }, 'Remove')
+    const row = el('div', { class: 'opt' }, radio, input, remove)
+    box.append(row)
+    renumber()
+  }
+  function renumber() {
+    const rows = [...$('d-options').children]
+    rows.forEach((row, i) => {
+      row.querySelector('input[type=text]').placeholder = 'Option ' + (i + 1)
+      row.querySelector('button').disabled = rows.length <= 2
+    })
+    $('d-add').disabled = rows.length >= 5
+  }
+  function resetDecisionForm() {
+    $('d-options').replaceChildren(); optSeq = 0
+    addOption(); addOption()
+    $('d-situation').value = ''; $('d-note').value = ''
+  }
+  async function logDecision() {
+    const rows = [...$('d-options').children]
+    const options = rows.map((row) => row.querySelector('input[type=text]').value.trim())
+    const chosenIndex = rows.findIndex((row) => row.querySelector('input[type=radio]').checked)
+    if (!$('d-situation').value.trim()) { say('d-msg', 'Describe the situation.', 'bad'); return }
+    if (options.some((o) => !o)) { say('d-msg', 'Fill in every option, or remove the empty ones.', 'bad'); return }
+    if (chosenIndex < 0) { say('d-msg', 'Select the option you chose.', 'bad'); return }
+    const body = { situation: $('d-situation').value, options, chosen: chosenIndex + 1 }
+    if ($('d-note').value.trim()) body.note = $('d-note').value
+    if ($('d-category').value.trim()) body.category = $('d-category').value.trim().toLowerCase()
+    try {
+      const r = await api('/api/decisions', body)
+      say('d-msg', 'Logged. Aura will learn from it.', 'ok')
+      resetDecisionForm()
+      await loadDecisions(r.decision.id)
+    } catch (e) { fail($('d-msg'), e) }
+  }
+  async function loadDecisions() {
+    let data
+    try { data = await api('/api/decisions?limit=8') } catch (e) {
+      if (e.status === 404) { $('decide-section').hidden = true; return }
+      fail($('d-baseline'), e); return
+    }
+    const b = data.baseline
+    say('d-baseline', data.total + ' decision(s): ' + data.counts.journal + ' logged, ' + data.counts.shadow + ' from shadow verdicts' +
+      (b.decisions ? ' · running accuracy ' + Math.round(b.accuracy * 100) + '% vs chance ' + Math.round(b.chance * 100) + '% (baseline: keyword features, predicted before each decision)' : ''))
+    $('d-list').replaceChildren(...(data.decisions.length ? data.decisions.map((d) => el('div', { class: 'item' },
+      el('div', {}, d.situation),
+      el('div', { class: 'msg' }, ...d.options.map((o, i) => el('span', { class: o.id === d.chosen ? 'chosen ok' : '' }, (i ? ' · ' : '') + (o.id === d.chosen ? '✓ ' : '') + o.text))),
+      el('div', {}, el('span', { class: 'tag' }, d.source), d.category ? el('span', { class: 'tag' }, d.category) : '', el('span', { class: 'tag' }, fmtTime(d.at))),
+      d.note ? el('div', { class: 'msg' }, 'Why: ' + d.note) : '')) : [el('div', { class: 'msg' }, 'No decisions yet.')]))
+  }
+  $('d-add').addEventListener('click', () => addOption())
+  $('d-log').addEventListener('click', logDecision)
+  resetDecisionForm()
 
   // ── Intent ledger (read-only) ──────────────────────────────────────────
   const reasonsOf = (e) => (e && e.data && Array.isArray(e.data.reasons) && e.data.reasons.length ? e.data.reasons : [])

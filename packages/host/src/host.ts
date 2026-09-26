@@ -22,6 +22,7 @@ import { SecretsVault, VaultError } from './vault.ts'
 import { handleIntentRoute, type IntentApiDeps } from './intent-api.ts'
 import { handleShadowRoute, type ShadowApiDeps } from './shadow-api.ts'
 import { handleGenesisRoute, type GenesisApiDeps } from './genesis-api.ts'
+import { handleDecisionRoute, type DecisionApiDeps } from './decisions-api.ts'
 
 /**
  * The single-tenant Quicksilver host: one process that runs the governed
@@ -55,6 +56,8 @@ export interface HostDependencies {
   shadow?: ShadowApiDeps
   /** Genesis run (M5): records and evaluates only. Routes return 404 when absent. */
   genesis?: GenesisApiDeps
+  /** Aura decision journal: decisions the provider logs, plus judged shadow verdicts. Routes return 404 when absent. */
+  decisions?: DecisionApiDeps
 }
 
 const CONSOLE_HEADERS = {
@@ -354,6 +357,15 @@ export class QuicksilverHost {
       if (handled) return handled
     }
 
+    // Aura decision journal
+    if (parts[1] === 'decisions' && this.deps.decisions) {
+      const handled = await handleDecisionRoute({
+        method, parts, query: url.searchParams, principal, tenantId: this.config.tenantId, access: this.access,
+        readBody: () => readJson(req, this.config.http.maxBodyBytes),
+      }, { ...this.deps.decisions, ...(this.deps.now ? { now: this.deps.now } : {}) })
+      if (handled) return handled
+    }
+
     // Genesis run (M5): records and evaluates; never moves money
     if (parts[1] === 'genesis' && this.deps.genesis) {
       const vault = this.vault
@@ -544,7 +556,7 @@ function headerValue(req: IncomingMessage, name: string): string | null {
 function routeLabel(method: string, path: string): string {
   if (path.startsWith('/webhooks/')) return `${method} /webhooks/:id`
   const normalized = path.replace(/^\/api\/runs\/[^/]+/, '/api/runs/:id').replace(/^\/api\/secrets\/[^/]+/, '/api/secrets/:name').replace(/^\/api\/intents\/[^/]+/, '/api/intents/:id').replace(/^\/api\/intent-ledger\/[^/]+/, '/api/intent-ledger/:company').replace(/^\/api\/genesis\/experiments\/[^/]+/, '/api/genesis/experiments/:id')
-  const known = ['/healthz', '/readyz', '/metrics', '/api/whoami', '/api/runs', '/api/runs/:id', '/api/runs/:id/cancel', '/api/runs/:id/redrive', '/api/dead-letters', '/api/stats', '/api/schedules', '/api/webhooks', '/api/workflows', '/api/secrets', '/api/secrets/:name', '/api/admin/reload-secrets', '/api/intents', '/api/intents/:id', '/api/intents/:id/answers', '/api/intent-ledger/:company', '/api/genesis', '/api/genesis/experiments', '/api/genesis/money', '/api/genesis/reviews', '/api/genesis/experiments/:id/start', '/api/genesis/experiments/:id/measurements', '/api/genesis/experiments/:id/evaluate', '/api/genesis/experiments/:id/decide']
+  const known = ['/healthz', '/readyz', '/metrics', '/api/whoami', '/api/runs', '/api/runs/:id', '/api/runs/:id/cancel', '/api/runs/:id/redrive', '/api/dead-letters', '/api/stats', '/api/schedules', '/api/webhooks', '/api/workflows', '/api/secrets', '/api/secrets/:name', '/api/admin/reload-secrets', '/api/intents', '/api/intents/:id', '/api/intents/:id/answers', '/api/intent-ledger/:company', '/api/decisions', '/api/genesis', '/api/genesis/experiments', '/api/genesis/money', '/api/genesis/reviews', '/api/genesis/experiments/:id/start', '/api/genesis/experiments/:id/measurements', '/api/genesis/experiments/:id/evaluate', '/api/genesis/experiments/:id/decide']
   return known.includes(normalized) ? `${method} ${normalized}` : `${method} other`
 }
 

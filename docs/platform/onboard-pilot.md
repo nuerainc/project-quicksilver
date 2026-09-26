@@ -147,3 +147,80 @@ host uses the same project settings as evaluation records
 
 Both types are read-only in Studio. After pulling, deploy the schema with
 `npm run schema:deploy -- --login`.
+
+## Feeding Aura
+
+Aura learns best from many real decisions, made in their real context. Each
+one is kept so it can be used twice: as a worked example Aura learns from,
+and as a test of Aura's predictions.
+
+### The daily 5-minute routine
+
+1. **Judge pending verdicts (about 2 minutes).** In the console, open the
+   intent. The shadow section lists **Waiting for your verdict** first; the
+   badge shows how many are waiting. Tap accepted, modified or rejected.
+   From the command line: `npm run onboard -- judge <intentId> <recId> accepted|modified|rejected "note"`.
+2. **Dismiss bad questions (about 1 minute).** Under "Aura still needs to
+   know", answer what matters and tap **Not worth asking** on the rest.
+   Dismissals teach Aura's question order and count toward question quality.
+3. **Log 1 to 3 real decisions (about 2 minutes).** Pick decisions you
+   actually made that day, in the business or outside Quicksilver, where you
+   had real alternatives. Use the console's **Log a decision** section
+   (situation, 2 to 5 options, select the one you chose, and a short "why"),
+   or:
+
+   ```bash
+   npm run onboard -- decide "A regular asked for 30-day terms on a large order" \
+     "Say yes" "Decline and keep cash on delivery" "Offer 15-day terms instead" \
+     --chose 3 --note "Good customer, but cash is tight" --category sales
+   npm run onboard -- decisions          # recent decisions and the running accuracy
+   ```
+
+   Write the options you really considered, before you think about which
+   one Aura would pick. The note matters most: it is what Aura learns *why*
+   from.
+
+### Where the decisions go
+
+- **The journal:** `data/intent/decisions.jsonl` (git-ignored). The console
+  (`POST /api/decisions`) and the CLI write to the same file. It is
+  append-only: entries are never edited or removed. Only a human with
+  `intent:provide` logs decisions; agents cannot. A logged decision is what
+  you did, not stated intent: it never touches the intent ledger and grants
+  nothing. (Sanity storage is not implemented for the journal yet.)
+- **Shadow verdicts count too.** Every judged recommendation is also read
+  as a decision between *accept*, *modify* and *reject* it, with your
+  verdict note. These are derived from `shadow.json` when read, not stored
+  twice.
+
+### How they become examples
+
+```bash
+npm run -s onboard -- decisions --export examples > data/aura/decision-examples.txt
+npm run -s onboard -- decisions --export json     > data/aura/decisions.json
+```
+
+The examples text uses the same format as the `--examples` arm of
+`npm run aura:choices:model`: each situation, its options, what you chose
+and your note, oldest first. It is the in-context evidence for any later
+test of Aura's choice predictions. Keep the honesty rule from the Aura
+README: a decision used as an example is never also scored as a test item
+in the same run.
+
+### The running accuracy (baseline)
+
+`GET /api/decisions`, the console and `npm run onboard -- decisions` report
+a running accuracy over all decisions (journal and shadow verdicts):
+
+- Each decision is predicted **before** Aura learns from it, oldest first
+  (predict-then-learn), with the existing learner (`learn.ts`).
+- The features are deliberately simple: keyword flags for declining,
+  delaying, compromise, asking, modifying and spending. Option position is
+  excluded, and ties are credited 1/k, so the score cannot rise by learning
+  "they usually pick b".
+- It is shown next to chance (the mean of 1 / number of options), with the
+  second-half accuracy and a breakdown by source.
+
+This is a **baseline**, labeled as one everywhere it appears. It is the bar
+any real Aura choice model has to beat on the same decisions, not a
+measure of Aura itself.

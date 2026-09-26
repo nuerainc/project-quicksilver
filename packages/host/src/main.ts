@@ -137,6 +137,13 @@ async function buildShadowStore(config: HostConfig, log: Logger): Promise<Shadow
     : new MemoryShadowStore()
 }
 
+/** Aura decision journal: data/intent/decisions.jsonl next to the intent graphs (where `npm run onboard -- decide` writes), in memory otherwise. */
+async function buildDecisions(config: HostConfig, shadow: ShadowApiDeps) {
+  const aura = await import('@quicksilver/aura')
+  const store = config.store.kind === 'file' ? new aura.FileDecisionStore(join(dirname(config.store.path), 'intent', 'decisions.jsonl')) : new aura.MemoryDecisionStore()
+  return { store, shadow: { store: shadow.store, graphs: shadow.graphs } }
+}
+
 async function buildShadow(config: HostConfig, log: Logger, graphs: import('@quicksilver/aura').IntentGraphStore): Promise<ShadowApiDeps> {
   const store = await buildShadowStore(config, log)
   const agent = await import('@quicksilver/agent')
@@ -290,6 +297,7 @@ async function main(): Promise<void> {
   const principals = principalsFromJson(process.env.QUICKSILVER_PRINCIPALS)
   const { store, close, ready } = await buildStore(config, log)
   const intent = await buildIntent(config, log)
+  const shadow = await buildShadow(config, log, intent.graphs)
   const host = new QuicksilverHost(config, {
     principals,
     store,
@@ -297,7 +305,8 @@ async function main(): Promise<void> {
     agentRunner: await buildAgentRunner(log),
     evaluationSink: await buildEvaluationSink(log),
     intent,
-    shadow: await buildShadow(config, log, intent.graphs),
+    shadow,
+    decisions: await buildDecisions(config, shadow),
     genesis: await buildGenesis(config, log),
     ...(close ? { onStop: close } : {}),
     ...(ready ? { ready } : {}),
