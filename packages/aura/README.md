@@ -188,6 +188,23 @@ flaws and one missing ingredient:
   concrete situations. The next profile version should measure in context
   (for example, commercial terms vs treatment of a specific customer).
 
+**Held-back dimensions, mapped (exploratory):**
+
+- Six of the eight held-back dimensions can be read secondarily from
+  existing profile items. Speed vs quality, for example, comes from the
+  training, roof, mediocre-product and own-name items.
+- With all 12 dimensions, readings from the profile only and held-back
+  dimensions also tagged on the scenarios, the score rises from 6/38 to
+  **11/38 (28.9%)**, barely above chance.
+- A leave-one-out upper bound, which learns each dimension from the other
+  37 answers, also reaches only 11/38. Weights on option tags top out here,
+  whatever the profile says.
+- The strongest leaning the scenarios reveal is **quality over speed**. The
+  profile's secondary reading agrees, so it is the first candidate for
+  profile v2. Focus agrees too. Growth and scale point the other way.
+- A predictor needs more than weights: requirements as filters, recognizing
+  a compromise option, and preferring the fix that solves the problem.
+
 The only blind check left on these answers is the model:
 `npm run aura:choices:model` gives the Azure model the scenarios with and
 without the profile, never the answers.
