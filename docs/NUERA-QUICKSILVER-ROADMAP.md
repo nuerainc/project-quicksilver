@@ -42,6 +42,8 @@ The M2 host runs on the founder's computer; always-on hosting is part of M5.
   - decision rules and customer commitments
   - a hash-chained, optionally signed log of every change, checked through
     kernel RBAC (`intent:provide`, `intent:rules`)
+- persistence: append-only file and Sanity stores for the ledger, verified on
+  every load, and Studio schemas `intentLedgerEntry` and `intentGraph`
 
 The first impact-ranking test scored 56.3% (below the 63% chance rate); the
 revised charter makes choice agreement the primary measure. Calibration now
@@ -53,7 +55,6 @@ Still to build:
 
 - implied-intent parsing (for example, "we run a feed store" settles the business type)
 - the choice predictor
-- Studio schemas and persistence for graphs and the ledger
 - the web entry point
 - the parser reaching 90%
 

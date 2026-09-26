@@ -10,6 +10,8 @@ import evidence from './evidence'
 import decision from './decision'
 import metric from './metric'
 import evaluationRecord from './evaluation-record'
+import intentGraph from './intent-graph'
+import intentLedgerEntry from './intent-ledger-entry'
 
 export const schemaTypes = [
   organization,
@@ -24,4 +26,6 @@ export const schemaTypes = [
   decision,
   metric,
   evaluationRecord,
+  intentGraph,
+  intentLedgerEntry,
 ]

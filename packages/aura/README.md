@@ -87,6 +87,25 @@ entry.
 - **Reversals are reported, never blocked.** `weightReversals` lists weights
   moved back and forth within a window.
 
+## Persistence
+
+`store.ts` saves the ledger and graphs. All ledger stores are append-only: an
+existing entry is never replaced. `loadLedger` checks the chain (and
+signatures, when a public key is given) on every load, and refuses a ledger
+that was edited outside Aura (`LedgerIntegrityError`).
+
+| Store | Where | Notes |
+|---|---|---|
+| `MemoryLedgerStore` | In process | Tests and short runs |
+| `FileLedgerStore` | `<dir>/<company>.intent-ledger.jsonl` | The local host; the file is created readable by its owner only |
+| `SanityLedgerStore` | `intentLedgerEntry` documents | Ids `intent-ledger.<company>.<seq>` contain a dot, so they stay out of unauthenticated reads. Writes use `createIfNotExists`, so a racing second writer gets `LedgerConflictError` |
+
+- `recordChange(store, companyId, actor, change)` loads the ledger, applies
+  the provider rules, and stores the new entry.
+- `toSanityIntentGraph` and `fromSanityIntentGraph` map graphs to the
+  `intentGraph` document type (id `intent-graph.<id>`).
+- Both Studio schemas are read-only in Studio: Aura is the only writer.
+
 ## Intent profile (calibration)
 
 `eval/intent-profile-v1.json` holds 36 quick two-option items. Each measures
@@ -158,8 +177,7 @@ npm run aura:test
 | All inferred values explained | Enforced by validation |
 | Tests pass | `npm run aura:test` |
 
-Not yet built: Studio schemas for `intent` and `graphVariable`, the web entry
-point, and persisting graphs.
+Not yet built: the web entry point, implied-intent parsing, and the choice predictor.
 
 ## Human rankings for the impact criterion
 
