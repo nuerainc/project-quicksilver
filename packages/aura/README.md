@@ -483,6 +483,26 @@ Azure run on the development set (2026-09-26, before these fixes): baseline
 
 The web entry point is the host console (`/console`), built 2026-09-26.
 
+## Fresh impact-ranking test for scorer v3 (frozen 2026-09-26)
+
+Scorer v3 (implied intent) was never tested on rankings it had not seen. The
+fresh test works like this:
+
+- **The set** (`eval/impact-ranking-set-v3.json`) has 30 objectives no one
+  has ranked: 7 held-out parsing objectives and 23 new ones, all with more
+  than three open questions.
+  - Objectives were kept or excluded only on parser output. Excluded were
+    those with three or fewer open questions (any ranking agrees trivially),
+    plus two the rule-based parser misread as new businesses.
+  - A finding along the way: when the mode is unknown, Aura asks only the
+    mode question, so most unclear objectives produce a single question.
+- **Aura's rankings are frozen first.** They are in
+  `eval/impact-predictions-v3.json`, committed before the founder ranks. A
+  test pins the file's hash and checks that scorer v3 still reproduces it.
+- **Chance:** 61.2%. **Target:** 80% top-3 agreement, the same as before.
+- **Run it:** `npm run aura:agreement -- --set v3 [--detail]` once
+  `eval/impact-rankings-v3.json` holds the founder's rankings.
+
 ## Human rankings for the impact criterion
 
 - Only objectives with more than three open questions count (32 of 52);

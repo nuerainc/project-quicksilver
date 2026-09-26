@@ -1,0 +1,434 @@
+{
+ "version": 1,
+ "createdAt": "2026-09-26",
+ "description": "Fresh objectives for the scorer v3 impact-ranking test: the held-out parsing objectives with more than three open questions, plus new objectives written 2026-09-26. None was ranked before. Objectives were kept or excluded only on parser output (never on any ranking).",
+ "objectives": [
+  {
+   "id": "hold-004",
+   "text": "Start a side business tutoring math on weekends; I keep my full-time job.",
+   "mode": "genesis"
+  },
+  {
+   "id": "hold-005",
+   "text": "I want to build an online course business from scratch, $400 budget, no paid ads, and ask me before you spend anything.",
+   "mode": "genesis"
+  },
+  {
+   "id": "hold-006",
+   "text": "Start a firewood delivery business and reach $3,000 in sales over the next 90 days.",
+   "mode": "genesis"
+  },
+  {
+   "id": "hold-007",
+   "text": "Turn $1,000 into a small vending machine business. Just advise me for now.",
+   "mode": "genesis"
+  },
+  {
+   "id": "hold-009",
+   "text": "I'd like to make extra money selling seedlings in the spring, 12 hours a week, within 8 weeks.",
+   "mode": "genesis"
+  },
+  {
+   "id": "hold-016",
+   "text": "We have an existing welding shop; bring it into Quicksilver and don't contact our customers.",
+   "mode": "onboard"
+  },
+  {
+   "id": "hold-019",
+   "text": "Our farm stand needs a clear view of which products actually make money this season.",
+   "mode": "genesis"
+  },
+  {
+   "id": "rank3-01",
+   "text": "Start a side business sharpening knives and garden tools; I keep my day job.",
+   "mode": "genesis"
+  },
+  {
+   "id": "rank3-02",
+   "text": "I want to start a small business making goat milk soap.",
+   "mode": "genesis"
+  },
+  {
+   "id": "rank3-04",
+   "text": "Help me start a mobile welding repair service from scratch.",
+   "mode": "genesis"
+  },
+  {
+   "id": "rank3-06",
+   "text": "Start an online shop selling vintage western wear with a $600 budget.",
+   "mode": "genesis"
+  },
+  {
+   "id": "rank3-14",
+   "text": "Launch a small honey business from my 20 hives.",
+   "mode": "genesis"
+  },
+  {
+   "id": "rank3-18",
+   "text": "Help me start a woodworking business selling cutting boards online.",
+   "mode": "genesis"
+  },
+  {
+   "id": "rank3-21",
+   "text": "Start a small print shop making vinyl decals, part-time.",
+   "mode": "genesis"
+  },
+  {
+   "id": "rank3-25",
+   "text": "Start a sewing alterations business from home with no advertising.",
+   "mode": "genesis"
+  },
+  {
+   "id": "rank3-29",
+   "text": "We have a two-truck plumbing business; help us get paid faster.",
+   "mode": "onboard"
+  },
+  {
+   "id": "rank3-30",
+   "text": "I own a boutique; bring it into Quicksilver and tell me what to fix first.",
+   "mode": "onboard"
+  },
+  {
+   "id": "rank3-33",
+   "text": "Our auto body shop wants to grow repeat customers.",
+   "mode": "onboard"
+  },
+  {
+   "id": "rank3-35",
+   "text": "We operate a car wash; figure out our slow days and what to do.",
+   "mode": "onboard"
+  },
+  {
+   "id": "rank3-37",
+   "text": "We have a tree-trimming crew; help us schedule jobs better.",
+   "mode": "onboard"
+  },
+  {
+   "id": "rank3-38",
+   "text": "I own a small gym; members keep canceling, find out why.",
+   "mode": "onboard"
+  },
+  {
+   "id": "rank3-41",
+   "text": "We own a hardware store and want to add online ordering.",
+   "mode": "onboard"
+  },
+  {
+   "id": "rank3-42",
+   "text": "Our cleaning company wants to win more commercial contracts.",
+   "mode": "onboard"
+  },
+  {
+   "id": "rank3-44",
+   "text": "We run an equipment rental yard; find out what we should stop renting.",
+   "mode": "onboard"
+  },
+  {
+   "id": "rank3-46",
+   "text": "We run a small campground; help us fill the shoulder season.",
+   "mode": "onboard"
+  },
+  {
+   "id": "rank3-47",
+   "text": "I own a used bookstore; figure out what sells and what to stop buying.",
+   "mode": "onboard"
+  },
+  {
+   "id": "rank3-48",
+   "text": "We operate a mobile vet clinic; help us cut drive time between calls.",
+   "mode": "onboard"
+  },
+  {
+   "id": "rank3-49",
+   "text": "Our pizza shop wants fewer wasted ingredients at close.",
+   "mode": "onboard"
+  },
+  {
+   "id": "rank3-51",
+   "text": "I own a nail salon; help me keep clients coming back.",
+   "mode": "onboard"
+  },
+  {
+   "id": "rank3-54",
+   "text": "Start a small business selling sourdough starter kits online.",
+   "mode": "genesis"
+  }
+ ],
+ "excluded": [
+  {
+   "id": "hold-001",
+   "text": "I've got $750 saved and want to start a mobile car detailing business within 3 months.",
+   "reason": "1 open question(s); any ranking agrees trivially"
+  },
+  {
+   "id": "hold-002",
+   "text": "Help me start selling handmade leather goods online. I can put in 6 hours a week.",
+   "reason": "1 open question(s); any ranking agrees trivially"
+  },
+  {
+   "id": "hold-003",
+   "text": "Launch a pet-sitting service in my town with no debt; I want $1,500 a month in bookings.",
+   "reason": "1 open question(s); any ranking agrees trivially"
+  },
+  {
+   "id": "hold-008",
+   "text": "Start a digital-only design studio by myself, without hiring anyone.",
+   "reason": "1 open question(s); any ranking agrees trivially"
+  },
+  {
+   "id": "hold-010",
+   "text": "Launch a newsletter about local farm auctions and grow it to $500 per month.",
+   "reason": "1 open question(s); any ranking agrees trivially"
+  },
+  {
+   "id": "hold-011",
+   "text": "We run a small auto repair garage. Find out why our parts costs keep rising.",
+   "reason": "3 open question(s); any ranking agrees trivially"
+  },
+  {
+   "id": "hold-012",
+   "text": "My bakery sells wholesale to three cafes. Help me raise profit by $1,200 a month.",
+   "reason": "1 open question(s); any ranking agrees trivially"
+  },
+  {
+   "id": "hold-013",
+   "text": "Our landscaping crew wants to add snow removal this winter with a $4,000 equipment budget.",
+   "reason": "1 open question(s); any ranking agrees trivially"
+  },
+  {
+   "id": "hold-014",
+   "text": "I own a hardware store. Connect our point-of-sale data and suggest what to stock, read-only.",
+   "reason": "3 open question(s); any ranking agrees trivially"
+  },
+  {
+   "id": "hold-015",
+   "text": "Our clinic's schedule has too many no-shows. Figure out a fix within a month and don't text patients.",
+   "reason": "1 open question(s); any ranking agrees trivially"
+  },
+  {
+   "id": "hold-017",
+   "text": "My flower shop does $9,000 a month and I want $12,000 a month by next spring.",
+   "reason": "3 open question(s); any ranking agrees trivially"
+  },
+  {
+   "id": "hold-018",
+   "text": "I operate two food trucks. Cut waste by $500 a month without adding staff.",
+   "reason": "1 open question(s); any ranking agrees trivially"
+  },
+  {
+   "id": "hold-020",
+   "text": "Every Friday, send me a summary of sales and overdue invoices.",
+   "reason": "1 open question(s); any ranking agrees trivially"
+  },
+  {
+   "id": "hold-021",
+   "text": "Keep reordering feed and supplies on your own within the limits I set.",
+   "reason": "1 open question(s); any ranking agrees trivially"
+  },
+  {
+   "id": "hold-022",
+   "text": "Each morning, check cash and alert me if it falls below $5,000.",
+   "reason": "1 open question(s); any ranking agrees trivially"
+  },
+  {
+   "id": "hold-023",
+   "text": "Run the weekly timesheet review, but ask me before changing any hours.",
+   "reason": "1 open question(s); any ranking agrees trivially"
+  },
+  {
+   "id": "hold-024",
+   "text": "Automate our monthly sales tax filing prep hands-off.",
+   "reason": "1 open question(s); any ranking agrees trivially"
+  },
+  {
+   "id": "hold-025",
+   "text": "Keep handling customer booking requests day to day and don't run any ads.",
+   "reason": "1 open question(s); any ranking agrees trivially"
+  },
+  {
+   "id": "hold-026",
+   "text": "Track equipment rentals every week and flag anything overdue.",
+   "reason": "1 open question(s); any ranking agrees trivially"
+  },
+  {
+   "id": "hold-027",
+   "text": "Should I raise my prices?",
+   "reason": "1 open question(s); any ranking agrees trivially"
+  },
+  {
+   "id": "hold-028",
+   "text": "Is a $2,000 trailer worth it for hauling hay?",
+   "reason": "1 open question(s); any ranking agrees trivially"
+  },
+  {
+   "id": "hold-029",
+   "text": "What's the best way to use 5 hours a week?",
+   "reason": "1 open question(s); any ranking agrees trivially"
+  },
+  {
+   "id": "hold-030",
+   "text": "Give me ideas.",
+   "reason": "1 open question(s); any ranking agrees trivially"
+  },
+  {
+   "id": "rank3-03",
+   "text": "Start a weekend farmers market booth selling microgreens.",
+   "reason": "1 open question(s); any ranking agrees trivially"
+  },
+  {
+   "id": "rank3-05",
+   "text": "I'd like to start a bookkeeping service for local ranches, working evenings.",
+   "reason": "1 open question(s); any ranking agrees trivially"
+  },
+  {
+   "id": "rank3-07",
+   "text": "Begin a small-engine repair side business out of my garage.",
+   "reason": "1 open question(s); any ranking agrees trivially"
+  },
+  {
+   "id": "rank3-08",
+   "text": "I want to launch a drone crop-scouting service this summer.",
+   "reason": "1 open question(s); any ranking agrees trivially"
+  },
+  {
+   "id": "rank3-09",
+   "text": "Start a firewood and kindling subscription for nearby cabins.",
+   "reason": "1 open question(s); any ranking agrees trivially"
+  },
+  {
+   "id": "rank3-10",
+   "text": "Help me start a custom saddle repair business, no debt.",
+   "reason": "1 open question(s); any ranking agrees trivially"
+  },
+  {
+   "id": "rank3-11",
+   "text": "Start a local meal-prep delivery business on weekends.",
+   "reason": "1 open question(s); any ranking agrees trivially"
+  },
+  {
+   "id": "rank3-12",
+   "text": "I want to start teaching guitar lessons online, 5 hours a week.",
+   "reason": "1 open question(s); any ranking agrees trivially"
+  },
+  {
+   "id": "rank3-13",
+   "text": "Start a greenhouse selling bedding plants next spring.",
+   "reason": "1 open question(s); any ranking agrees trivially"
+  },
+  {
+   "id": "rank3-15",
+   "text": "Start a pressure-washing business with $1,200 I have saved.",
+   "reason": "1 open question(s); any ranking agrees trivially"
+  },
+  {
+   "id": "rank3-16",
+   "text": "I want to start a used farm equipment resale business on the side.",
+   "reason": "1 open question(s); any ranking agrees trivially"
+  },
+  {
+   "id": "rank3-17",
+   "text": "Start a dog grooming van business within 6 months.",
+   "reason": "1 open question(s); any ranking agrees trivially"
+  },
+  {
+   "id": "rank3-19",
+   "text": "Start a lawn aeration service this fall without a loan.",
+   "reason": "1 open question(s); any ranking agrees trivially"
+  },
+  {
+   "id": "rank3-20",
+   "text": "I want to start a resume-writing service for local job seekers.",
+   "reason": "1 open question(s); any ranking agrees trivially"
+  },
+  {
+   "id": "rank3-22",
+   "text": "Launch a snow-plowing side business for this winter.",
+   "reason": "1 open question(s); any ranking agrees trivially"
+  },
+  {
+   "id": "rank3-23",
+   "text": "Start an egg delivery route from my backyard flock.",
+   "reason": "1 open question(s); any ranking agrees trivially"
+  },
+  {
+   "id": "rank3-24",
+   "text": "I want to start a bike repair stand at the trailhead on weekends.",
+   "reason": "1 open question(s); any ranking agrees trivially"
+  },
+  {
+   "id": "rank3-26",
+   "text": "We run a small feed store. Figure out why margins dropped this year.",
+   "reason": "2 open question(s); any ranking agrees trivially"
+  },
+  {
+   "id": "rank3-27",
+   "text": "We own a diner. Help us understand which menu items make money.",
+   "reason": "the rule-based parser read an existing business as genesis"
+  },
+  {
+   "id": "rank3-28",
+   "text": "Our family runs a hay farm; find where we're losing money on delivery.",
+   "reason": "1 open question(s); any ranking agrees trivially"
+  },
+  {
+   "id": "rank3-31",
+   "text": "Our motel's bookings are down; find out why.",
+   "reason": "1 open question(s); any ranking agrees trivially"
+  },
+  {
+   "id": "rank3-32",
+   "text": "We run a small print shop; help us price jobs better.",
+   "reason": "3 open question(s); any ranking agrees trivially"
+  },
+  {
+   "id": "rank3-34",
+   "text": "I run a daycare; help me cut costs without cutting staff.",
+   "reason": "3 open question(s); any ranking agrees trivially"
+  },
+  {
+   "id": "rank3-36",
+   "text": "Our coffee roastery sells to 12 cafes; help us grow wholesale.",
+   "reason": "1 open question(s); any ranking agrees trivially"
+  },
+  {
+   "id": "rank3-39",
+   "text": "We run a pet supply store; tell us what inventory is dead weight.",
+   "reason": "3 open question(s); any ranking agrees trivially"
+  },
+  {
+   "id": "rank3-40",
+   "text": "Our farm sells beef direct; help us plan next year's sales.",
+   "reason": "3 open question(s); any ranking agrees trivially"
+  },
+  {
+   "id": "rank3-43",
+   "text": "I run a tattoo studio; help me fill weekday appointments.",
+   "reason": "3 open question(s); any ranking agrees trivially"
+  },
+  {
+   "id": "rank3-45",
+   "text": "Our bakery wants to open a second location someday; tell us if we're ready.",
+   "reason": "1 open question(s); any ranking agrees trivially"
+  },
+  {
+   "id": "rank3-50",
+   "text": "We run a small machine shop; help us quote jobs faster.",
+   "reason": "3 open question(s); any ranking agrees trivially"
+  },
+  {
+   "id": "rank3-52",
+   "text": "We have a roofing crew; figure out which jobs actually make money.",
+   "reason": "the rule-based parser read an existing business as genesis"
+  },
+  {
+   "id": "rank3-53",
+   "text": "Our dairy sells cheese at three markets; help us decide where to focus.",
+   "reason": "1 open question(s); any ranking agrees trivially"
+  },
+  {
+   "id": "rank3-55",
+   "text": "I want to start a pet-waste cleanup service in my town.",
+   "reason": "1 open question(s); any ranking agrees trivially"
+  }
+ ]
+}

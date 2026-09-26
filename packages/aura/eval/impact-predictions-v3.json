@@ -1,0 +1,673 @@
+{
+ "scorerVersion": 3,
+ "frozenAt": "2026-09-26",
+ "set": "impact-ranking-set-v3.json",
+ "parser": "rule-based baseline (createIntent default)",
+ "note": "Aura’s full impact order with scores, recorded BEFORE the founder ranks these objectives. The tie rule in agreement.ts applies. A scorer change is a new version and needs new rankings.",
+ "rankings": {
+  "hold-004": [
+   {
+    "variableId": "risk_tolerance",
+    "score": 1.16
+   },
+   {
+    "variableId": "budget",
+    "score": 0.9
+   },
+   {
+    "variableId": "success_metric",
+    "score": 0.8
+   },
+   {
+    "variableId": "timeframe",
+    "score": 0.7
+   },
+   {
+    "variableId": "skills",
+    "score": 0.6
+   },
+   {
+    "variableId": "weekly_hours",
+    "score": 0.5
+   }
+  ],
+  "hold-005": [
+   {
+    "variableId": "risk_tolerance",
+    "score": 1.16
+   },
+   {
+    "variableId": "success_metric",
+    "score": 0.8
+   },
+   {
+    "variableId": "timeframe",
+    "score": 0.7
+   },
+   {
+    "variableId": "skills",
+    "score": 0.6
+   },
+   {
+    "variableId": "weekly_hours",
+    "score": 0.5
+   }
+  ],
+  "hold-006": [
+   {
+    "variableId": "risk_tolerance",
+    "score": 1.16
+   },
+   {
+    "variableId": "budget",
+    "score": 0.9
+   },
+   {
+    "variableId": "skills",
+    "score": 0.6
+   },
+   {
+    "variableId": "weekly_hours",
+    "score": 0.5
+   }
+  ],
+  "hold-007": [
+   {
+    "variableId": "risk_tolerance",
+    "score": 1.16
+   },
+   {
+    "variableId": "success_metric",
+    "score": 0.8
+   },
+   {
+    "variableId": "timeframe",
+    "score": 0.7
+   },
+   {
+    "variableId": "skills",
+    "score": 0.6
+   },
+   {
+    "variableId": "weekly_hours",
+    "score": 0.5
+   }
+  ],
+  "hold-009": [
+   {
+    "variableId": "risk_tolerance",
+    "score": 1.16
+   },
+   {
+    "variableId": "budget",
+    "score": 0.9
+   },
+   {
+    "variableId": "success_metric",
+    "score": 0.8
+   },
+   {
+    "variableId": "skills",
+    "score": 0.6
+   }
+  ],
+  "hold-016": [
+   {
+    "variableId": "revenue_model",
+    "score": 0.8
+   },
+   {
+    "variableId": "success_metric",
+    "score": 0.8
+   },
+   {
+    "variableId": "data_sources",
+    "score": 0.7
+   },
+   {
+    "variableId": "scope",
+    "score": 0.7
+   }
+  ],
+  "hold-019": [
+   {
+    "variableId": "risk_tolerance",
+    "score": 1.16
+   },
+   {
+    "variableId": "budget",
+    "score": 0.9
+   },
+   {
+    "variableId": "success_metric",
+    "score": 0.8
+   },
+   {
+    "variableId": "timeframe",
+    "score": 0.7
+   },
+   {
+    "variableId": "skills",
+    "score": 0.6
+   },
+   {
+    "variableId": "weekly_hours",
+    "score": 0.5
+   }
+  ],
+  "rank3-01": [
+   {
+    "variableId": "risk_tolerance",
+    "score": 1.16
+   },
+   {
+    "variableId": "budget",
+    "score": 0.9
+   },
+   {
+    "variableId": "success_metric",
+    "score": 0.8
+   },
+   {
+    "variableId": "timeframe",
+    "score": 0.7
+   },
+   {
+    "variableId": "skills",
+    "score": 0.6
+   },
+   {
+    "variableId": "weekly_hours",
+    "score": 0.5
+   }
+  ],
+  "rank3-02": [
+   {
+    "variableId": "risk_tolerance",
+    "score": 1.16
+   },
+   {
+    "variableId": "budget",
+    "score": 0.9
+   },
+   {
+    "variableId": "success_metric",
+    "score": 0.8
+   },
+   {
+    "variableId": "timeframe",
+    "score": 0.7
+   },
+   {
+    "variableId": "skills",
+    "score": 0.6
+   },
+   {
+    "variableId": "weekly_hours",
+    "score": 0.5
+   }
+  ],
+  "rank3-04": [
+   {
+    "variableId": "risk_tolerance",
+    "score": 1.16
+   },
+   {
+    "variableId": "budget",
+    "score": 0.9
+   },
+   {
+    "variableId": "success_metric",
+    "score": 0.8
+   },
+   {
+    "variableId": "timeframe",
+    "score": 0.7
+   },
+   {
+    "variableId": "skills",
+    "score": 0.6
+   },
+   {
+    "variableId": "weekly_hours",
+    "score": 0.5
+   }
+  ],
+  "rank3-06": [
+   {
+    "variableId": "risk_tolerance",
+    "score": 1.16
+   },
+   {
+    "variableId": "success_metric",
+    "score": 0.8
+   },
+   {
+    "variableId": "timeframe",
+    "score": 0.7
+   },
+   {
+    "variableId": "skills",
+    "score": 0.6
+   },
+   {
+    "variableId": "weekly_hours",
+    "score": 0.5
+   }
+  ],
+  "rank3-14": [
+   {
+    "variableId": "risk_tolerance",
+    "score": 1.16
+   },
+   {
+    "variableId": "budget",
+    "score": 0.9
+   },
+   {
+    "variableId": "success_metric",
+    "score": 0.8
+   },
+   {
+    "variableId": "timeframe",
+    "score": 0.7
+   },
+   {
+    "variableId": "skills",
+    "score": 0.6
+   },
+   {
+    "variableId": "weekly_hours",
+    "score": 0.5
+   }
+  ],
+  "rank3-18": [
+   {
+    "variableId": "risk_tolerance",
+    "score": 1.16
+   },
+   {
+    "variableId": "budget",
+    "score": 0.9
+   },
+   {
+    "variableId": "success_metric",
+    "score": 0.8
+   },
+   {
+    "variableId": "timeframe",
+    "score": 0.7
+   },
+   {
+    "variableId": "skills",
+    "score": 0.6
+   },
+   {
+    "variableId": "weekly_hours",
+    "score": 0.5
+   }
+  ],
+  "rank3-21": [
+   {
+    "variableId": "risk_tolerance",
+    "score": 1.16
+   },
+   {
+    "variableId": "budget",
+    "score": 0.9
+   },
+   {
+    "variableId": "success_metric",
+    "score": 0.8
+   },
+   {
+    "variableId": "timeframe",
+    "score": 0.7
+   },
+   {
+    "variableId": "skills",
+    "score": 0.6
+   },
+   {
+    "variableId": "weekly_hours",
+    "score": 0.5
+   }
+  ],
+  "rank3-25": [
+   {
+    "variableId": "risk_tolerance",
+    "score": 1.16
+   },
+   {
+    "variableId": "budget",
+    "score": 0.9
+   },
+   {
+    "variableId": "success_metric",
+    "score": 0.8
+   },
+   {
+    "variableId": "timeframe",
+    "score": 0.7
+   },
+   {
+    "variableId": "skills",
+    "score": 0.6
+   },
+   {
+    "variableId": "weekly_hours",
+    "score": 0.5
+   }
+  ],
+  "rank3-29": [
+   {
+    "variableId": "revenue_model",
+    "score": 0.8
+   },
+   {
+    "variableId": "success_metric",
+    "score": 0.8
+   },
+   {
+    "variableId": "data_sources",
+    "score": 0.7
+   },
+   {
+    "variableId": "scope",
+    "score": 0.7
+   }
+  ],
+  "rank3-30": [
+   {
+    "variableId": "business_type",
+    "score": 0.9
+   },
+   {
+    "variableId": "revenue_model",
+    "score": 0.8
+   },
+   {
+    "variableId": "success_metric",
+    "score": 0.8
+   },
+   {
+    "variableId": "data_sources",
+    "score": 0.7
+   },
+   {
+    "variableId": "scope",
+    "score": 0.7
+   }
+  ],
+  "rank3-33": [
+   {
+    "variableId": "business_type",
+    "score": 0.9
+   },
+   {
+    "variableId": "revenue_model",
+    "score": 0.8
+   },
+   {
+    "variableId": "success_metric",
+    "score": 0.8
+   },
+   {
+    "variableId": "data_sources",
+    "score": 0.7
+   },
+   {
+    "variableId": "scope",
+    "score": 0.7
+   }
+  ],
+  "rank3-35": [
+   {
+    "variableId": "business_type",
+    "score": 0.9
+   },
+   {
+    "variableId": "revenue_model",
+    "score": 0.8
+   },
+   {
+    "variableId": "success_metric",
+    "score": 0.8
+   },
+   {
+    "variableId": "data_sources",
+    "score": 0.7
+   },
+   {
+    "variableId": "scope",
+    "score": 0.7
+   }
+  ],
+  "rank3-37": [
+   {
+    "variableId": "business_type",
+    "score": 0.9
+   },
+   {
+    "variableId": "revenue_model",
+    "score": 0.8
+   },
+   {
+    "variableId": "success_metric",
+    "score": 0.8
+   },
+   {
+    "variableId": "data_sources",
+    "score": 0.7
+   },
+   {
+    "variableId": "scope",
+    "score": 0.7
+   }
+  ],
+  "rank3-38": [
+   {
+    "variableId": "business_type",
+    "score": 0.9
+   },
+   {
+    "variableId": "revenue_model",
+    "score": 0.8
+   },
+   {
+    "variableId": "success_metric",
+    "score": 0.8
+   },
+   {
+    "variableId": "data_sources",
+    "score": 0.7
+   },
+   {
+    "variableId": "scope",
+    "score": 0.7
+   }
+  ],
+  "rank3-41": [
+   {
+    "variableId": "revenue_model",
+    "score": 0.8
+   },
+   {
+    "variableId": "success_metric",
+    "score": 0.8
+   },
+   {
+    "variableId": "data_sources",
+    "score": 0.7
+   },
+   {
+    "variableId": "scope",
+    "score": 0.7
+   }
+  ],
+  "rank3-42": [
+   {
+    "variableId": "business_type",
+    "score": 0.9
+   },
+   {
+    "variableId": "revenue_model",
+    "score": 0.8
+   },
+   {
+    "variableId": "success_metric",
+    "score": 0.8
+   },
+   {
+    "variableId": "data_sources",
+    "score": 0.7
+   },
+   {
+    "variableId": "scope",
+    "score": 0.7
+   }
+  ],
+  "rank3-44": [
+   {
+    "variableId": "business_type",
+    "score": 0.9
+   },
+   {
+    "variableId": "revenue_model",
+    "score": 0.8
+   },
+   {
+    "variableId": "success_metric",
+    "score": 0.8
+   },
+   {
+    "variableId": "data_sources",
+    "score": 0.7
+   }
+  ],
+  "rank3-46": [
+   {
+    "variableId": "business_type",
+    "score": 0.9
+   },
+   {
+    "variableId": "revenue_model",
+    "score": 0.8
+   },
+   {
+    "variableId": "success_metric",
+    "score": 0.8
+   },
+   {
+    "variableId": "data_sources",
+    "score": 0.7
+   }
+  ],
+  "rank3-47": [
+   {
+    "variableId": "business_type",
+    "score": 0.9
+   },
+   {
+    "variableId": "revenue_model",
+    "score": 0.8
+   },
+   {
+    "variableId": "success_metric",
+    "score": 0.8
+   },
+   {
+    "variableId": "data_sources",
+    "score": 0.7
+   },
+   {
+    "variableId": "scope",
+    "score": 0.7
+   }
+  ],
+  "rank3-48": [
+   {
+    "variableId": "revenue_model",
+    "score": 0.8
+   },
+   {
+    "variableId": "success_metric",
+    "score": 0.8
+   },
+   {
+    "variableId": "data_sources",
+    "score": 0.7
+   },
+   {
+    "variableId": "scope",
+    "score": 0.7
+   }
+  ],
+  "rank3-49": [
+   {
+    "variableId": "business_type",
+    "score": 0.9
+   },
+   {
+    "variableId": "revenue_model",
+    "score": 0.8
+   },
+   {
+    "variableId": "success_metric",
+    "score": 0.8
+   },
+   {
+    "variableId": "data_sources",
+    "score": 0.7
+   },
+   {
+    "variableId": "scope",
+    "score": 0.7
+   }
+  ],
+  "rank3-51": [
+   {
+    "variableId": "revenue_model",
+    "score": 0.8
+   },
+   {
+    "variableId": "success_metric",
+    "score": 0.8
+   },
+   {
+    "variableId": "data_sources",
+    "score": 0.7
+   },
+   {
+    "variableId": "scope",
+    "score": 0.7
+   }
+  ],
+  "rank3-54": [
+   {
+    "variableId": "risk_tolerance",
+    "score": 1.16
+   },
+   {
+    "variableId": "budget",
+    "score": 0.9
+   },
+   {
+    "variableId": "success_metric",
+    "score": 0.8
+   },
+   {
+    "variableId": "timeframe",
+    "score": 0.7
+   },
+   {
+    "variableId": "skills",
+    "score": 0.6
+   },
+   {
+    "variableId": "weekly_hours",
+    "score": 0.5
+   }
+  ]
+ }
+}
