@@ -1,0 +1,402 @@
+{
+ "schemaVersion": 1,
+ "id": "onboard",
+ "version": 1,
+ "name": "Onboard an existing business",
+ "description": "Connect the business's own records, ask the owner only about gaps and conflicts, back-test predictions on its history, then recommend without acting (shadow mode) until the owner hands over a department.",
+ "modes": [
+  "onboard"
+ ],
+ "trigger": {
+  "kind": "manual"
+ },
+ "requiredVariables": [
+  "business_type"
+ ],
+ "process": {
+  "id": "onboard-process",
+  "name": "Onboard",
+  "version": 1,
+  "initialState": "connect",
+  "states": [
+   {
+    "id": "connect",
+    "label": "Connect records"
+   },
+   {
+    "id": "observe",
+    "label": "Observe"
+   },
+   {
+    "id": "interview",
+    "label": "Interview gaps and conflicts"
+   },
+   {
+    "id": "backtest",
+    "label": "Back-test on history"
+   },
+   {
+    "id": "shadow",
+    "label": "Shadow mode: recommend, don't act"
+   },
+   {
+    "id": "graduate",
+    "label": "Owner review for hand-over"
+   },
+   {
+    "id": "handed-over",
+    "label": "Department handed over",
+    "terminal": true
+   },
+   {
+    "id": "stopped",
+    "label": "Stopped",
+    "terminal": true
+   }
+  ],
+  "transitions": [
+   {
+    "id": "connected",
+    "from": "connect",
+    "to": "observe",
+    "automatic": true,
+    "guard": {
+     "all": [
+      {
+       "fact": "connectors.connected",
+       "op": "gte",
+       "value": 1
+      }
+     ]
+    }
+   },
+   {
+    "id": "observed",
+    "from": "observe",
+    "to": "interview",
+    "automatic": true,
+    "guard": {
+     "all": [
+      {
+       "fact": "observed.variables",
+       "op": "gte",
+       "value": 1
+      }
+     ]
+    }
+   },
+   {
+    "id": "gaps-closed",
+    "from": "interview",
+    "to": "backtest",
+    "automatic": true,
+    "guard": {
+     "all": [
+      {
+       "fact": "aura.openQuestions",
+       "op": "eq",
+       "value": 0
+      }
+     ]
+    }
+   },
+   {
+    "id": "backtest-passed",
+    "from": "backtest",
+    "to": "shadow",
+    "automatic": true,
+    "guard": {
+     "all": [
+      {
+       "fact": "backtest.passed",
+       "op": "eq",
+       "value": true
+      }
+     ]
+    }
+   },
+   {
+    "id": "backtest-failed",
+    "from": "backtest",
+    "to": "interview",
+    "automatic": true,
+    "guard": {
+     "all": [
+      {
+       "fact": "backtest.passed",
+       "op": "eq",
+       "value": false
+      }
+     ]
+    }
+   },
+   {
+    "id": "shadow-ready",
+    "from": "shadow",
+    "to": "graduate",
+    "automatic": true,
+    "guard": {
+     "all": [
+      {
+       "fact": "shadow.recommendations",
+       "op": "gte",
+       "value": 20
+      },
+      {
+       "fact": "shadow.agreement",
+       "op": "gte",
+       "value": 0.8
+      }
+     ]
+    }
+   },
+   {
+    "id": "hand-over",
+    "from": "graduate",
+    "to": "handed-over",
+    "requiresHumanApproval": true
+   },
+   {
+    "id": "keep-shadowing",
+    "from": "graduate",
+    "to": "shadow",
+    "requiresHumanApproval": true
+   },
+   {
+    "id": "stop-connect",
+    "from": "connect",
+    "to": "stopped",
+    "requiresHumanApproval": true
+   },
+   {
+    "id": "stop-observe",
+    "from": "observe",
+    "to": "stopped",
+    "requiresHumanApproval": true
+   },
+   {
+    "id": "stop-interview",
+    "from": "interview",
+    "to": "stopped",
+    "requiresHumanApproval": true
+   },
+   {
+    "id": "stop-backtest",
+    "from": "backtest",
+    "to": "stopped",
+    "requiresHumanApproval": true
+   },
+   {
+    "id": "stop-shadow",
+    "from": "shadow",
+    "to": "stopped",
+    "requiresHumanApproval": true
+   },
+   {
+    "id": "stop-graduate",
+    "from": "graduate",
+    "to": "stopped",
+    "requiresHumanApproval": true
+   }
+  ]
+ },
+ "stageGraphs": {
+  "observe": {
+   "schemaVersion": 1,
+   "id": "onboard-observe",
+   "version": 1,
+   "entryNodeId": "start",
+   "nodes": [
+    {
+     "id": "start",
+     "kind": "trigger",
+     "label": "Start"
+    },
+    {
+     "id": "work",
+     "kind": "agent",
+     "label": "Summarize what the connected records show",
+     "config": {
+      "agentId": "query",
+      "evaluationRequired": true,
+      "impact": "low"
+     }
+    },
+    {
+     "id": "done",
+     "kind": "output",
+     "label": "Done"
+    }
+   ],
+   "edges": [
+    {
+     "id": "e1",
+     "from": "start",
+     "to": "work"
+    },
+    {
+     "id": "e2",
+     "from": "work",
+     "to": "done"
+    }
+   ]
+  },
+  "interview": {
+   "schemaVersion": 1,
+   "id": "onboard-interview",
+   "version": 1,
+   "entryNodeId": "start",
+   "nodes": [
+    {
+     "id": "start",
+     "kind": "trigger",
+     "label": "Start"
+    },
+    {
+     "id": "work",
+     "kind": "agent",
+     "label": "Prepare questions about gaps and conflicts only",
+     "config": {
+      "agentId": "query",
+      "evaluationRequired": true,
+      "impact": "low"
+     }
+    },
+    {
+     "id": "done",
+     "kind": "output",
+     "label": "Done"
+    }
+   ],
+   "edges": [
+    {
+     "id": "e1",
+     "from": "start",
+     "to": "work"
+    },
+    {
+     "id": "e2",
+     "from": "work",
+     "to": "done"
+    }
+   ]
+  },
+  "backtest": {
+   "schemaVersion": 1,
+   "id": "onboard-backtest",
+   "version": 1,
+   "entryNodeId": "start",
+   "nodes": [
+    {
+     "id": "start",
+     "kind": "trigger",
+     "label": "Start"
+    },
+    {
+     "id": "work",
+     "kind": "agent",
+     "label": "Explain the back-test result in plain language",
+     "config": {
+      "agentId": "query",
+      "evaluationRequired": true,
+      "impact": "low"
+     }
+    },
+    {
+     "id": "done",
+     "kind": "output",
+     "label": "Done"
+    }
+   ],
+   "edges": [
+    {
+     "id": "e1",
+     "from": "start",
+     "to": "work"
+    },
+    {
+     "id": "e2",
+     "from": "work",
+     "to": "done"
+    }
+   ]
+  },
+  "shadow": {
+   "schemaVersion": 1,
+   "id": "onboard-shadow",
+   "version": 1,
+   "entryNodeId": "start",
+   "nodes": [
+    {
+     "id": "start",
+     "kind": "trigger",
+     "label": "Start"
+    },
+    {
+     "id": "work",
+     "kind": "agent",
+     "label": "Recommend next actions (proposals only)",
+     "config": {
+      "agentId": "query",
+      "evaluationRequired": true,
+      "impact": "low"
+     }
+    },
+    {
+     "id": "done",
+     "kind": "output",
+     "label": "Done"
+    }
+   ],
+   "edges": [
+    {
+     "id": "e1",
+     "from": "start",
+     "to": "work"
+    },
+    {
+     "id": "e2",
+     "from": "work",
+     "to": "done"
+    }
+   ]
+  }
+ },
+ "stepCapabilities": {
+  "observe/work": "capability-read-company-state",
+  "interview/work": "capability-read-company-state",
+  "backtest/work": "capability-read-company-state",
+  "shadow/work": "capability-propose-actions"
+ },
+ "budget": {
+  "amountUsd": 50,
+  "includesCompute": true
+ },
+ "metrics": [
+  {
+   "id": "backtest-error",
+   "label": "Back-test forecast error (MAPE)",
+   "unit": "fraction",
+   "direction": "lower-is-better",
+   "kill": 0.5,
+   "hold": 0.3,
+   "scale": 0.15
+  },
+  {
+   "id": "shadow-agreement",
+   "label": "Owner accepts shadow recommendations",
+   "unit": "fraction",
+   "direction": "higher-is-better",
+   "kill": 0.5,
+   "hold": 0.7,
+   "scale": 0.85
+  }
+ ],
+ "outputs": [
+  "intent graph filled with OBSERVED values",
+  "back-test report",
+  "shadow-mode log",
+  "hand-over proposal"
+ ],
+ "owner": "entity-founder"
+}

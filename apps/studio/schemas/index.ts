@@ -12,6 +12,7 @@ import metric from './metric'
 import evaluationRecord from './evaluation-record'
 import intentGraph from './intent-graph'
 import intentLedgerEntry from './intent-ledger-entry'
+import playbook from './playbook'
 
 export const schemaTypes = [
   organization,
@@ -28,4 +29,5 @@ export const schemaTypes = [
   evaluationRecord,
   intentGraph,
   intentLedgerEntry,
+  playbook,
 ]
