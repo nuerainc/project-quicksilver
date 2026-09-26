@@ -215,6 +215,51 @@ requirements eliminate options first, then the least-sacrifice option wins
 will be frozen before it is tested on a fresh scenario set, since these 38
 are now seen. The founder's raw answers are kept out of the repository.
 
+### Learning predictor (`src/learn.ts`, exploratory)
+
+v1 was fixed: it read the profile once and never changed. The learning
+predictor starts from the profile and updates after every choice the
+provider makes: scenario answers now, shadow-mode verdicts in the pilot.
+
+- **Model:** a multinomial logit over the options of one decision. It uses
+  these features:
+  - each dimension's signed load
+  - `ask`
+  - `compromise` (the option takes a partial position)
+  - `practical` (the option expresses no trade-off)
+- **Update:** after each choice, one gradient step on the log-likelihood,
+  pulled back toward the profile prior so one answer never swings it.
+- **Measure:** `prequential` predicts each decision *before* learning from
+  it, so every scored prediction was made without its answer.
+
+Results on the founder's 38 answers (2026-09-26):
+
+| Order | With profile prior | No prior |
+|---|---|---|
+| Scenario order | 16/38 (42.1%) | 18/38 (47.4%) |
+| Reverse order | 17/38 | 17/38 |
+| Interleaved | 19/38 (50.0%) | 20/38 (52.6%) |
+
+- Every ordering beats the frozen v1 (15.8%) and chance (25%).
+- The largest learned weight is **compromise (+1.14)**. **Ask** turns
+  negative (−0.46): the founder rarely chooses to be asked.
+- Starting from the profile did not help. This matches the finding that
+  the profile's readings did not carry over to the scenarios.
+
+**Why this is not a claim:**
+
+- The features (`compromise`, `practical`) were designed after seeing
+  these answers.
+- The learning rate and prior strength were not tuned, but they were not
+  pre-registered either.
+- The real test is fresh scenarios or pilot verdicts, scored the same
+  predict-then-learn way.
+
+**Governance:** learned weights are Aura's inference about a provider, never
+provider-stated intent. They are kept in their own record, shown to the
+provider with their evidence, and never overwrite weights in the intent
+ledger.
+
 ## Entry point
 
 ```ts
