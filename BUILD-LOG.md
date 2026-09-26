@@ -1144,6 +1144,16 @@ New workspace `packages/aura` (pre-charter, version 0.0.0):
   standard.
 - The charter's success criteria are Aura's bar for 0.4.0.
 
+## 2026-09-26 — Aura choice predictor v2: 10/30 (33.3%), not met  *(Claude, via Cowork)*
+
+- The founder answered the 30 fresh scenarios and ran the blind model picks
+  and the v2 scorer.
+- The frozen v2 method scored 10/30 (33.3%, 1.33× chance). The model alone
+  scored 7/30 (23.3%), against 24/38 (63.2%) on set 1: that result did not
+  replicate.
+- Recorded as run, not retuned. The next choice test is pilot shadow
+  verdicts.
+
 ## Errors encountered (chronological, all environments)
 
 | Day / Env | Error | Resolution |

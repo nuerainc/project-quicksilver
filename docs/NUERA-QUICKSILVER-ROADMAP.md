@@ -57,7 +57,7 @@ The M2 host runs on the founder's computer; always-on hosting is part of M5.
 - persistence: append-only file and Sanity stores for the ledger, verified on
   every load, and Studio schemas `intentLedgerEntry` and `intentGraph`
 
-Choice agreement (the primary criterion, target 70%): predictor v1 scored 6/38 (15.8%, below 25% chance). The blind Azure model test scored 24/38 (63.2%) without the profile and 23/38 (60.5%) with it: past 2× chance, short of 70%. Next is the model's pick plus a learner trained on the provider's own verdicts, frozen before a fresh test. The first impact-ranking test scored 56.3% (below the 63% chance rate); the
+Choice agreement (the primary criterion, target 70%): predictor v1 scored 6/38 (15.8%, below 25% chance). The blind Azure model test scored 24/38 (63.2%) without the profile and 23/38 (60.5%) with it: past 2× chance, short of 70%. The frozen v2 method (the model's pick plus a learner) scored 10/30 (33.3%) on 30 fresh scenarios, and the model alone 7/30 (23.3%): the 63% did not replicate. Not met. The next test is shadow-mode verdicts in the pilot. The first impact-ranking test scored 56.3% (below the 63% chance rate); the
 revised charter makes choice agreement the primary measure. Calibration now
 starts from a 36-item intent profile (six dimensions, consistency checks, red
 lines). The 38 blind choice scenarios test whether Aura can predict the

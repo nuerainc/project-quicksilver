@@ -350,9 +350,48 @@ for reference. Nothing is claimed until all 30 are answered.
    npm run aura:choices:v2 -- data/aura/scenario-answers-v2.json data/aura/v2-picks.json [--detail]
    ```
 
-Both files hold one person's data and stay out of the repository. **No v2
-result exists yet, and nothing is claimed until that run.** The same
+Both files hold one person's data and stay out of the repository. The same
 combiner is meant to be scored the same way on pilot verdicts.
+
+### v2 result (2026-09-26): 10/30 (33.3%), not met
+
+The founder answered all 30 fresh scenarios and ran the blind picks on Azure
+(`qs-planner`, no-profile arm).
+
+| Measure | Result |
+|---|---|
+| **Predictor v2, predict-then-learn (the frozen test)** | **10/30 = 33.3%**, 1.33× chance (25%). Target ≥ 70% and ≥ 2× chance: **not met** |
+| Model pick alone (reference) | 7/30 = 23.3%, at chance |
+| By category (v2) | drift 3/3, tradeoff 2/3, unstated-constraint 2/3; implied 1/4, autonomy 1/4, collective 1/3; conflict, ambiguity and spirit 0 each |
+
+Findings, stated plainly:
+
+- **The method failed its frozen test.** It is recorded as it ran, not retuned.
+- **The model result did not replicate.** On set 1 the same model, with no
+  profile, matched 24/38 (63.2%). On set 2 it matched 7/30, at chance.
+  - Both samples are small, so each figure is uncertain.
+  - Even so, a gap this large means the 63% cannot be treated as the model's
+    general ability to predict this founder.
+- **The learner moved in the right direction but too slowly.** It cut the
+  model's weight from 1.5 to 0.42 and added 3 correct choices over the model
+  alone. With 30 answers it could not catch up.
+  - It learned: toward compromise (+0.40) and bolder, longer-term options
+    (risk +0.61, horizon +0.55); away from "ask" (−0.72); and away from the
+    options tagged customer-first (−0.76).
+  - These are Aura's inferences, never provider intent.
+- **Exploratory only (after seeing the answers):**
+  - The founder chose the option marked "c" in 14 of 30 scenarios; the
+    model rarely picked it.
+  - Where a scenario had an option flagged as a compromise (22 of 30), he
+    chose it in 12.
+  - "Ask" was chosen 3 times; Aura never predicted those correctly.
+
+**What this means for the method:** a general model plus 30 answers is not
+enough to predict one person's choices. The next test comes from far more
+decisions per provider, in the real context they are made in: shadow-mode
+verdicts during the Onboard pilot, scored the same predict-then-learn way.
+Any new scenario set is written by someone who has not seen this founder's
+answers, and the method is frozen before it is answered.
 
 ## Entry point
 
@@ -434,7 +473,7 @@ Azure run on the development set (2026-09-26, before these fixes): baseline
 
 | Criterion | Status |
 |---|---|
-| Choice agreement ≥ 70% and ≥ 2× chance on a fresh set, method frozen first, scored predict-then-learn (primary; charter revision 1, 2026-09-26) | **Not met.** Frozen predictor v1: 6/38 (15.8%). Blind model test: 24/38 (63.2%) without the profile, 23/38 (60.5%) with it; passes 2× chance, misses 70%. Next: predictor v2 (model plus learner), frozen 2026-09-26 on 30 fresh scenarios; answered by the founder, run pending |
+| Choice agreement ≥ 70% and ≥ 2× chance on a fresh set, method frozen first, scored predict-then-learn (primary; charter revision 1, 2026-09-26) | **Not met.** Frozen predictor v1: 6/38 (15.8%). Blind model test: 24/38 (63.2%) without the profile, 23/38 (60.5%) with it; passes 2× chance, misses 70%. Frozen predictor v2 (model plus learner) on 30 fresh scenarios: 10/30 (33.3%); the model alone 7/30 (23.3%). Next: shadow-mode verdicts in the pilot |
 | ≥ 90% parsing accuracy | **Met on the held-out set:** model parser 27/30 (90.0%) on Azure, 2026-09-26. Confirm on a larger fresh set |
 | 100% provenance tagging | Enforced by validation; true on all 52 labeled objectives |
 | 0 unsupported inferences | Enforced by validation; 0 on all 52 |
