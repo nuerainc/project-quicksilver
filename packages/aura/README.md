@@ -127,7 +127,7 @@ slightly or clearly, and lists their red lines at the end.
 - a score from −1 to +1 and a plain reading, for example "Long term (clear)"
 - agreement across its items
 - whether its repeated pair agreed
-- a confidence level: a pair that disagrees gives low confidence, never a firm value
+- a confidence out of 10: `10 × (0.25 + 0.75 × one-sidedness) × share answered`. One-sidedness is 0 for an even split and 1 when all answers agree. A disagreeing pair caps it at 3; an unanswered pair takes off 20%
 
 Answering "a" every time shows up as inconsistency. Honesty and legality are
 never items; they are fixed limits. The profile seeds the provider's weights.

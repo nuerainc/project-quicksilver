@@ -6,7 +6,7 @@
  *   dimension, and the provider says whether they lean slightly or clearly.
  * - Some items come back later reworded with the options swapped ("mirrors").
  *   If the two answers point the same way, the reading is trustworthy; if
- *   not, that dimension is reported with low confidence, never as a firm value.
+ *   not, that dimension is reported with low confidence (0–10), never as a firm value.
  * - Honesty and legality are not dimensions: they are fixed limits (the law,
  *   WAES and the provider's own red lines), never weights to trade.
  * - Scoring is deterministic. The result is the provider's own statement, so
@@ -47,7 +47,20 @@ export interface ProfileAnswer {
   strength: 1 | 2
 }
 
-export type Confidence = 'high' | 'medium' | 'low'
+/**
+ * Confidence in a dimension's reading, 0–10:
+ *   10 × (0.25 + 0.75 × how one-sided its answers are) × share of its items answered.
+ * One-sidedness is 0 when answers split evenly and 1 when they all agree. A
+ * repeated pair that disagrees caps it at 3; an unanswered pair takes off 20%.
+ */
+export function profileConfidence(agreement: number, answered: number, expected: number, consistent: boolean | null): number {
+  if (!answered || !expected) return 0
+  const oneSided = Math.max(0, Math.min(1, (agreement - 0.5) / 0.5))
+  let c = 10 * (0.25 + 0.75 * oneSided) * Math.min(1, answered / expected)
+  if (consistent === null) c *= 0.8
+  if (consistent === false) c = Math.min(c, 3)
+  return Math.round(c)
+}
 
 export interface DimensionResult {
   dimension: string
@@ -62,7 +75,8 @@ export interface DimensionResult {
   agreement: number
   /** Whether the mirrored pair pointed the same way; null when not answered. */
   consistent: boolean | null
-  confidence: Confidence
+  /** 0–10; see `profileConfidence`. */
+  confidence: number
 }
 
 export interface ProfileResult {
@@ -107,10 +121,8 @@ export function scoreProfile(instrument: ProfileInstrument, answers: Record<stri
       consistent = consistent === false ? false : same
     }
 
-    const confidence: Confidence =
-      n < 3 || consistent === false || agreement < 0.6 ? 'low'
-        : n >= 5 && agreement >= 0.8 && consistent !== null ? 'high'
-          : 'medium'
+    const expected = instrument.items.filter((i) => i.dimension === d.id).length
+    const confidence = profileConfidence(agreement, n, expected, consistent)
     const magnitude = Math.abs(score)
     const lean = !n ? 'Not answered' : magnitude < 0.2 ? 'Balanced' : `${score > 0 ? d.right : d.left} (${magnitude >= 0.5 ? 'clear' : 'slight'})`
     return { dimension: d.id, left: d.left, right: d.right, score, lean, answered: n, agreement, consistent, confidence }

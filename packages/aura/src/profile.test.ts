@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-import { scoreProfile, type ProfileAnswer, type ProfileInstrument } from './index.ts'
+import { profileConfidence, scoreProfile, type ProfileAnswer, type ProfileInstrument } from './index.ts'
 
 const instrument = JSON.parse(readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'eval', 'intent-profile-v1.json'), 'utf8')) as ProfileInstrument
 
@@ -39,7 +39,7 @@ test('consistent answers give clear, high-confidence readings', () => {
   const h = r.dimensions.find((d) => d.dimension === 'horizon')!
   assert.equal(h.score, 1)
   assert.equal(h.lean, 'Long term (clear)')
-  assert.equal(h.confidence, 'high')
+  assert.equal(h.confidence, 10)
   assert.equal(r.dimensions.find((d) => d.dimension === 'risk')!.lean, 'Safe (clear)')
 })
 
@@ -50,7 +50,7 @@ test('a mirrored pair that disagrees lowers confidence instead of producing a fi
   const r = scoreProfile(instrument, answers)
   const h = r.dimensions.find((d) => d.dimension === 'horizon')!
   assert.equal(h.consistent, false)
-  assert.equal(h.confidence, 'low')
+  assert.ok(h.confidence <= 3)
   assert.ok(r.consistency! < 1)
 })
 
@@ -59,12 +59,21 @@ test('always picking the first option does not produce a strong profile', () => 
   for (const i of instrument.items) answers[i.id] = { choice: 'a', strength: 2 }
   const r = scoreProfile(instrument, answers)
   assert.ok(r.consistency! < 1, 'mirrors swap the option order, so a pattern shows up as inconsistency')
-  assert.ok(r.dimensions.some((d) => d.confidence === 'low'))
+  assert.ok(r.dimensions.some((d) => d.confidence <= 3))
 })
 
 test('partial answers are scored and the rest reported missing', () => {
   const r = scoreProfile(instrument, { h1: { choice: 'a', strength: 1 } })
   assert.equal(r.complete, false)
   assert.equal(r.missing.length, instrument.items.length - 1)
-  assert.equal(r.dimensions.find((d) => d.dimension === 'horizon')!.confidence, 'low')
+  assert.ok(r.dimensions.find((d) => d.dimension === 'horizon')!.confidence <= 2)
+})
+
+test('confidence is out of 10: one-sided answers score high, even splits low, a broken pair is capped', () => {
+  assert.equal(profileConfidence(1, 6, 6, true), 10)
+  assert.equal(profileConfidence(0.5, 6, 6, true), 3)
+  assert.equal(profileConfidence(1, 6, 6, false), 3)
+  assert.equal(profileConfidence(1, 6, 6, null), 8)
+  assert.equal(profileConfidence(1, 3, 6, true), 5)
+  assert.equal(profileConfidence(1, 0, 6, true), 0)
 })
