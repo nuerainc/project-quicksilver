@@ -1,6 +1,6 @@
 /**
  * @quicksilver/aura: the intent layer (Quicksilver Layer 2).
- * Pre-charter prototype; Aura becomes 0.1.0 when its charter is approved.
+ * Aura 0.1.0: chartered (approval recorded 2026-09-26).
  */
 export * from './types.ts'
 export * from './provenance.ts'

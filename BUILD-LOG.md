@@ -1136,6 +1136,14 @@ New workspace `packages/aura` (pre-charter, version 0.0.0):
 - The run itself waits on the entity decision and payment accounts. 0.5.0
   and 0.6.0 follow pilot and run evidence.
 
+## 2026-09-26 — Aura charter approved: Aura 0.1.0  *(Claude, via Cowork)*
+
+- The founder confirmed that the Aura charter is approved and that work on
+  Aura is under way.
+- `packages/aura` moves from 0.0.0 to 0.1.0 under the Nuera RDL versioning
+  standard.
+- The charter's success criteria are Aura's bar for 0.4.0.
+
 ## Errors encountered (chronological, all environments)
 
 | Day / Env | Error | Resolution |

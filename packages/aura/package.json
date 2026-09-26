@@ -1,9 +1,9 @@
 {
   "name": "@quicksilver/aura",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "private": true,
   "license": "MIT",
-  "description": "Aura intent layer (Quicksilver Layer 2): decision graph, provenance, impact scoring, governed belief updates. Pre-charter: Aura starts at 0.1.0 when its charter is approved.",
+  "description": "Aura intent layer (Quicksilver Layer 2): decision graph, provenance, impact scoring, governed belief updates. Chartered; Aura 0.1.0 (Nuera RDL versioning standard).",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
   "type": "module",
