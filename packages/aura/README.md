@@ -434,7 +434,7 @@ Azure run on the development set (2026-09-26, before these fixes): baseline
 
 | Criterion | Status |
 |---|---|
-| Choice agreement ≥ 70% and ≥ 2× chance (primary, revised charter) | **Not met.** Frozen predictor v1: 6/38 (15.8%). Blind model test: 24/38 (63.2%) without the profile, 23/38 (60.5%) with it; passes 2× chance, misses 70%. Next: predictor v2 (model plus learner), frozen 2026-09-26 on 30 fresh scenarios; not yet run |
+| Choice agreement ≥ 70% and ≥ 2× chance on a fresh set, method frozen first, scored predict-then-learn (primary; charter revision 1, 2026-09-26) | **Not met.** Frozen predictor v1: 6/38 (15.8%). Blind model test: 24/38 (63.2%) without the profile, 23/38 (60.5%) with it; passes 2× chance, misses 70%. Next: predictor v2 (model plus learner), frozen 2026-09-26 on 30 fresh scenarios; answered by the founder, run pending |
 | ≥ 90% parsing accuracy | **Met on the held-out set:** model parser 27/30 (90.0%) on Azure, 2026-09-26. Confirm on a larger fresh set |
 | 100% provenance tagging | Enforced by validation; true on all 52 labeled objectives |
 | 0 unsupported inferences | Enforced by validation; 0 on all 52 |
