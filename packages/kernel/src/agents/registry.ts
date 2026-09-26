@@ -72,6 +72,8 @@ export const BUILT_IN_AGENT_MANIFESTS: readonly AgentManifest[] = Object.freeze(
   Object.freeze({ id: 'nuera-quicksilver:planner', version: 1, authority: 'propose', tasks: Object.freeze(['planning'] as EvaluationTaskType[]), maximumImpact: 'critical', requiresEvaluation: true }),
   Object.freeze({ id: 'nuera-quicksilver:reviewer', version: 1, authority: 'review', tasks: Object.freeze(['evaluation', 'reasoning'] as EvaluationTaskType[]), maximumImpact: 'critical', requiresEvaluation: true }),
   Object.freeze({ id: 'nuera-quicksilver:query', version: 1, authority: 'propose', tasks: Object.freeze(['reasoning'] as EvaluationTaskType[]), maximumImpact: 'moderate', requiresEvaluation: true }),
+  // Aura objective parser: reads an objective into structured fields; proposes nothing.
+  Object.freeze({ id: 'nuera-quicksilver:intent', version: 1, authority: 'propose', tasks: Object.freeze(['reasoning'] as EvaluationTaskType[]), maximumImpact: 'low', requiresEvaluation: true }),
 ])
 
 export function createBuiltInAgentRegistry(): AgentRegistry {

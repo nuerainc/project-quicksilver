@@ -12,14 +12,16 @@
     "./models": "./src/models.ts",
     "./mcp": "./src/mcp.ts",
     "./prompts": "./src/prompts.ts",
-    "./planner": "./src/planner.ts"
+    "./planner": "./src/planner.ts",
+    "./intent": "./src/intent-parser.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
     "verify:mcp": "tsx src/verify-mcp.ts",
     "verify:llm": "tsx src/verify-llm.ts",
     "benchmark:stress": "tsx src/benchmark-stress.ts",
-    "test": "node --experimental-strip-types --no-warnings --test src/models.test.ts"
+    "test": "node --experimental-strip-types --no-warnings --test src/models.test.ts",
+    "intent:eval": "tsx src/intent-eval.ts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.0",
@@ -30,7 +32,8 @@
     "@ai-sdk/openai-compatible": "^2.0.0",
     "@quicksilver/kernel": "*",
     "ai": "^6.0.0",
-    "zod": "^3.25.76"
+    "zod": "^3.25.76",
+    "@quicksilver/aura": "*"
   },
   "devDependencies": {
     "tsx": "^4.19.2",

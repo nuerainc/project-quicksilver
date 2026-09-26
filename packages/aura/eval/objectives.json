@@ -1,0 +1,714 @@
+{
+  "version": 1,
+  "description": "Labeled objectives for the Aura objective parser. Labels record only what the text literally states; mode is labeled when the text clearly describes a new venture (genesis), an existing business (onboard) or recurring work (operate), otherwise null. revenueTarget is the money goal the text states (revenue, sales or savings); a threshold to watch is not a budget.",
+  "objectives": [
+    {
+      "id": "obj-001",
+      "text": "I have $500 and want to start a small online business that makes money in 30 days, digital only.",
+      "expected": {
+        "mode": "genesis",
+        "budget": 500,
+        "revenueTarget": null,
+        "timeframeDays": 30,
+        "weeklyHours": null,
+        "autonomy": null,
+        "constraints": [
+          "digital_only"
+        ]
+      }
+    },
+    {
+      "id": "obj-002",
+      "text": "Help me make some extra money on the side with $200, no paid ads.",
+      "expected": {
+        "mode": "genesis",
+        "budget": 200,
+        "revenueTarget": null,
+        "timeframeDays": null,
+        "weeklyHours": null,
+        "autonomy": null,
+        "constraints": [
+          "keep_day_job",
+          "no_paid_ads"
+        ]
+      }
+    },
+    {
+      "id": "obj-003",
+      "text": "Start a business from scratch that can reach $1,000 a month in revenue within 6 months.",
+      "expected": {
+        "mode": "genesis",
+        "budget": null,
+        "revenueTarget": 1000,
+        "timeframeDays": 180,
+        "weeklyHours": null,
+        "autonomy": null,
+        "constraints": []
+      }
+    },
+    {
+      "id": "obj-004",
+      "text": "Launch a new online store selling printable planners. Budget $300. I can give it 10 hours a week.",
+      "expected": {
+        "mode": "genesis",
+        "budget": 300,
+        "revenueTarget": null,
+        "timeframeDays": null,
+        "weeklyHours": 10,
+        "autonomy": null,
+        "constraints": []
+      }
+    },
+    {
+      "id": "obj-005",
+      "text": "I want to build a side hustle that earns $500 per month. Just advise me, don't do anything yet.",
+      "expected": {
+        "mode": "genesis",
+        "budget": null,
+        "revenueTarget": 500,
+        "timeframeDays": null,
+        "weeklyHours": null,
+        "autonomy": "advise",
+        "constraints": [
+          "keep_day_job"
+        ]
+      }
+    },
+    {
+      "id": "obj-006",
+      "text": "Turn $500 into a profitable digital product business over the next 90 days.",
+      "expected": {
+        "mode": "genesis",
+        "budget": 500,
+        "revenueTarget": null,
+        "timeframeDays": 90,
+        "weeklyHours": null,
+        "autonomy": null,
+        "constraints": []
+      }
+    },
+    {
+      "id": "obj-007",
+      "text": "Start a new consulting business with no debt and no employees.",
+      "expected": {
+        "mode": "genesis",
+        "budget": null,
+        "revenueTarget": null,
+        "timeframeDays": null,
+        "weeklyHours": null,
+        "autonomy": null,
+        "constraints": [
+          "no_debt",
+          "no_employees"
+        ]
+      }
+    },
+    {
+      "id": "obj-008",
+      "text": "Make money online. I only have 5 hours a week and a $150 budget.",
+      "expected": {
+        "mode": "genesis",
+        "budget": 150,
+        "revenueTarget": null,
+        "timeframeDays": null,
+        "weeklyHours": 5,
+        "autonomy": null,
+        "constraints": []
+      }
+    },
+    {
+      "id": "obj-009",
+      "text": "Build a newsletter business from scratch, ask me before spending anything.",
+      "expected": {
+        "mode": "genesis",
+        "budget": null,
+        "revenueTarget": null,
+        "timeframeDays": null,
+        "weeklyHours": null,
+        "autonomy": "act-with-approval",
+        "constraints": []
+      }
+    },
+    {
+      "id": "obj-010",
+      "text": "I want to launch a digital course and hit $2k in sales in 60 days.",
+      "expected": {
+        "mode": "genesis",
+        "budget": null,
+        "revenueTarget": 2000,
+        "timeframeDays": 60,
+        "weeklyHours": null,
+        "autonomy": null,
+        "constraints": []
+      }
+    },
+    {
+      "id": "obj-011",
+      "text": "Start an Etsy shop for digital downloads with $100, online only.",
+      "expected": {
+        "mode": "genesis",
+        "budget": 100,
+        "revenueTarget": null,
+        "timeframeDays": null,
+        "weeklyHours": null,
+        "autonomy": null,
+        "constraints": [
+          "digital_only"
+        ]
+      }
+    },
+    {
+      "id": "obj-012",
+      "text": "Help me start a lawn care business this spring with $1,500 and no loans.",
+      "expected": {
+        "mode": "genesis",
+        "budget": 1500,
+        "revenueTarget": null,
+        "timeframeDays": null,
+        "weeklyHours": null,
+        "autonomy": null,
+        "constraints": [
+          "no_debt"
+        ]
+      }
+    },
+    {
+      "id": "obj-013",
+      "text": "Start a business on nights and weekends with 8 hours a week.",
+      "expected": {
+        "mode": "genesis",
+        "budget": null,
+        "revenueTarget": null,
+        "timeframeDays": null,
+        "weeklyHours": 8,
+        "autonomy": null,
+        "constraints": [
+          "keep_day_job"
+        ]
+      }
+    },
+    {
+      "id": "obj-014",
+      "text": "I'd like to make money from scratch with no inventory and no ads.",
+      "expected": {
+        "mode": "genesis",
+        "budget": null,
+        "revenueTarget": null,
+        "timeframeDays": null,
+        "weeklyHours": null,
+        "autonomy": null,
+        "constraints": [
+          "digital_only",
+          "no_paid_ads"
+        ]
+      }
+    },
+    {
+      "id": "obj-015",
+      "text": "Launch a SaaS product and reach $3,000 MRR within 12 months.",
+      "expected": {
+        "mode": "genesis",
+        "budget": null,
+        "revenueTarget": 3000,
+        "timeframeDays": 360,
+        "weeklyHours": null,
+        "autonomy": null,
+        "constraints": []
+      }
+    },
+    {
+      "id": "obj-016",
+      "text": "Start a new agency with a budget of $2,500. Run it by me before any purchase.",
+      "expected": {
+        "mode": "genesis",
+        "budget": 2500,
+        "revenueTarget": null,
+        "timeframeDays": null,
+        "weeklyHours": null,
+        "autonomy": "act-with-approval",
+        "constraints": []
+      }
+    },
+    {
+      "id": "obj-017",
+      "text": "Build a business that brings in $400 a month in 3 months, solo.",
+      "expected": {
+        "mode": "genesis",
+        "budget": null,
+        "revenueTarget": 400,
+        "timeframeDays": 90,
+        "weeklyHours": null,
+        "autonomy": null,
+        "constraints": [
+          "no_employees"
+        ]
+      }
+    },
+    {
+      "id": "obj-018",
+      "text": "I want to start my own bakery business.",
+      "expected": {
+        "mode": "genesis",
+        "budget": null,
+        "revenueTarget": null,
+        "timeframeDays": null,
+        "weeklyHours": null,
+        "autonomy": null,
+        "constraints": []
+      }
+    },
+    {
+      "id": "obj-019",
+      "text": "Create a side hustle selling templates, $50 to start with, digital-only.",
+      "expected": {
+        "mode": "genesis",
+        "budget": 50,
+        "revenueTarget": null,
+        "timeframeDays": null,
+        "weeklyHours": null,
+        "autonomy": null,
+        "constraints": [
+          "digital_only",
+          "keep_day_job"
+        ]
+      }
+    },
+    {
+      "id": "obj-020",
+      "text": "Start a business that earns $10k in its first year.",
+      "expected": {
+        "mode": "genesis",
+        "budget": null,
+        "revenueTarget": 10000,
+        "timeframeDays": null,
+        "weeklyHours": null,
+        "autonomy": null,
+        "constraints": []
+      }
+    },
+    {
+      "id": "obj-021",
+      "text": "Connect my farm's records and tell me where we lose money.",
+      "expected": {
+        "mode": "onboard",
+        "budget": null,
+        "revenueTarget": null,
+        "timeframeDays": null,
+        "weeklyHours": null,
+        "autonomy": null,
+        "constraints": []
+      }
+    },
+    {
+      "id": "obj-022",
+      "text": "We sell hay and alfalfa to local ranchers. Help us understand our margins.",
+      "expected": {
+        "mode": "onboard",
+        "budget": null,
+        "revenueTarget": null,
+        "timeframeDays": null,
+        "weeklyHours": null,
+        "autonomy": null,
+        "constraints": []
+      }
+    },
+    {
+      "id": "obj-023",
+      "text": "I run a small landscaping company. Onboard it and find quick wins, just advise.",
+      "expected": {
+        "mode": "onboard",
+        "budget": null,
+        "revenueTarget": null,
+        "timeframeDays": null,
+        "weeklyHours": null,
+        "autonomy": "advise",
+        "constraints": []
+      }
+    },
+    {
+      "id": "obj-024",
+      "text": "Our restaurant loses money on Tuesdays. Figure out why within two weeks.",
+      "expected": {
+        "mode": "onboard",
+        "budget": null,
+        "revenueTarget": null,
+        "timeframeDays": 14,
+        "weeklyHours": null,
+        "autonomy": null,
+        "constraints": []
+      }
+    },
+    {
+      "id": "obj-025",
+      "text": "My shop sells used farm equipment. I want $5,000 more revenue per month.",
+      "expected": {
+        "mode": "onboard",
+        "budget": null,
+        "revenueTarget": 5000,
+        "timeframeDays": null,
+        "weeklyHours": null,
+        "autonomy": null,
+        "constraints": []
+      }
+    },
+    {
+      "id": "obj-026",
+      "text": "Onboard our agency and don't email our customers.",
+      "expected": {
+        "mode": "onboard",
+        "budget": null,
+        "revenueTarget": null,
+        "timeframeDays": null,
+        "weeklyHours": null,
+        "autonomy": null,
+        "constraints": [
+          "no_customer_contact"
+        ]
+      }
+    },
+    {
+      "id": "obj-027",
+      "text": "We have an existing business selling irrigation parts; connect our books and inventory.",
+      "expected": {
+        "mode": "onboard",
+        "budget": null,
+        "revenueTarget": null,
+        "timeframeDays": null,
+        "weeklyHours": null,
+        "autonomy": null,
+        "constraints": []
+      }
+    },
+    {
+      "id": "obj-028",
+      "text": "I own a coffee shop. Help me cut costs by $800 a month without hiring.",
+      "expected": {
+        "mode": "onboard",
+        "budget": null,
+        "revenueTarget": 800,
+        "timeframeDays": null,
+        "weeklyHours": null,
+        "autonomy": null,
+        "constraints": [
+          "no_employees"
+        ]
+      }
+    },
+    {
+      "id": "obj-029",
+      "text": "Our company needs a clear picture of cash flow for the next quarter.",
+      "expected": {
+        "mode": "onboard",
+        "budget": null,
+        "revenueTarget": null,
+        "timeframeDays": 90,
+        "weeklyHours": null,
+        "autonomy": null,
+        "constraints": []
+      }
+    },
+    {
+      "id": "obj-030",
+      "text": "My practice has 3 staff. Map our operations; ask me first before changing anything.",
+      "expected": {
+        "mode": "onboard",
+        "budget": null,
+        "revenueTarget": null,
+        "timeframeDays": null,
+        "weeklyHours": null,
+        "autonomy": "act-with-approval",
+        "constraints": []
+      }
+    },
+    {
+      "id": "obj-031",
+      "text": "We run a feed store. Set up Quicksilver for it with read-only access.",
+      "expected": {
+        "mode": "onboard",
+        "budget": null,
+        "revenueTarget": null,
+        "timeframeDays": null,
+        "weeklyHours": null,
+        "autonomy": "advise",
+        "constraints": []
+      }
+    },
+    {
+      "id": "obj-032",
+      "text": "My studio makes $4,000 a month; I want to reach $6,000 in 6 months.",
+      "expected": {
+        "mode": "onboard",
+        "budget": null,
+        "revenueTarget": 6000,
+        "timeframeDays": 180,
+        "weeklyHours": null,
+        "autonomy": null,
+        "constraints": []
+      }
+    },
+    {
+      "id": "obj-033",
+      "text": "I operate a food truck and want to know which menu items to drop.",
+      "expected": {
+        "mode": "onboard",
+        "budget": null,
+        "revenueTarget": null,
+        "timeframeDays": null,
+        "weeklyHours": null,
+        "autonomy": null,
+        "constraints": []
+      }
+    },
+    {
+      "id": "obj-034",
+      "text": "Our farm wants to test a new direct-to-consumer channel with a $1,000 budget.",
+      "expected": {
+        "mode": "onboard",
+        "budget": 1000,
+        "revenueTarget": null,
+        "timeframeDays": null,
+        "weeklyHours": null,
+        "autonomy": null,
+        "constraints": []
+      }
+    },
+    {
+      "id": "obj-035",
+      "text": "Bring my existing business into Quicksilver, no paid ads.",
+      "expected": {
+        "mode": "onboard",
+        "budget": null,
+        "revenueTarget": null,
+        "timeframeDays": null,
+        "weeklyHours": null,
+        "autonomy": null,
+        "constraints": [
+          "no_paid_ads"
+        ]
+      }
+    },
+    {
+      "id": "obj-036",
+      "text": "Send me a weekly report on sales and open decisions.",
+      "expected": {
+        "mode": "operate",
+        "budget": null,
+        "revenueTarget": null,
+        "timeframeDays": null,
+        "weeklyHours": null,
+        "autonomy": null,
+        "constraints": []
+      }
+    },
+    {
+      "id": "obj-037",
+      "text": "Every morning, tell me which approvals are waiting.",
+      "expected": {
+        "mode": "operate",
+        "budget": null,
+        "revenueTarget": null,
+        "timeframeDays": null,
+        "weeklyHours": null,
+        "autonomy": null,
+        "constraints": []
+      }
+    },
+    {
+      "id": "obj-038",
+      "text": "Keep running the inventory reorders on your own within the limits we set.",
+      "expected": {
+        "mode": "operate",
+        "budget": null,
+        "revenueTarget": null,
+        "timeframeDays": null,
+        "weeklyHours": null,
+        "autonomy": "act-within-limits",
+        "constraints": []
+      }
+    },
+    {
+      "id": "obj-039",
+      "text": "Automate the monthly books close and ask me before posting anything.",
+      "expected": {
+        "mode": "operate",
+        "budget": null,
+        "revenueTarget": null,
+        "timeframeDays": null,
+        "weeklyHours": null,
+        "autonomy": "act-with-approval",
+        "constraints": []
+      }
+    },
+    {
+      "id": "obj-040",
+      "text": "Run our payroll prep each week, but don't message customers.",
+      "expected": {
+        "mode": "operate",
+        "budget": null,
+        "revenueTarget": null,
+        "timeframeDays": null,
+        "weeklyHours": null,
+        "autonomy": null,
+        "constraints": [
+          "no_customer_contact"
+        ]
+      }
+    },
+    {
+      "id": "obj-041",
+      "text": "Handle day-to-day scheduling for the crew.",
+      "expected": {
+        "mode": "operate",
+        "budget": null,
+        "revenueTarget": null,
+        "timeframeDays": null,
+        "weeklyHours": null,
+        "autonomy": null,
+        "constraints": []
+      }
+    },
+    {
+      "id": "obj-042",
+      "text": "Watch cash every day and warn me if we drop under $2,000.",
+      "expected": {
+        "mode": "operate",
+        "budget": null,
+        "revenueTarget": null,
+        "timeframeDays": null,
+        "weeklyHours": null,
+        "autonomy": null,
+        "constraints": []
+      }
+    },
+    {
+      "id": "obj-043",
+      "text": "Keep doing the daily brief and add a monthly report.",
+      "expected": {
+        "mode": "operate",
+        "budget": null,
+        "revenueTarget": null,
+        "timeframeDays": null,
+        "weeklyHours": null,
+        "autonomy": null,
+        "constraints": []
+      }
+    },
+    {
+      "id": "obj-044",
+      "text": "Automate our invoice follow-ups hands-off.",
+      "expected": {
+        "mode": "operate",
+        "budget": null,
+        "revenueTarget": null,
+        "timeframeDays": null,
+        "weeklyHours": null,
+        "autonomy": "act-within-limits",
+        "constraints": []
+      }
+    },
+    {
+      "id": "obj-045",
+      "text": "Ongoing: track equipment maintenance and flag overdue service.",
+      "expected": {
+        "mode": "operate",
+        "budget": null,
+        "revenueTarget": null,
+        "timeframeDays": null,
+        "weeklyHours": null,
+        "autonomy": null,
+        "constraints": []
+      }
+    },
+    {
+      "id": "obj-046",
+      "text": "What should I do next?",
+      "expected": {
+        "mode": null,
+        "budget": null,
+        "revenueTarget": null,
+        "timeframeDays": null,
+        "weeklyHours": null,
+        "autonomy": null,
+        "constraints": []
+      }
+    },
+    {
+      "id": "obj-047",
+      "text": "Help me decide whether to buy a second tractor for $45,000.",
+      "expected": {
+        "mode": null,
+        "budget": 45000,
+        "revenueTarget": null,
+        "timeframeDays": null,
+        "weeklyHours": null,
+        "autonomy": null,
+        "constraints": []
+      }
+    },
+    {
+      "id": "obj-048",
+      "text": "Find ways to save money.",
+      "expected": {
+        "mode": null,
+        "budget": null,
+        "revenueTarget": null,
+        "timeframeDays": null,
+        "weeklyHours": null,
+        "autonomy": null,
+        "constraints": []
+      }
+    },
+    {
+      "id": "obj-049",
+      "text": "Is it worth spending $300 on a booth at the county fair?",
+      "expected": {
+        "mode": null,
+        "budget": 300,
+        "revenueTarget": null,
+        "timeframeDays": null,
+        "weeklyHours": null,
+        "autonomy": null,
+        "constraints": []
+      }
+    },
+    {
+      "id": "obj-050",
+      "text": "Plan a fundraising push over the next 60 days.",
+      "expected": {
+        "mode": null,
+        "budget": null,
+        "revenueTarget": null,
+        "timeframeDays": 60,
+        "weeklyHours": null,
+        "autonomy": null,
+        "constraints": []
+      }
+    },
+    {
+      "id": "obj-051",
+      "text": "Give me advice only: should we raise prices 10%?",
+      "expected": {
+        "mode": null,
+        "budget": null,
+        "revenueTarget": null,
+        "timeframeDays": null,
+        "weeklyHours": null,
+        "autonomy": "advise",
+        "constraints": []
+      }
+    },
+    {
+      "id": "obj-052",
+      "text": "Help me grow.",
+      "expected": {
+        "mode": null,
+        "budget": null,
+        "revenueTarget": null,
+        "timeframeDays": null,
+        "weeklyHours": null,
+        "autonomy": null,
+        "constraints": []
+      }
+    }
+  ]
+}

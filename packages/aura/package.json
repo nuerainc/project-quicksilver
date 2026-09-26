@@ -1,0 +1,24 @@
+{
+  "name": "@quicksilver/aura",
+  "version": "0.0.0",
+  "private": true,
+  "license": "MIT",
+  "description": "Aura intent layer (Quicksilver Layer 2): decision graph, provenance, impact scoring, governed belief updates. Pre-charter: Aura starts at 0.1.0 when its charter is approved.",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "eval": "node --experimental-strip-types --no-warnings src/eval-cli.ts"
+  },
+  "dependencies": {
+    "@quicksilver/kernel": "*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.9.0",
+    "typescript": "^5.6.3"
+  }
+}

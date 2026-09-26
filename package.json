@@ -28,7 +28,10 @@
     "agent:test": "node --experimental-strip-types --no-warnings --test packages/agent/src/models.test.ts packages/agent/src/schemas.test.ts packages/agent/src/contracts.test.ts",
     "lint": "npm run lint --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",
-    "host:test": "node --experimental-strip-types --no-warnings --test packages/host/src/host.test.ts packages/host/src/vault.test.ts packages/host/src/observability.test.ts packages/host/src/config.test.ts"
+    "host:test": "node --experimental-strip-types --no-warnings --test packages/host/src/host.test.ts packages/host/src/vault.test.ts packages/host/src/observability.test.ts packages/host/src/config.test.ts",
+    "aura:test": "node --experimental-strip-types --no-warnings --test packages/aura/src/aura.test.ts",
+    "aura:eval": "node --experimental-strip-types --no-warnings packages/aura/src/eval-cli.ts",
+    "aura:eval:model": "npm run intent:eval --workspace=@quicksilver/agent --"
   },
   "engines": {
     "node": ">=20"

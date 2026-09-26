@@ -19,6 +19,7 @@ import { zodSchema } from 'ai'
 import { PlanOutputSchema } from './planner.ts'
 import { ReviewResultSchema } from './reviewer.ts'
 import { QueryResultSchema } from './query.ts'
+import { IntentParseSchema } from './intent-parser.ts'
 
 type JsonSchema = { type?: unknown; properties?: Record<string, JsonSchema>; required?: string[]; items?: JsonSchema | JsonSchema[]; anyOf?: JsonSchema[]; [k: string]: unknown }
 
@@ -41,6 +42,7 @@ for (const [name, schema] of [
   ['PlanOutputSchema (planner)', PlanOutputSchema],
   ['ReviewResultSchema (reviewer)', ReviewResultSchema],
   ['QueryResultSchema (/api/query)', QueryResultSchema],
+  ['IntentParseSchema (Aura objective parser)', IntentParseSchema],
 ] as const) {
   test(`Strict output: ${name} lists every property as required`, () => {
     const json = zodSchema(schema as never).jsonSchema as JsonSchema

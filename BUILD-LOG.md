@@ -1059,6 +1059,28 @@ and waits on its first deployment.
   `requestedBy`/`proposedBy`.
 - The one-off `run` command now prints each agent step's output once.
 
+## 2026-09-26 — M3 started: Aura intent layer core  *(Claude, via Cowork)*
+
+New workspace `packages/aura` (pre-charter, version 0.0.0):
+- Decision graph with a provenance tag on every value (`HUMAN_SPECIFIED`,
+  `SYSTEM_CONSTRAINT`, `OBSERVED`, `AGENT_INFERRED`). Validation enforces
+  the tagging and source rules, explanations for inferences, and no
+  unsupported inferences, duplicates, dangling edges or cycles.
+- Deterministic impact scoring of open unknowns and weak beliefs, with the
+  arithmetic shown; the top items become targeted questions.
+- Governed belief updates: agents can't overwrite human values or system
+  constraints, and an inference can't replace an observation. Every change
+  passes the NQC memory governor.
+- The intent entry point (`createIntent`): stated values are quoted, the mode
+  is inferred and explained, and missing slots become open unknowns.
+- Rule-based baseline parser and 52 labeled objectives. The baseline gets
+  42/52 exactly right (80.8%); the charter target is 90%.
+- Model-based parser in `@quicksilver/agent` (`nuera-quicksilver:intent`,
+  registered at low impact). Values whose quote isn't in the text are dropped.
+  `npm run aura:eval:model` runs it on Azure from `.env`.
+- Tests: aura 9/9, agent 21/21 (strict schema and grounding added), kernel
+  213/213, host 30/30.
+
 ## Errors encountered (chronological, all environments)
 
 | Day / Env | Error | Resolution |

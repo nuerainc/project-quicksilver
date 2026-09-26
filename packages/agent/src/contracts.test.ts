@@ -68,3 +68,27 @@ test('the paused challenge project\'s Context MCP endpoints and knowledge base a
     }
   }
 })
+
+test('intent parser: the intent agent is registered at low impact only', () => {
+  assert.doesNotThrow(() => assertAgentDispatch('nuera-quicksilver:intent', 'reasoning', 'low'))
+  assert.throws(() => assertAgentDispatch('nuera-quicksilver:intent', 'reasoning', 'high'))
+})
+
+test('intent parser: values whose quote is not in the objective are dropped', async () => {
+  const { toParsedObjective } = await import('./intent-parser.ts')
+  const objective = 'I have $500 and want to start a business in 30 days, no paid ads.'
+  const parsed = toParsedObjective(objective, {
+    mode: { value: 'genesis', quote: 'start a business' },
+    budget: { value: 500, quote: '$500' },
+    revenueTarget: { value: 5000, quote: 'make $5,000' },
+    timeframeDays: { value: 30, quote: 'in 30 days' },
+    weeklyHours: null,
+    autonomy: null,
+    constraints: [{ id: 'no_paid_ads', quote: 'no paid ads' }, { id: 'no_debt', quote: 'no loans' }, { id: 'no_paid_ads', quote: 'NO PAID ADS' }],
+  })
+  assert.equal(parsed.budget?.value, 500)
+  assert.equal(parsed.budget?.span.index, objective.indexOf('$500'))
+  assert.equal(parsed.revenueTarget, null)
+  assert.deepEqual(parsed.constraints.map((c) => c.id), ['no_paid_ads'])
+  assert.deepEqual(parsed.dropped.sort(), ['constraint:no_debt', 'revenueTarget'])
+})
