@@ -10,7 +10,9 @@ import {
   provenanceReport,
   recordChange,
   replay,
-  scoreImpact,
+  openQuestions,
+  questionQuality,
+  recordQuestionFeedback,
   validateIntentGraph,
   verifyLedger,
   AUTONOMY_DEPTHS,
@@ -29,6 +31,7 @@ import {
  *   GET  /api/intents                                                               decision:read
  *   GET  /api/intents/:id                                                           decision:read
  *   POST /api/intents/:id/answers           { variableId, answer }                intent:provide
+ *   POST /api/intents/:id/dismiss           { variableId }  "not worth asking"    intent:provide (humans)
  *   GET  /api/intent-ledger/:company                                                decision:read
  *   POST /api/intent-ledger/:company        { change, reason? }   intent:provide or intent:rules (checked by Aura)
  *
@@ -56,7 +59,7 @@ export interface IntentApiContext {
 type Response = { status: number; body: unknown }
 
 function summary(graph: IntentGraph) {
-  const impact = scoreImpact(graph)
+  const impact = openQuestions(graph)
   return {
     id: graph.id,
     objective: graph.objective,
@@ -67,6 +70,7 @@ function summary(graph: IntentGraph) {
     questions: impact.slice(0, 3).map((i) => ({ variableId: i.variableId, label: i.label, question: i.question, score: i.score, explanation: i.explanation })),
     report: provenanceReport(graph),
     issues: validateIntentGraph(graph),
+    questionQuality: questionQuality([graph]),
   }
 }
 
@@ -103,7 +107,7 @@ export async function handleIntentRoute(ctx: IntentApiContext, deps: IntentApiDe
       const denied = allow('decision:read')
       if (denied) return denied
       const graphs = (await deps.graphs.list()).sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-      return { status: 200, body: { intents: graphs.map((g) => ({ id: g.id, objective: g.objective, mode: g.mode, requestedBy: g.requestedBy, createdAt: g.createdAt })) } }
+      return { status: 200, body: { intents: graphs.map((g) => ({ id: g.id, objective: g.objective, mode: g.mode, requestedBy: g.requestedBy, createdAt: g.createdAt })), questionQuality: questionQuality(graphs) } }
     }
     if (parts.length === 3 && method === 'GET') {
       const denied = allow('decision:read')
@@ -121,7 +125,9 @@ export async function handleIntentRoute(ctx: IntentApiContext, deps: IntentApiDe
       const { variableId, answer } = (body.value ?? {}) as Record<string, unknown>
       if (typeof variableId !== 'string' || typeof answer !== 'string' || !answer.trim() || answer.length > 1_000) return { status: 422, body: { error: 'variableId and a 1 to 1,000 character answer are required.' } }
       const numeric = /^\s*\$?\s*-?\d[\d,]*(\.\d+)?\s*$/.test(answer) ? Number(answer.replace(/[$,\s]/g, '')) : undefined
-      const result = applyBeliefUpdate(graph, { id: principal.id, kind: 'human' }, {
+      // Question quality (charter revision 2): note the question's rank before the answer closes it.
+      const fb = principal.kind === 'human' ? recordQuestionFeedback(graph, { id: principal.id, kind: 'human' }, variableId, 'answered', now()) : undefined
+      const result = applyBeliefUpdate(fb?.ok ? fb.graph : graph, { id: principal.id, kind: 'human' }, {
         variableId,
         value: numeric ?? answer.trim(),
         provenance: 'HUMAN_SPECIFIED',
@@ -131,6 +137,20 @@ export async function handleIntentRoute(ctx: IntentApiContext, deps: IntentApiDe
       if (!result.accepted) return { status: 422, body: { error: 'The answer was not accepted.', reasons: result.reasons } }
       await deps.graphs.put(result.graph)
       return { status: 200, body: { intent: summary(result.graph), change: result.change } }
+    }
+    if (parts.length === 4 && parts[3] === 'dismiss' && method === 'POST') {
+      const denied = allow('intent:provide')
+      if (denied) return denied
+      const graph = await deps.graphs.get(parts[2]!).catch(() => undefined)
+      if (!graph) return { status: 404, body: { error: 'No such intent.' } }
+      const body = await ctx.readBody()
+      if (!body.ok) return { status: body.status, body: { error: body.error } }
+      const { variableId } = (body.value ?? {}) as Record<string, unknown>
+      if (typeof variableId !== 'string') return { status: 422, body: { error: 'variableId is required.' } }
+      const r = recordQuestionFeedback(graph, { id: principal.id, kind: principal.kind === 'human' ? 'human' : principal.kind === 'agent' ? 'agent' : 'service' }, variableId, 'not-worth-asking', now())
+      if (!r.ok) return { status: principal.kind === 'human' ? 422 : 403, body: { error: r.reason } }
+      await deps.graphs.put(r.graph)
+      return { status: 200, body: { intent: summary(r.graph), feedback: r.feedback } }
     }
     return { status: 404, body: { error: 'Not found.' } }
   }

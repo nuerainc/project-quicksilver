@@ -74,6 +74,23 @@ export interface IntentGraph {
   edges: DecisionEdge[]
   /** Append-only record of every accepted change. */
   history: BeliefChange[]
+  /**
+   * What the provider did with the questions Aura asked (charter revision 2):
+   * answered, or marked not worth asking. `rank` is the question's position
+   * in Aura's impact order at that moment. Append-only.
+   */
+  questionFeedback?: QuestionFeedback[]
+}
+
+export interface QuestionFeedback {
+  variableId: string
+  outcome: 'answered' | 'not-worth-asking'
+  /** 1 = the question Aura considered most important at that moment. */
+  rank: number
+  /** How many open questions there were at that moment. */
+  openQuestions: number
+  at: string
+  by: string
 }
 
 export interface BeliefChange {

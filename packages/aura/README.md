@@ -477,13 +477,35 @@ Azure run on the development set (2026-09-26, before these fixes): baseline
 | ≥ 90% parsing accuracy | **Met on the held-out set:** model parser 27/30 (90.0%) on Azure, 2026-09-26. Confirm on a larger fresh set |
 | 100% provenance tagging | Enforced by validation; true on all 52 labeled objectives |
 | 0 unsupported inferences | Enforced by validation; 0 on all 52 |
-| ≥ 80% top-3 agreement on impact ranking | **Not met: 56.3%** (chance 63.0%) on 32 objectives vs scorer v2, 2026-09-25. Scorer v3 (implied intent) needs fresh rankings |
+| Question quality ≥ 80%: Aura's top-3 questions answered rather than dismissed, in real use (charter revision 2) | Measured from the pilot. The earlier offline ranking test (56.3% vs scorer v2) was retired |
 | All inferred values explained | Enforced by validation |
 | Tests pass | `npm run aura:test` |
 
 The web entry point is the host console (`/console`), built 2026-09-26.
 
-## Fresh impact-ranking test for scorer v3 (frozen 2026-09-26)
+## Question quality in real use (charter revision 2, 2026-09-26)
+
+The founder retired the offline ranking exercise: ranking lists of
+questions by hand is too easy to get wrong. Question quality is now measured
+as questions are actually asked:
+
+- **Answer:** answering one of Aura's open questions records its rank in
+  Aura's impact order at that moment.
+- **Dismiss:** "not worth asking" records the same rank, and the question
+  leaves the queue:
+  - `npm run onboard -- dismiss <intentId> <variableId>`
+  - `POST /api/intents/:id/dismiss`
+  - the console's **Not worth asking** button
+- **Quality** is the share of Aura's first three questions (ranks 1–3) that
+  the provider answered rather than dismissed. The target is 80%, unchanged.
+  - It shows in `npm run onboard -- status` and in `GET /api/intents`.
+  - Only a human provider's actions count, and the record is append-only
+    (`questionFeedback` on the intent graph).
+
+The frozen v3 predictions below stay in the repository as a record. That
+test was retired before any ranking was collected, so it has no result.
+
+## Fresh impact-ranking test for scorer v3 (frozen 2026-09-26; retired, not run)
 
 Scorer v3 (implied intent) was never tested on rankings it had not seen. The
 fresh test works like this:

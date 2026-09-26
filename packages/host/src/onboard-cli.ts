@@ -3,6 +3,7 @@
  *
  *   npm run onboard -- start "<objective>"
  *   npm run onboard -- answer <intentId> <variableId> "<your answer>"
+ *   npm run onboard -- dismiss <intentId> <variableId>      (a question not worth asking)
  *   npm run onboard -- connect <intentId> <ledger.csv>
  *   npm run onboard -- backtest <intentId>
  *   npm run onboard -- recommend <intentId> <department> "<what to do>" [--kernel execute-autonomously|request-approval|reject] [--risk 0-5]
@@ -36,6 +37,9 @@ import {
   observeInto,
   readCsvLedger,
   scoreImpact,
+  openQuestions,
+  questionQuality,
+  recordQuestionFeedback,
   learnFromVerdict,
   newVerdictLearner,
   predictAccept,
@@ -86,11 +90,23 @@ switch (cmd) {
     if (!id || !variableId || !answer?.trim()) fail('Usage: answer <intentId> <variableId> "<your answer>"')
     const graph = await graphOrFail(id)
     const numeric = /^\s*\$?\s*-?\d[\d,]*(\.\d+)?\s*$/.test(answer) ? Number(answer.replace(/[$,\s]/g, '')) : undefined
-    const r = applyBeliefUpdate(graph, human, { variableId, value: numeric ?? answer.trim(), provenance: 'HUMAN_SPECIFIED', confidence: 1, sources: [{ type: 'human', ref: actorId, quote: answer.trim() }] })
+    const fb = recordQuestionFeedback(graph, human, variableId, 'answered')
+    const r = applyBeliefUpdate(fb.ok ? fb.graph : graph, human, { variableId, value: numeric ?? answer.trim(), provenance: 'HUMAN_SPECIFIED', confidence: 1, sources: [{ type: 'human', ref: actorId, quote: answer.trim() }] })
     if (!r.accepted) fail(r.reasons.join(' '))
     await graphs.put(r.graph)
     console.log(`Recorded your answer for ${variableId}.`)
-    for (const q of scoreImpact(r.graph).slice(0, 3)) console.log(`  ? ${q.variableId}: ${q.question}`)
+    for (const q of openQuestions(r.graph).slice(0, 3)) console.log(`  ? ${q.variableId}: ${q.question}`)
+    break
+  }
+  case 'dismiss': {
+    const [id, variableId] = positional
+    if (!id || !variableId) fail('Usage: dismiss <intentId> <variableId>')
+    const graph = await graphOrFail(id)
+    const r = recordQuestionFeedback(graph, human, variableId, 'not-worth-asking')
+    if (!r.ok) fail(r.reason)
+    await graphs.put(r.graph)
+    console.log(`Noted: "${variableId}" was not worth asking (it was Aura's #${r.feedback.rank} of ${r.feedback.openQuestions}).`)
+    for (const q of openQuestions(r.graph).slice(0, 3)) console.log(`  ? ${q.variableId}: ${q.question}`)
     break
   }
   case 'connect': {
@@ -167,7 +183,7 @@ switch (cmd) {
     const facts: Facts = {
       'connectors.connected': connectors.connected.length,
       'observed.variables': graph.variables.filter((x) => x.provenance === 'OBSERVED').length,
-      'aura.openQuestions': scoreImpact(graph).length,
+      'aura.openQuestions': openQuestions(graph).length,
       ...(backtest ? { 'backtest.passed': backtest.passed === true } : {}),
       ...shadowFacts(shadow),
     }
@@ -184,7 +200,9 @@ switch (cmd) {
     console.log(`Intent ${id}: ${graph.objective}`)
     console.log(`Playbook stage: ${stage}`)
     console.log('Facts:', facts)
-    const open = scoreImpact(graph).slice(0, 3)
+    const open = openQuestions(graph).slice(0, 3)
+    const qq = questionQuality(await graphs.list())
+    if (qq.scored) console.log(`Question quality: ${qq.answered}/${qq.scored} of Aura's top-3 questions answered rather than dismissed (target 80%).`)
     if (open.length) { console.log('Open questions (answer with: npm run onboard -- answer <intentId> <variableId> "..."):'); for (const q of open) console.log(`  ? ${q.variableId}: ${q.question}`) }
     const waiting = availableTransitions(playbook.process, stage, facts).filter((o) => !o.guard.passed || o.transition.requiresHumanApproval)
     for (const o of waiting) console.log(`  next: ${o.transition.label ?? o.transition.id}${o.transition.requiresHumanApproval ? ' (your decision)' : ''}${o.guard.results.length ? ` — ${o.guard.results.filter((r) => !r.passed).map((r) => r.explanation).join('; ')}` : ''}`)
@@ -220,5 +238,5 @@ switch (cmd) {
     break
   }
   default:
-    console.log('Commands: start, answer, connect, backtest, recommend, judge, outcome, status, company, handover. See the header of packages/host/src/onboard-cli.ts.')
+    console.log('Commands: start, answer, dismiss, connect, backtest, recommend, judge, outcome, status, company, handover. See the header of packages/host/src/onboard-cli.ts.')
 }

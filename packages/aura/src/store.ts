@@ -239,6 +239,7 @@ export interface SanityIntentGraphDocument {
   variables: Array<Omit<GraphVariable, 'value' | 'sources'> & { _key: string; valueJson?: string; sourcesJson: string }>
   edges: Array<IntentGraph['edges'][number] & { _key: string }>
   historyJson: string
+  questionFeedbackJson?: string
 }
 
 export function toSanityIntentGraph(graph: IntentGraph): SanityIntentGraphDocument {
@@ -260,6 +261,7 @@ export function toSanityIntentGraph(graph: IntentGraph): SanityIntentGraphDocume
     })),
     edges: graph.edges.map((e, i) => ({ _key: `e${i}`, ...e })),
     historyJson: JSON.stringify(graph.history),
+    ...(graph.questionFeedback?.length ? { questionFeedbackJson: JSON.stringify(graph.questionFeedback) } : {}),
   }
 }
 
@@ -280,6 +282,7 @@ export function fromSanityIntentGraph(doc: SanityIntentGraphDocument): IntentGra
       return e
     }),
     history: JSON.parse(doc.historyJson) as IntentGraph['history'],
+    ...(doc.questionFeedbackJson ? { questionFeedback: JSON.parse(doc.questionFeedbackJson) as IntentGraph['questionFeedback'] } : {}),
   }
 }
 

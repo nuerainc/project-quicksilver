@@ -86,3 +86,22 @@ test('the intent ledger over HTTP: providers shape intent, admins set rules only
     await host.stop({ abort: true })
   }
 })
+
+test('question quality: answering and dismissing Aura\'s questions are recorded with their rank', async () => {
+  const { host, call, tokens } = await start()
+  try {
+    const created = await call('/api/intents', tokens.founder, { objective: 'Start a side business sharpening knives and garden tools; I keep my day job.' })
+    const id = created.body.intent.id
+    const [first, second] = created.body.intent.questions
+    const dismissed = await call(`/api/intents/${id}/dismiss`, tokens.founder, { variableId: first.variableId })
+    assert.equal(dismissed.status, 200)
+    assert.equal(dismissed.body.feedback.rank, 1)
+    assert.ok(!dismissed.body.intent.questions.some((q: any) => q.variableId === first.variableId), 'a dismissed question is not asked again')
+    assert.equal((await call(`/api/intents/${id}/dismiss`, tokens.founder, { variableId: first.variableId })).status, 422)
+    assert.equal((await call(`/api/intents/${id}/dismiss`, tokens.viewer, { variableId: second.variableId })).status, 403)
+    const answered = await call(`/api/intents/${id}/answers`, tokens.founder, { variableId: second.variableId, answer: 'About 6 hours a week' })
+    assert.equal(answered.status, 200)
+    const list = await call('/api/intents', tokens.viewer)
+    assert.deepEqual({ scored: list.body.questionQuality.scored, answered: list.body.questionQuality.answered }, { scored: 2, answered: 1 })
+  } finally { await host.stop() }
+})

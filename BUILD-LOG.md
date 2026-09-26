@@ -1154,6 +1154,18 @@ New workspace `packages/aura` (pre-charter, version 0.0.0):
 - Recorded as run, not retuned. The next choice test is pilot shadow
   verdicts.
 
+## 2026-09-26 — Aura charter revision 2: question quality measured in real use  *(Claude, via Cowork)*
+
+- The founder retired offline ranking exercises as too easy to get wrong.
+- Aura now records what the provider does with each question it asks:
+  answered, or not worth asking, with the question's rank.
+- Question quality is the share of the top-3 questions answered. The target
+  is 80%, measured from the pilot.
+- Built into the intent API (`/dismiss`), the onboard CLI (`dismiss`) and
+  the console.
+- The frozen v3 ranking predictions remain as a record; that test was never
+  run.
+
 ## Errors encountered (chronological, all environments)
 
 | Day / Env | Error | Resolution |

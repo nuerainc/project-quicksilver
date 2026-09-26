@@ -55,6 +55,7 @@ export default defineType({
       }],
     }),
     defineField({ name: 'historyJson', type: 'text', description: 'Append-only record of accepted belief changes.' }),
+    defineField({ name: 'questionFeedbackJson', type: 'text', readOnly: true, description: 'What the provider did with the questions Aura asked: answered, or marked not worth asking (append-only).' }),
   ],
   preview: {
     select: { title: 'objective', mode: 'mode', by: 'requestedBy' },

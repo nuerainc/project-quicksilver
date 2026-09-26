@@ -174,7 +174,9 @@ h3 { font-size: 14px; margin: 12px 0 4px; }
       const msg = el('div', { class: 'msg' })
       return el('div', { class: 'item' }, el('div', {}, q.question), el('div', { class: 'row' }, input, el('button', { style: 'flex:0 0 auto', onclick: async () => {
         try { await api('/api/intents/' + encodeURIComponent(id) + '/answers', { variableId: q.variableId, answer: input.value }); await openIntent(id) } catch (e) { msg.className = 'msg bad'; msg.textContent = e.message }
-      } }, 'Answer')), msg)
+      } }, 'Answer'), el('button', { class: 'ghost', style: 'flex:0 0 auto', onclick: async () => {
+        try { await api('/api/intents/' + encodeURIComponent(id) + '/dismiss', { variableId: q.variableId }); await openIntent(id) } catch (e) { msg.className = 'msg bad'; msg.textContent = e.message }
+      } }, 'Not worth asking')), msg)
     }) : [el('div', { class: 'msg ok' }, 'No open questions.')]))
     await loadShadow(id)
   }
