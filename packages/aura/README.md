@@ -393,6 +393,37 @@ verdicts during the Onboard pilot, scored the same predict-then-learn way.
 Any new scenario set is written by someone who has not seen this founder's
 answers, and the method is frozen before it is answered.
 
+## Learning choices from the provider's own decisions (in-context, frozen 2026-09-26)
+
+v1 read a profile, and v2 added a small learner on hand-made features;
+neither learned enough. This method learns from the provider's own
+decisions:
+
+- The model is shown the provider's decisions on the **other** scenario set:
+  the situation, the options, what they chose, and their own note.
+- It then predicts this set without seeing this set's answers.
+- It runs both ways: set 1 as examples to predict set 2, and set 2 to
+  predict set 1.
+- The "none" arm (no examples) runs alongside in the same run as a
+  baseline. The model's own results varied a lot between the two sets
+  (63% and 23%).
+
+```bash
+npm run aura:choices:model -- --set v2 --examples data/aura/scenario-answers.json --choices data/aura/scenario-answers-v2.json --detail
+npm run aura:choices:model -- --set v1 --examples data/aura/scenario-answers-v2.json --choices data/aura/scenario-answers.json --detail
+```
+
+**Honesty notes:**
+
+- Both sets were answered before this method existed, and I (the designer)
+  have seen both.
+- The prompt is fixed here, before any run. It contains no pattern taken
+  from the answers, only the instruction to learn from the examples.
+- A result counts as evidence, not proof. The clean test is new decisions,
+  such as pilot verdicts, with all earlier decisions as examples.
+- Offline check, same data (cross-set warm start of the v2 learner, no
+  model): set 2 went from 11/30 cold to 13/30 after learning on set 1.
+
 ## Entry point
 
 ```ts

@@ -7,6 +7,16 @@
  *
  *   npm run aura:choices:model -- --set v2 --picks-out data/aura/v2-picks.json
  *
+ * Learning from the provider's own earlier choices (in-context examples, 2026-09-26):
+ *
+ *   npm run aura:choices:model -- --set v2 --examples data/aura/scenario-answers.json --choices data/aura/scenario-answers-v2.json --detail
+ *   npm run aura:choices:model -- --set v1 --examples data/aura/scenario-answers-v2.json --choices data/aura/scenario-answers.json --detail
+ *
+ * The "examples" arm shows the model the provider's decisions on the OTHER
+ * scenario set (situation, options, their choice and note), then predicts
+ * this set. It never sees this set's answers. The "none" arm runs alongside
+ * as the same-run baseline. --picks-arm examples writes that arm's picks.
+ *
  * With --set v2 only the "none" arm runs (the arm frozen in
  * aura/eval/choice-predictor-v2.json), unless --profile is given; the picks
  * written are always from the "none" arm. --choices is optional there and, if
@@ -46,9 +56,12 @@ const { modelForRole, resolveId } = await import('./models.ts')
 
 const arg = (name: string) => { const i = process.argv.indexOf(name); return i > 0 ? process.argv[i + 1] : undefined }
 const profilePath = arg('--profile'), choicesPath = arg('--choices'), picksOut = arg('--picks-out')
+// --examples <answers.json> [--examples-set v1|v2]: the provider's own earlier decisions, shown to the
+// model as worked examples (in-context learning). Never the answers of the set being predicted.
+const examplesPath = arg('--examples')
 const set = arg('--set') ?? 'v1'
 if (set !== 'v1' && set !== 'v2') { console.log('--set must be v1 or v2'); process.exit(1) }
-if (set === 'v1' ? !profilePath || !choicesPath : !picksOut && !choicesPath) {
+if (set === 'v1' ? !(profilePath || examplesPath) || !choicesPath : !picksOut && !choicesPath) {
   console.log('Usage: --profile <profile-answers.json> --choices <scenario-answers.json> [--detail] [--picks-out <file>]\n   or: --set v2 --picks-out <file> [--profile <profile-answers.json>] [--choices <scenario-answers-v2.json>] [--detail]')
   process.exit(1)
 }
@@ -58,7 +71,24 @@ const evalDir = join(here, '..', '..', 'aura', 'eval')
 const instrument = read(join(evalDir, 'intent-profile-v1.json'))
 const scenarios = read(join(evalDir, set === 'v2' ? 'choice-scenarios-v2.json' : 'choice-scenarios.json')).scenarios as Array<{ id: string; category: string; providers?: string; said: string; situation: string; decision: string; options: Record<string, string> }>
 const profile = profilePath ? scoreProfile(instrument, read(profilePath).answers) : null
-const arms = (profile ? ['profile', 'none'] : ['none']) as Array<'profile' | 'none'>
+type Arm = 'profile' | 'none' | 'examples'
+const arms: Arm[] = [...(examplesPath ? ['examples' as const] : []), ...(profile ? ['profile' as const] : []), 'none']
+const examplesSet = arg('--examples-set') ?? (set === 'v2' ? 'v1' : 'v2')
+if (examplesPath && examplesSet === set) { console.log('--examples must come from the other scenario set, never the one being predicted.'); process.exit(1) }
+const examplesText = (() => {
+  if (!examplesPath) return ''
+  const exScenarios = read(join(evalDir, examplesSet === 'v2' ? 'choice-scenarios-v2.json' : 'choice-scenarios.json')).scenarios as typeof scenarios
+  const ans = read(examplesPath).answers as Record<string, { choice?: string; confidence?: string; note?: string }>
+  const lines = ['Here are earlier decisions this same provider made, with the option they chose and, when they gave one, their own note. Learn how they decide: what they protect, when they take a middle path, when they want to be asked, and when they would rather you just act.', '']
+  for (const e of exScenarios) {
+    const a = ans[e.id]
+    if (!a?.choice) continue
+    lines.push(`- ${e.providers ? `Providers: ${e.providers}. ` : ''}Said: ${e.said} Situation: ${e.situation} Decision: ${e.decision}`)
+    lines.push(`  Options: ${Object.entries(e.options).map(([k, v]) => `${k}) ${v}`).join(' | ')}`)
+    lines.push(`  They chose: ${a.choice}${a.confidence ? ` (${a.confidence})` : ''}${a.note?.trim() ? `. Their note: "${a.note.trim().slice(0, 300)}"` : ''}`)
+  }
+  return lines.join('\n')
+})()
 
 const SYSTEM = `You predict what an intent provider (a person, group or organization that an automated company acts for) would choose.
 Read what the provider said, the situation and the options. Pick the ONE option this provider would most want, given what they said and clearly meant.
@@ -74,12 +104,12 @@ const profileText = [
 const role = (process.env.QUICKSILVER_INTENT_ROLE || 'planner') as 'planner'
 console.log(`Model: ${resolveId(role, 'azure')} · set ${set} · ${scenarios.length} scenarios · arms: ${arms.join(', ')}`)
 
-async function predict(s: (typeof scenarios)[number], withProfile: boolean): Promise<string | null> {
+async function predict(s: (typeof scenarios)[number], arm: Arm): Promise<string | null> {
   assertAgentDispatch('nuera-quicksilver:intent', 'reasoning', 'low')
   const ids = Object.keys(s.options) as [string, ...string[]]
   const schema = z.object({ choice: z.enum(ids), reason: z.string() })
   const prompt = [
-    withProfile ? profileText : 'Nothing else is known about the provider.',
+    arm === 'profile' ? profileText : arm === 'examples' ? examplesText : 'Nothing else is known about the provider.',
     '',
     s.providers ? `Intent providers: ${s.providers}` : '',
     `What the provider said: ${s.said}`,
@@ -96,20 +126,18 @@ async function predict(s: (typeof scenarios)[number], withProfile: boolean): Pro
   }
 }
 
-const predictions: Record<'profile' | 'none', Record<string, string | null>> = { profile: {}, none: {} }
-for (const s of scenarios) {
-  if (profile) predictions.profile[s.id] = await predict(s, true)
-  predictions.none[s.id] = await predict(s, false)
-}
+const predictions: Record<Arm, Record<string, string | null>> = { profile: {}, none: {}, examples: {} }
+for (const s of scenarios) for (const arm of arms) predictions[arm][s.id] = await predict(s, arm)
+const picksArm: Arm = (arg('--picks-arm') as Arm | undefined) ?? 'none'
 
 // Blind picks from the "none" arm, written before any answers are read.
 if (picksOut) {
   const out = resolve(base, picksOut)
   mkdirSync(dirname(out), { recursive: true })
-  const picks = Object.fromEntries(scenarios.map((s) => [s.id, predictions.none[s.id] ?? null]))
-  writeFileSync(out, JSON.stringify({ set, arm: 'none', model: resolveId(role, 'azure'), createdAt: new Date().toISOString(), picks }, null, 1) + '\n')
+  const picks = Object.fromEntries(scenarios.map((s) => [s.id, predictions[picksArm][s.id] ?? null]))
+  writeFileSync(out, JSON.stringify({ set, arm: picksArm, model: resolveId(role, 'azure'), createdAt: new Date().toISOString(), picks }, null, 1) + '\n')
   const errors = Object.values(picks).filter((p) => p === null).length
-  console.log(`Wrote ${scenarios.length} blind picks (arm "none") to ${out}${errors ? `; ${errors} model errors recorded as null` : ''}`)
+  console.log(`Wrote ${scenarios.length} blind picks (arm "${picksArm}") to ${out}${errors ? `; ${errors} model errors recorded as null` : ''}`)
 }
 if (!choicesPath) process.exit(0)
 
