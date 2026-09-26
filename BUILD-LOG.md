@@ -1024,6 +1024,23 @@ Sanity check, 0.3.0 after the first host deployment.
 - Setup steps for this project's own endpoints are in
   `docs/platform/sanity-isolation.md`. Agent tests 18/18.
 
+## 2026-09-25 — Release 0.2.0: M1 governance foundation complete  *(Claude, via Cowork)*
+
+All eight M1 exit items are met. Item 7, the dedicated Sanity project working
+end to end, was verified by the founder:
+- The schema was deployed with `npm run schema:deploy -- --login`, and the
+  Studio was deployed to https://project-quicksilver.sanity.studio.
+- New Context MCP endpoints were created in project `f87t11g1`:
+  `nuera-quicksilver-agent` (dataset) and `nuera-quicksilver-kb` (knowledge
+  base `kbzyKoLrbQiu`, 12 evidence and policy documents, 11 entries). The
+  challenge endpoints were not changed.
+- `npm run verify:mcp` passed against both new endpoints.
+- `npm run smoke` passed on `f87t11g1/production` with fresh tokens; the
+  earlier tokens in `.env` predated the rotation.
+
+All workspace packages and the Python SDK move to 0.2.0. M2 (0.3.0) is built
+and waits on its first deployment.
+
 ## Errors encountered (chronological, all environments)
 
 | Day / Env | Error | Resolution |
