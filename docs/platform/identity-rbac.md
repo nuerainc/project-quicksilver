@@ -12,9 +12,16 @@ model, and so do the web app's supervisor decision routes.
 - **Permission:** one of a fixed list. Examples: `run:enqueue`, `run:cancel`,
   `run:redrive`, `decision:approve`, `decision:rollback`, `workflow:publish`,
   `memory:approve`, `routing:approve`, `secret:*`, `audit:read`,
-  `tenant:admin`.
+  `tenant:admin`, `intent:provide`, `intent:rules`.
 - **Roles:** built in are `viewer`, `operator`, `developer`, `supervisor`,
-  `auditor`, `tenant-admin`, `trigger` (enqueue only) and `agent-worker`.
+  `auditor`, `tenant-admin`, `trigger` (enqueue only), `agent-worker`,
+  `intent-provider` and `intent-admin`.
+  - `intent-provider` (`intent:provide`) states Aura intent: goals, weights,
+    horizons, autonomy and customer commitments.
+  - `intent-admin` (`intent:rules`) sets how several providers decide, and
+    has no input into intent.
+  - Both are authority permissions, so agents can never hold them. See the
+    [Aura intent ledger](../../packages/aura/README.md#intent-ledger).
   Tenants can define **custom roles**. A custom role is scoped to one tenant
   and cannot redefine a built-in role.
 

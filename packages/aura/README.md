@@ -50,6 +50,43 @@ variables depend on, constrain or inform which.
     change, so human rankings collected against one version are never reused
     silently against another.
 
+## Intent ledger
+
+`ledger.ts` implements the provider operating rules from the revised charter.
+A company's intent is an append-only log; `replay(ledger)` rebuilds the
+current state, and `replay(ledger, { seq })` rebuilds it as of any earlier
+entry.
+
+| Who | May change | Kernel permission |
+|---|---|---|
+| Intent provider (person, group or organization) | Goals and their horizons, their **own** weights and autonomy per goal, customer commitments, the decision rule | `intent:provide` |
+| Admin | The decision rule and the admin list only; no input into intent unless also recorded as a provider | `intent:rules` |
+| Agent | Nothing | — |
+
+- **Horizons.** `week`, `quarter`, `year` or `enduring`.
+  - A goal may only serve longer-horizon goals.
+  - Short-term goals lapse at `expiresAt` unless renewed.
+  - Goal ids may not start with `rule.`, because the law and WAES are
+    system constraints, not provider intent.
+- **Every change is kept.** Each entry records who made the change, in which
+  role, when, the change itself, the value it replaced, and an optional
+  reason.
+- **Tamper-evident.** Entries are chained by SHA-256 and can be signed with
+  Ed25519. `verifyLedger` detects any edit, removal or reordering.
+- **Decisions keep their context.** `intentInForce` returns the ledger head,
+  rule and weights in force at a moment, and a decision stores them.
+  Later changes never rewrite the past.
+- **Decision rules.** `resolvePositions` combines providers' positions under
+  the rule in force:
+  - `majority`: more than 50% of authority.
+  - `veto`: holders can block, and a silent holder is asked.
+  - `final-say`: that provider decides.
+  - With no rule set, any disagreement escalates to all providers.
+- **Who the providers are** changes only by the sole provider or the
+  provider with the final say.
+- **Reversals are reported, never blocked.** `weightReversals` lists weights
+  moved back and forth within a window.
+
 ## Entry point
 
 ```ts

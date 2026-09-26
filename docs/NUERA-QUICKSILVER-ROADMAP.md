@@ -29,13 +29,31 @@ and 3.
 **Versioning:** the current version is 0.3.0 (Nuera RDL versioning standard): M1 and M2 are complete. Each milestone raises the minor version.
 The M2 host runs on the founder's computer; always-on hosting is part of M5.
 
-**M3 progress (2026-09-26):** `packages/aura` has the provenance-tagged
-decision graph, validation, impact scoring and targeted questions, governed
-belief updates, the intent entry point, a rule-based baseline parser (80.8% on
-52 labeled objectives) and a model-based parser on Azure (agent
-`nuera-quicksilver:intent`, grounded quotes only). Still to build: Studio
-schemas, the web entry point, persistence, human impact rankings, and the
-parser reaching 90%.
+**M3 progress (2026-09-26):** `packages/aura` has:
+
+- the provenance-tagged decision graph, validation, impact scoring and targeted questions
+- governed belief updates and the intent entry point
+- a rule-based baseline parser (80.8% on 52 labeled objectives) and a
+  model-based parser on Azure (agent `nuera-quicksilver:intent`, grounded quotes only)
+- the **intent ledger** from the revised Aura charter:
+  - intent providers (person, group or organization) and admins
+  - goals with time horizons
+  - per-provider weights and autonomy
+  - decision rules and customer commitments
+  - a hash-chained, optionally signed log of every change, checked through
+    kernel RBAC (`intent:provide`, `intent:rules`)
+
+The first impact-ranking test scored 56.3% (below the 63% chance rate); the
+revised charter makes choice agreement the primary measure, with 38 blind
+scenarios awaiting founder labels.
+
+Still to build:
+
+- implied-intent parsing (for example, "we run a feed store" settles the business type)
+- the choice predictor
+- Studio schemas and persistence for graphs and the ledger
+- the web entry point
+- the parser reaching 90%
 
 **Carried into M3 (found by the first live host run, 2026-09-26):**
 - The seed policies in `f87t11g1` have no structured `effect`, so live

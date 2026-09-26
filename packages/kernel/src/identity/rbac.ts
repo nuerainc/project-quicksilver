@@ -35,6 +35,8 @@ export const PERMISSIONS = [
   'secret:write',
   'audit:read',
   'tenant:admin',
+  'intent:provide',
+  'intent:rules',
 ] as const
 
 export type Permission = (typeof PERMISSIONS)[number]
@@ -51,6 +53,8 @@ export const AUTHORITY_PERMISSIONS: readonly Permission[] = Object.freeze([
   'secret:read',
   'secret:write',
   'tenant:admin',
+  'intent:provide',
+  'intent:rules',
 ])
 
 /** Permissions that require the actor to be someone other than the proposer/requester. */
@@ -127,6 +131,8 @@ export const BUILT_IN_ROLES: readonly RoleDefinition[] = Object.freeze([
   role('auditor', 'Read-only access including the audit trail.', ['workflow:read', 'run:read', 'decision:read', 'audit:read']),
   role('tenant-admin', 'Manage roles, principals, and secrets for one tenant.', ['workflow:read', 'run:read', 'decision:read', 'audit:read', 'secret:read', 'secret:write', 'secret:use', 'tenant:admin']),
   role('trigger', 'Service identity for webhooks and schedules: may only enqueue runs.', ['run:enqueue']),
+  role('intent-provider', 'Aura intent provider: states goals, weights, horizons, autonomy and customer commitments. The only source of intent.', ['decision:read', 'audit:read', 'intent:provide']),
+  role('intent-admin', 'Sets how several intent providers decide (the decision rule). No input into intent itself.', ['decision:read', 'audit:read', 'intent:rules']),
   role('agent-worker', 'Nuera Quicksilver Agent identity: read context and propose, never authorize.', ['workflow:read', 'run:read', 'decision:read', 'decision:propose', 'secret:use']),
 ])
 
