@@ -84,6 +84,16 @@ browser tab. From the console you can:
 - answer Aura's questions
 - ask the shadow agent for proposals
 - judge each recommendation
+- read a company's **intent ledger** (read-only): whether its hash chain
+  verifies, the providers, goals with their horizons, weights and autonomy
+  per goal, the decision rule, commitments and the recent entries
+- follow the **Genesis run** when the host has one configured: what blocks
+  it, capital used (compute included), what is left, revenue, net and return
+  on capital, each experiment's thresholds and latest measurement, with
+  buttons to start, measure, evaluate and decide, and a form that records
+  money that already moved (it shows the kernel's reasons when a spend is
+  refused or needs your confirmation). The section is hidden when the host
+  has no Genesis run
 
 The page itself holds no data: everything comes from the API, under your
 own permissions.

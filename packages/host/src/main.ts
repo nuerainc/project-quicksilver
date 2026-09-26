@@ -35,6 +35,7 @@ import { Logger, parseLogLevel } from './log.ts'
 import { createSanityStoreClient, sanityConfigFromEnv } from './sanity-client.ts'
 import { FileShadowStore, MemoryShadowStore, type ShadowApiDeps, type ShadowStore } from './shadow-api.ts'
 import { SanityShadowStore } from './shadow-store-sanity.ts'
+import { FileGenesisStore, MemoryGenesisStore, type GenesisApiDeps } from './genesis-api.ts'
 import { SecretsVault, generateMasterKey } from './vault.ts'
 
 /** Where the command was run from (npm sets INIT_CWD; workspace scripts run inside packages/host). */
@@ -143,6 +144,36 @@ async function buildShadow(config: HostConfig, log: Logger, graphs: import('@qui
   }
   const { proposeShadowActions } = await import('@quicksilver/agent/shadow')
   return { store, graphs, generator: (ctx) => proposeShadowActions(ctx) }
+}
+
+/**
+ * Genesis run (M5): the same run config and data/genesis/<runId>/ files as `npm run genesis`.
+ * Config from QUICKSILVER_GENESIS_CONFIG (default deploy/genesis/genesis-500.json); data next to
+ * the intent stores, or QUICKSILVER_GENESIS_DIR. Vault names come from the host's own vault.
+ */
+async function buildGenesis(config: HostConfig, log: Logger): Promise<GenesisApiDeps | undefined> {
+  const configPath = resolve(baseDir, process.env.QUICKSILVER_GENESIS_CONFIG ?? 'deploy/genesis/genesis-500.json')
+  if (!existsSync(configPath)) {
+    log.info('no Genesis run config; the Genesis routes are off', { configPath })
+    return undefined
+  }
+  const { validateGenesisConfig } = await import('@quicksilver/kernel/playbooks/genesis')
+  const genesis = JSON.parse(readFileSync(configPath, 'utf8'))
+  const errors = validateGenesisConfig(genesis)
+  if (errors.length) {
+    log.error('the Genesis run config is invalid; the Genesis routes are off', { configPath, errors })
+    return undefined
+  }
+  const dir = process.env.QUICKSILVER_GENESIS_DIR
+    ? resolve(baseDir, process.env.QUICKSILVER_GENESIS_DIR)
+    : config.store.kind === 'file' ? join(dirname(config.store.path), 'genesis') : undefined
+  if (!dir) log.warn('the Genesis ledger and experiments are kept in memory; use a file store or QUICKSILVER_GENESIS_DIR to keep them')
+  if ((process.env.QUICKSILVER_GENESIS_STORE ?? 'file').trim() === 'sanity') {
+    const { genesisStoresFromEnv, StoresGenesisAdapter } = await import('./genesis-store.ts')
+    const stores = await genesisStoresFromEnv({ dir: dir ?? join(baseDir, 'data', 'genesis'), budgetUsd: genesis.budgetUsd })
+    return { config: genesis, store: new StoresGenesisAdapter(stores) }
+  }
+  return { config: genesis, store: dir ? new FileGenesisStore(dir) : new MemoryGenesisStore() }
 }
 
 async function buildAgentRunner(log: Logger): Promise<AgentRunner | undefined> {
@@ -265,6 +296,7 @@ async function main(): Promise<void> {
     evaluationSink: await buildEvaluationSink(log),
     intent,
     shadow: await buildShadow(config, log, intent.graphs),
+    genesis: await buildGenesis(config, log),
     ...(close ? { onStop: close } : {}),
     ...(ready ? { ready } : {}),
   })

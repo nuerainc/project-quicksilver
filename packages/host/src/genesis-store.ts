@@ -4,6 +4,8 @@ import { join } from 'node:path'
 import { experimentDigest, verifyMoneyLedger, type Experiment, type ExperimentStatus, type MoneyEntry, type MoneyLedger } from '@quicksilver/kernel/playbooks/economics'
 
 import { assertAllowedSanityProject, createSanityStoreClient, idSegment, isSanityConflict, type SanityStoreClient } from './sanity-client.ts'
+import type { GenesisState, GenesisStore } from './genesis-api.ts'
+import type { GenesisRunConfig } from '@quicksilver/kernel/playbooks/genesis'
 
 /**
  * Persistence for Genesis (M5): the money ledger and the run's experiments.
@@ -427,4 +429,30 @@ export async function genesisStoresFromEnv(options: { dir: string; budgetUsd: nu
     return { kind: 'sanity', ledger: new SanityMoneyLedgerStore(client), experiments: new SanityExperimentStore(client) }
   }
   return { kind: 'file', ledger: new FileMoneyLedgerStore(options.dir, { budgetUsd: options.budgetUsd }), experiments: new FileExperimentStore(options.dir) }
+}
+
+// ── Host API adapter ──────────────────────────────────────────────────────
+
+/**
+ * Serves the host's Genesis routes from these stores, so the host and
+ * `npm run genesis` share one ledger in Sanity mode too. Saves only append new
+ * ledger entries and put experiments; the run's start is the first
+ * experiment's start.
+ */
+export class StoresGenesisAdapter implements GenesisStore {
+  private readonly stores: GenesisStores
+  constructor(stores: GenesisStores) { this.stores = stores }
+  async load(config: GenesisRunConfig): Promise<GenesisState> {
+    const [entries, experiments] = await Promise.all([this.stores.ledger.load(config.runId), this.stores.experiments.list(config.runId)])
+    return { ledger: { runId: config.runId, budgetUsd: config.budgetUsd, entries }, experiments, run: { startedAt: runStartedAt(experiments) } }
+  }
+  async saveLedger(runId: string, ledger: MoneyLedger): Promise<void> {
+    const stored = await this.stores.ledger.load(runId)
+    for (const entry of ledger.entries.slice(stored.length)) await this.stores.ledger.append(runId, entry)
+  }
+  async saveExperiments(runId: string, experiments: Experiment[]): Promise<void> {
+    const stored = new Map((await this.stores.experiments.list(runId)).map((e) => [e.definition.id, JSON.stringify(e)]))
+    for (const e of experiments) if (stored.get(e.definition.id) !== JSON.stringify(e)) await this.stores.experiments.put(runId, e)
+  }
+  async saveRun(): Promise<void> {}
 }

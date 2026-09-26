@@ -281,3 +281,22 @@ test('Genesis stores: files by default, Sanity when asked (and only when configu
   await assert.rejects(genesisStoresFromEnv({ dir: tmpdir(), budgetUsd: 500, env: { QUICKSILVER_GENESIS_STORE: 'sanity' } }), /needs NEXT_PUBLIC_SANITY_PROJECT_ID/)
   assert.equal((await genesisStoresFromEnv({ dir: tmpdir(), budgetUsd: 500, env: { QUICKSILVER_GENESIS_STORE: 'sanity' }, client: new FakeSanity() })).kind, 'sanity')
 })
+
+test('the host adapter appends only new entries and loads what the CLI stores wrote', async () => {
+  const { genesisStoresFromEnv, StoresGenesisAdapter } = await import('./genesis-store.ts')
+  const dir = await mkdtemp(join(tmpdir(), 'qs-adapter-'))
+  const stores = await genesisStoresFromEnv({ dir, budgetUsd: 500, env: {} })
+  const adapter = new StoresGenesisAdapter(stores)
+  const config = { runId: 'run-a', budgetUsd: 500 } as Parameters<typeof adapter.load>[0]
+  let ledger: MoneyLedger = (await adapter.load(config)).ledger
+  const human = { id: 'entity-founder', kind: 'human' as const }
+  for (const amount of [5, 7]) {
+    const r = appendMoney(ledger, { kind: 'spend', amountUsd: amount, category: 'domain', description: `d${amount}`, source: { type: 'receipt', ref: `r${amount}` } }, human, new Date('2026-11-01T00:00:00Z'))
+    assert.ok(r.ok)
+    if (r.ok) ledger = r.ledger
+    await adapter.saveLedger('run-a', ledger)
+  }
+  const reloaded = await adapter.load(config)
+  assert.equal(reloaded.ledger.entries.length, 2)
+  assert.deepEqual((await stores.ledger.load('run-a')).map((e) => e.amountUsd), [5, 7])
+})

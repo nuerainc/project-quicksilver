@@ -77,6 +77,28 @@ project. The run's start is then the first experiment's start.
 Both stores enforce the same rules on files. Both types are read-only in
 Studio. After pulling, deploy the schema with `npm run schema:deploy -- --login`.
 
+## On the host
+
+The host serves the same commands over HTTP, on the same data files
+(`data/genesis/<runId>/`), so the CLI and the host see one ledger. The
+console (`/console`) has a **Genesis run** section built on these routes.
+
+| Route | Who | Same as |
+|---|---|---|
+| `GET /api/genesis` | `decision:read` | `check` + `status`: blockers, totals, experiments, facts, ledger verification |
+| `POST /api/genesis/experiments` `{ definition }` | `intent:provide` or `decision:propose` | `experiment draft` |
+| `POST /api/genesis/experiments/:id/start` | the founder (`intent:provide`, human) | `experiment start`; 409 with the blockers while any exist |
+| `POST /api/genesis/experiments/:id/measurements` `{ value, source }` | `intent:provide` or `decision:propose` | `measure` |
+| `POST /api/genesis/experiments/:id/evaluate` | `decision:read` | `evaluate`: kill, continue, expiry and over-budget apply as the kernel; scale and hold come back as `awaitingDecision` |
+| `POST /api/genesis/experiments/:id/decide` `{ note? }` | the founder | `decide` |
+| `POST /api/genesis/money` `{ kind, amountUsd, category, description, source: { type, ref }, experimentId?, confirm? }` | the founder | `spend` / `compute` / `revenue` / `refund`. Refused spends → 422 with reasons; a founder decision without `confirm: true` → 409 with reasons |
+
+The money route records money that has already moved. Nothing on the host
+pays, charges or executes anything; every response says `executed: false`.
+Config: `QUICKSILVER_GENESIS_CONFIG` (default `deploy/genesis/genesis-500.json`);
+data: next to the intent stores, or `QUICKSILVER_GENESIS_DIR`. The blockers
+check payment-account names against the host's own vault.
+
 ## What the run reports
 
 - Capital used (compute included), revenue, net, and return on capital

@@ -113,6 +113,13 @@ run's event history.
 | `GET /api/secrets` | `secret:use` or `secret:read` | Names, versions, dates; never values |
 | `PUT /api/secrets/:name` | `secret:write` | `{ value, description?, graceMs? }`. Rotates and reloads affected webhooks |
 | `POST /api/admin/reload-secrets` | `tenant:admin` | Re-read webhook secrets |
+| `GET /api/genesis` | `decision:read` | Genesis run: config summary, blockers (vault names checked against the host's own vault), money totals, experiments with their current evaluation, playbook facts, ledger verification |
+| `POST /api/genesis/experiments` `{ definition }` | `intent:provide` or `decision:propose` | Drafts an `ExperimentDefinition`; `proposedBy` is always the caller |
+| `POST /api/genesis/experiments/:id/start` | `intent:provide`, humans only | Fixes the thresholds; refused (409) while any blocker exists |
+| `POST /api/genesis/experiments/:id/measurements` `{ value, source }` | `intent:provide` or `decision:propose` | Records a measurement with its source |
+| `POST /api/genesis/experiments/:id/evaluate` | `decision:read` | Kill, continue, expiry and over-budget are applied by the kernel; scale and hold are returned as awaiting a decision |
+| `POST /api/genesis/experiments/:id/decide` `{ note? }` | `intent:provide`, humans only | Applies the current verdict (scale, hold, or any other) as the founder |
+| `POST /api/genesis/money` `{ kind, amountUsd, category, description, source: { type, ref }, experimentId?, confirm? }` | `intent:provide`, humans only | **Records** money that already moved; never moves money. Spend and compute go through `decideSpend`: reject → 422 with reasons; founder decision without `confirm: true` → 409 with reasons |
 
 No API route returns a secret value.
 
@@ -210,3 +217,13 @@ memory.
   `QUICKSILVER_INTENT_PARSER=model` uses the production parser (the model with the autonomy guard; see the Aura
   README), which needs a model provider.
 - Nothing here proposes or executes an action.
+
+## Genesis run API (M5)
+
+The Genesis routes above are on when the run config exists
+(`QUICKSILVER_GENESIS_CONFIG`, default `deploy/genesis/genesis-500.json`) and
+is valid. Data sits next to the intent stores under `genesis/<runId>/`
+(`ledger.json`, `experiments.json`, `run.json`), the same layout as
+`npm run genesis`, or in `QUICKSILVER_GENESIS_DIR`. Without a file store and
+without that variable it is held in memory. Writes are serialized per run.
+Every response carries `executed: false`. See [genesis-run.md](genesis-run.md).
