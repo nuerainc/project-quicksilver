@@ -30,6 +30,7 @@ import { ConfigError, loadHostConfig, type HostConfig } from './config.ts'
 import type { AgentRunner, EvaluationSink } from './handlers.ts'
 import { QuicksilverHost } from './host.ts'
 import { Logger, parseLogLevel } from './log.ts'
+import { FileShadowStore, MemoryShadowStore, type ShadowApiDeps } from './shadow-api.ts'
 import { SecretsVault, generateMasterKey } from './vault.ts'
 
 const LEGACY_CHALLENGE_PROJECT_ID = 'd280bqjc'
@@ -109,6 +110,24 @@ async function buildIntent(config: HostConfig, log: Logger) {
     else log.warn('QUICKSILVER_INTENT_PARSER=model but no model provider is configured; using the rule-based parser')
   }
   return { graphs, ledger, ...(parser ? { parser } : {}) }
+}
+
+/**
+ * Shadow mode (M4): the log and Aura's verdict learner sit next to the intent
+ * graphs (<intent>/onboard/<intentId>/), where `npm run onboard` keeps them too.
+ * The shadow-stage agent needs a model provider; without one, proposals are entered by hand.
+ */
+async function buildShadow(config: HostConfig, log: Logger, graphs: import('@quicksilver/aura').IntentGraphStore): Promise<ShadowApiDeps> {
+  const store = config.store.kind === 'file'
+    ? new FileShadowStore(join(dirname(config.store.path), 'intent', 'onboard'))
+    : new MemoryShadowStore()
+  const agent = await import('@quicksilver/agent')
+  if (!agent.isLlmConfigured()) {
+    log.warn('no model provider is configured; shadow recommendations can only be entered by hand')
+    return { store, graphs }
+  }
+  const { proposeShadowActions } = await import('@quicksilver/agent/shadow')
+  return { store, graphs, generator: (ctx) => proposeShadowActions(ctx) }
 }
 
 async function buildAgentRunner(log: Logger): Promise<AgentRunner | undefined> {
@@ -229,13 +248,15 @@ async function main(): Promise<void> {
   const log = new Logger({ level: parseLogLevel(process.env.QUICKSILVER_LOG_LEVEL ?? config.log.level) })
   const principals = principalsFromJson(process.env.QUICKSILVER_PRINCIPALS)
   const { store, close, ready } = await buildStore(config, log)
+  const intent = await buildIntent(config, log)
   const host = new QuicksilverHost(config, {
     principals,
     store,
     logger: log,
     agentRunner: await buildAgentRunner(log),
     evaluationSink: await buildEvaluationSink(log),
-    intent: await buildIntent(config, log),
+    intent,
+    shadow: await buildShadow(config, log, intent.graphs),
     ...(close ? { onStop: close } : {}),
     ...(ready ? { ready } : {}),
   })

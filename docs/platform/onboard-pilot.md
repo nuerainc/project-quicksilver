@@ -69,3 +69,40 @@ npm run onboard -- handover nuera collections act-with-approval "20 of 21 accept
 | Outcomes | bad outcomes on accepted recommendations block hand-over |
 | Human interventions | every verdict and hand-over is recorded with who and when |
 | Audit completeness | every observed value names its source; every intent change is in the chained ledger |
+| Aura verdict prediction | before each verdict, Aura records the chance you will accept. Scored predict-then-learn, this is the first **fresh** test of Aura's choice agreement (target 70%) |
+
+## Shadow mode on the host
+
+The local host serves the same shadow log over its API, so the shadow-stage
+agent can propose and you can judge from anywhere the host is reachable.
+
+| Route | Who | What |
+|---|---|---|
+| `GET /api/shadow/:intentId` | `decision:read` | Recommendations, per-department report, playbook facts, Aura's prediction score and learned weights (marked `AGENT_INFERRED`) |
+| `POST /api/shadow/:intentId/recommendations` | `intent:provide` or `decision:propose` | Record one proposal by hand |
+| `POST /api/shadow/:intentId/generate` | `intent:provide` or `decision:propose` | The shadow-stage agent (`nuera-quicksilver:shadow`) proposes up to 10 actions for the named departments; needs a model provider |
+| `POST /api/shadow/:intentId/recommendations/:recId/verdict` | `intent:provide`, humans only | `accepted`, `modified` or `rejected`; trains Aura's verdict learner |
+| `POST /api/shadow/:intentId/recommendations/:recId/outcome` | `intent:provide`, humans only | `good`, `neutral` or `bad`, after a verdict |
+
+A proposal carries:
+
+- `department`, `description` and `reversible`
+- `operationalImpact` and `uncertainty` (each 0–5)
+- `financialExposure` and `customerFacing`, which are optional
+- `evidence`: a list of `{id, title, confidence}`
+
+What the host does with each one:
+
+- **Kernel verdict.** The kernel judges every proposal as if that
+  department had already been handed over. The verdict records what
+  Quicksilver *would* have done:
+  - Low-risk, reversible work with evidence shows `execute-autonomously`.
+  - Anything without evidence is refused.
+  - Large or irreversible exposure goes to a human.
+- **Grounding.** The agent must cite facts from the intent graph. Citations
+  that aren't in the graph are dropped, and so are proposals left with none.
+- **Nothing executes.** Every record stays `executed: false`.
+
+Aura's learner lives in `learner.json` next to `shadow.json`. It is Aura's
+inference about you: it never writes to the intent ledger and grants
+nothing. Hand-over is still your own `handover` entry.

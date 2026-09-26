@@ -13,7 +13,8 @@
     "./mcp": "./src/mcp.ts",
     "./prompts": "./src/prompts.ts",
     "./planner": "./src/planner.ts",
-    "./intent": "./src/intent-parser.ts"
+    "./intent": "./src/intent-parser.ts",
+    "./shadow": "./src/shadow-agent.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

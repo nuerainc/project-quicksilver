@@ -36,6 +36,11 @@ import {
   observeInto,
   readCsvLedger,
   scoreImpact,
+  learnFromVerdict,
+  newVerdictLearner,
+  predictAccept,
+  predictionAgreement,
+  type LearnerState,
   type Transaction,
 } from '@quicksilver/aura'
 import { availableTransitions, nextAutomaticTransition, type Facts } from '@quicksilver/kernel/process'
@@ -122,7 +127,9 @@ switch (cmd) {
     const path = join(workDir(id), 'shadow.json')
     const log = await readJsonFile<ShadowLog>(path, { recommendations: [] })
     const kernel = (flag('--kernel') ?? 'request-approval') as 'execute-autonomously' | 'request-approval' | 'reject'
-    const r = recommend(log, { id: `rec-${log.recommendations.length + 1}`, department, description, proposedAt: new Date().toISOString(), kernel: { recommendation: kernel, riskLevel: Number(flag('--risk') ?? 1) } })
+    const learner = await readJsonFile<LearnerState | null>(join(workDir(id), 'learner.json'), null) ?? newVerdictLearner()
+    const draft = { department, kernel: { recommendation: kernel, riskLevel: Number(flag('--risk') ?? 1) } }
+    const r = recommend(log, { id: `rec-${log.recommendations.length + 1}`, description, proposedAt: new Date().toISOString(), source: 'human', ...draft, prediction: predictAccept(learner, draft) })
     if (!r.ok) fail(r.reason)
     await writeJsonFile(path, r.log)
     console.log(`Recorded rec-${log.recommendations.length + 1} for ${department}. Nothing was executed.`)
@@ -138,6 +145,12 @@ switch (cmd) {
     const r = cmd === 'judge' ? judge(log, recId, human, value as Verdict, new Date(), note) : recordOutcome(log, recId, human, value as Outcome, new Date(), note)
     if (!r.ok) fail(r.reason)
     await writeJsonFile(path, r.log)
+    if (cmd === 'judge') {
+      // Aura learns from the verdict (its own record; never the intent ledger).
+      const learnerPath = join(workDir(id), 'learner.json')
+      const learner = await readJsonFile<LearnerState | null>(learnerPath, null) ?? newVerdictLearner()
+      await writeJsonFile(learnerPath, learnFromVerdict(learner, r.log.recommendations.find((x) => x.id === recId)!, value as Verdict))
+    }
     console.log(`Recorded ${cmd} for ${recId}: ${value}.`)
     break
   }
@@ -175,6 +188,8 @@ switch (cmd) {
     if (open.length) { console.log('Open questions (answer with: npm run onboard -- answer <intentId> <variableId> "..."):'); for (const q of open) console.log(`  ? ${q.variableId}: ${q.question}`) }
     const waiting = availableTransitions(playbook.process, stage, facts).filter((o) => !o.guard.passed || o.transition.requiresHumanApproval)
     for (const o of waiting) console.log(`  next: ${o.transition.label ?? o.transition.id}${o.transition.requiresHumanApproval ? ' (your decision)' : ''}${o.guard.results.length ? ` — ${o.guard.results.filter((r) => !r.passed).map((r) => r.explanation).join('; ')}` : ''}`)
+    const agreement = predictionAgreement(shadow)
+    if (agreement.scored) console.log(`Aura predicted your verdict ${agreement.agreed}/${agreement.scored} times (made before each verdict).`)
     const report = shadowReport(shadow)
     if (report.length) {
       console.log('Shadow mode by department:')

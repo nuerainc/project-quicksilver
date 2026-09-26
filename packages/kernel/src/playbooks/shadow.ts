@@ -23,6 +23,15 @@ export interface ShadowRecommendation {
   /** What the kernel said about the action (authorize().recommendation), and its risk. */
   kernel: { recommendation: 'execute-autonomously' | 'request-approval' | 'reject'; riskLevel: number }
   executed: false
+  /** Who proposed it: a person entering it by hand, or the shadow-stage agent. */
+  source?: 'human' | 'agent'
+  /** Plain-number features describing the recommendation, for Aura's learner. */
+  features?: Record<string, number>
+  /**
+   * Aura's prediction of the owner's verdict, recorded BEFORE the verdict, so
+   * pilot agreement is scored predict-then-learn. Inference, never authority.
+   */
+  prediction?: { accept: number; observations: number; model: string }
   verdict?: { value: Verdict; by: string; at: string; note?: string }
   outcome?: { value: Outcome; by: string; at: string; note?: string }
 }

@@ -19,6 +19,7 @@ import { Logger, redactValue } from './log.ts'
 import { createHostMetrics, type HostMetrics } from './metrics.ts'
 import { SecretsVault, VaultError } from './vault.ts'
 import { handleIntentRoute, type IntentApiDeps } from './intent-api.ts'
+import { handleShadowRoute, type ShadowApiDeps } from './shadow-api.ts'
 
 /**
  * The single-tenant Quicksilver host: one process that runs the governed
@@ -48,6 +49,8 @@ export interface HostDependencies {
   ready?: () => Promise<boolean>
   /** Aura intent entry point and ledger (M3). Routes return 404 when absent. */
   intent?: IntentApiDeps
+  /** Shadow mode for the Onboard pilot (M4). Routes return 404 when absent. */
+  shadow?: ShadowApiDeps
 }
 
 const RUN_STATUSES: readonly WorkflowRunStatus[] = ['queued', 'running', 'completed', 'blocked', 'cancelled', 'dead-lettered']
@@ -319,6 +322,15 @@ export class QuicksilverHost {
         method, parts, principal, tenantId: this.config.tenantId, access: this.access,
         readBody: () => readJson(req, this.config.http.maxBodyBytes),
       }, { ...this.deps.intent, ...(this.deps.now ? { now: this.deps.now } : {}) })
+      if (handled) return handled
+    }
+
+    // Shadow mode (M4)
+    if (parts[1] === 'shadow' && this.deps.shadow) {
+      const handled = await handleShadowRoute({
+        method, parts, principal, tenantId: this.config.tenantId, access: this.access,
+        readBody: () => readJson(req, this.config.http.maxBodyBytes),
+      }, { ...this.deps.shadow, ...(this.deps.now ? { now: this.deps.now } : {}) })
       if (handled) return handled
     }
 
