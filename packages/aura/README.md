@@ -525,6 +525,39 @@ fresh test works like this:
 - **Run it:** `npm run aura:agreement -- --set v3 [--detail]` once
   `eval/impact-rankings-v3.json` holds the founder's rankings.
 
+### v3 result (ranked 2026-09-26, after revision 2): 56.7%, below chance
+
+The founder ranked all 30 anyway, against Aura's picks frozen beforehand.
+`npm run aura:agreement -- --set v3 --detail` shows the detail.
+
+| Measure | Result |
+|---|---|
+| Top-3 agreement, scorer v3 | **17/30 average = 56.7%** (chance 61.2%, target 80%): not met |
+| Identical top three | 5/30 |
+
+This is supporting evidence, not the charter measure (revision 2 moved that to real use). Two patterns stand out:
+
+- **Existing businesses:** the founder put *where the records are*
+  (`data_sources`) first in 10 of 12 objectives. Aura never had it in its
+  top three and led with business type, even when the text named the
+  business ("I own a boutique").
+- **New businesses:** Aura led with risk tolerance every time. The founder
+  never put it first; he led with the goal (success metric), weekly hours,
+  timeframe or budget.
+
+**Scorer v4 (2026-09-26), fitted to these rankings:**
+
+- Existing businesses ask where the records are first.
+- New businesses rank time and hours above risk.
+- Many more business types are recognized: boutique, gym, car wash,
+  roastery, campground and others, plus "our …" with modifiers.
+
+Scored on the same 30 rankings, v4 reaches 65.4% against its own chance
+rate of 64.1%. That score is fitted and exploratory, and barely above
+chance: fixed importance weights do not capture how the founder orders
+questions. Whether v4 asks better questions will show in real-use question
+quality, which is what revision 2 measures.
+
 ## Human rankings for the impact criterion
 
 - Only objectives with more than three open questions count (32 of 52);

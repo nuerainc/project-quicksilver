@@ -21,8 +21,13 @@ import type { GraphVariable, IntentGraph } from './types.ts'
  * the arithmetic that produced it. The top items become targeted questions.
  */
 
-/** v3: implied values are no longer open questions, so the candidate set changed (2026-09-26). */
-export const IMPACT_SCORER_VERSION = 3
+/**
+ * v3: implied values are no longer open questions, so the candidate set changed (2026-09-26).
+ * v4: importances revised from the founder's v3 rankings (onboard: where the records are first;
+ * genesis: time and hours before risk) and more business types recognized (2026-09-26).
+ * v4 was fitted to those rankings, so its evidence comes from question quality in real use.
+ */
+export const IMPACT_SCORER_VERSION = 4
 
 export interface ImpactItem {
   variableId: string

@@ -1166,6 +1166,18 @@ New workspace `packages/aura` (pre-charter, version 0.0.0):
 - The frozen v3 ranking predictions remain as a record; that test was never
   run.
 
+## 2026-09-26 — Impact rankings v3: 56.7% (chance 61.2%); scorer v4  *(Claude, via Cowork)*
+
+- The founder ranked the 30 fresh objectives against Aura's picks frozen
+  beforehand: 56.7%, below chance. This is supporting evidence; revision 2
+  measures question quality in real use.
+- Scorer v4:
+  - existing businesses ask where the records are first
+  - new businesses rank time and hours above risk
+  - more business types are recognized
+- v4 is fitted to these rankings (65.4% vs 64.1% chance, exploratory), so
+  its evidence comes from the pilot. Parsing accuracy is unchanged.
+
 ## Errors encountered (chronological, all environments)
 
 | Day / Env | Error | Resolution |

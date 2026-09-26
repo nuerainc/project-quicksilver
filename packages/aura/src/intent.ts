@@ -39,16 +39,16 @@ export interface IntentResult {
 export const MODE_SLOTS: Record<OperatingMode, Array<{ id: string; label: string; importance: number }>> = {
   genesis: [
     { id: 'budget', label: 'Budget', importance: 0.9 },
-    { id: 'timeframe', label: 'Timeframe', importance: 0.7 },
-    { id: 'risk_tolerance', label: 'Risk tolerance', importance: 0.8 },
+    { id: 'timeframe', label: 'Timeframe', importance: 0.75 },
+    { id: 'risk_tolerance', label: 'Risk tolerance', importance: 0.55 },
     { id: 'success_metric', label: 'Success metric', importance: 0.8 },
     { id: 'skills', label: 'Skills and assets', importance: 0.6 },
-    { id: 'weekly_hours', label: 'Weekly hours available', importance: 0.5 },
+    { id: 'weekly_hours', label: 'Weekly hours available', importance: 0.75 },
   ],
   onboard: [
     { id: 'business_type', label: 'Business type', importance: 0.9 },
     { id: 'revenue_model', label: 'Revenue model', importance: 0.8 },
-    { id: 'data_sources', label: 'Data sources', importance: 0.7 },
+    { id: 'data_sources', label: 'Data sources', importance: 0.95 },
     { id: 'scope', label: 'Scope', importance: 0.7 },
     { id: 'success_metric', label: 'Success metric', importance: 0.8 },
   ],
@@ -96,8 +96,8 @@ export async function createIntent(objective: string, options: CreateIntentOptio
   // Values stated in the text.
   const stated: Record<string, { value: number; quote: string; unit: string; label: string; kind: GraphVariable['kind']; importance: number }> = {}
   if (parsed.budget) stated.budget = { value: parsed.budget.value, quote: parsed.budget.span.text, unit: 'USD', label: 'Budget', kind: 'constraint', importance: 0.9 }
-  if (parsed.timeframeDays) stated.timeframe = { value: parsed.timeframeDays.value, quote: parsed.timeframeDays.span.text, unit: 'days', label: 'Timeframe', kind: 'constraint', importance: 0.7 }
-  if (parsed.weeklyHours) stated.weekly_hours = { value: parsed.weeklyHours.value, quote: parsed.weeklyHours.span.text, unit: 'hours/week', label: 'Weekly hours available', kind: 'constraint', importance: 0.5 }
+  if (parsed.timeframeDays) stated.timeframe = { value: parsed.timeframeDays.value, quote: parsed.timeframeDays.span.text, unit: 'days', label: 'Timeframe', kind: 'constraint', importance: 0.75 }
+  if (parsed.weeklyHours) stated.weekly_hours = { value: parsed.weeklyHours.value, quote: parsed.weeklyHours.span.text, unit: 'hours/week', label: 'Weekly hours available', kind: 'constraint', importance: 0.75 }
   if (parsed.revenueTarget) stated.success_metric = { value: parsed.revenueTarget.value, quote: parsed.revenueTarget.span.text, unit: 'USD revenue', label: 'Success metric', kind: 'metric', importance: 0.8 }
   for (const [id, s] of Object.entries(stated)) {
     variables.push({ id, label: s.label, kind: s.kind, value: s.value, unit: s.unit, provenance: 'HUMAN_SPECIFIED', confidence: 1, importance: s.importance, sources: human(s.quote), ...base })

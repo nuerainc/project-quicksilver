@@ -90,7 +90,9 @@ test('impact scoring is deterministic, explained, and favors uncertain high-stak
   const a = scoreImpact(graph)
   const b = scoreImpact(structuredClone(graph))
   assert.deepEqual(a, b)
-  assert.equal(a[0]!.variableId, 'risk_tolerance', 'risk tolerance informs the stated budget, so it outranks other unknowns')
+  // Scorer v4: what the provider is aiming for comes before risk (founder rankings, 2026-09-26).
+  assert.equal(a[0]!.variableId, 'success_metric')
+  assert.ok(a.findIndex((i) => i.variableId === 'risk_tolerance') > 0)
   for (const item of a) assert.match(item.explanation, /uncertainty .* × importance .* × \(1 \+ leverage .*\) = /)
   assert.ok(a.every((item, i) => i === 0 || a[i - 1]!.score >= item.score))
   assert.equal(targetedQuestions(graph, 2).length, 2)

@@ -23,6 +23,14 @@ export interface ImpliedValue {
 
 export const IMPLIED_CONFIDENCE = 0.8
 
+/** Nouns that name a kind of business ("we run a car wash", "our roastery"). v4 widened the list (2026-09-26). */
+const BUSINESS_NOUNS = [
+  'store', 'shop', 'company', 'business', 'farm', 'restaurant', 'truck', 'studio', 'practice', 'agency', 'firm', 'clinic',
+  'salon', 'bakery', 'cafe', 'café', 'ranch', 'garage', 'service', 'boutique', 'gym', 'diner', 'motel', 'hotel', 'campground',
+  'bookstore', 'roastery', 'daycare', 'car wash', 'yard', 'crew', 'dealership', 'brewery', 'winery', 'dairy', 'nursery',
+  'greenhouse', 'kennel', 'pharmacy', 'print shop', 'machine shop', 'body shop', 'co-op', 'cooperative', 'market', 'orchard',
+].map((n) => n.replace(/ /g, '\\s+')).join('|')
+
 const GENERIC = /^(?:business|company|firm|team|thing|one|group)$/i
 const STOP = /\s+(?:that|which|who|with|for|in|on|to|where|so|but|because)\b.*$/i
 
@@ -49,15 +57,19 @@ export function inferImplied(objective: string): ImpliedValue[] {
   }
 
   // "we run a feed store", "I own a coffee shop", "I run a small landscaping company", "I operate a food truck"
-  const runs = /\b(?:we|i)\s+(?:run|own|operate|manage|have)\s+(?:a|an)\s+((?:[a-z][\w'-]*\s+){0,4}?(?:store|shop|company|business|farm|restaurant|truck|studio|practice|agency|firm|clinic|salon|bakery|cafe|café|ranch|garage|service))\b/i.exec(text)
+  const runs = new RegExp(String.raw`\b(?:we|i)\s+(?:run|own|operate|manage|have)\s+(?:a|an)\s+((?:[a-z][\w'-]*\s+){0,4}?(?:${BUSINESS_NOUNS}))\b`, 'i').exec(text)
   if (runs) {
     const kind = clean(runs[1]!)
     if (!GENERIC.test(kind)) add({ slot: 'business_type', value: kind, quote: runs[0].trim(), reason: 'the objective names the kind of business' })
   }
 
   // "our restaurant", "my farm's records", "my practice", "our agency"
-  const owned = /\b(?:my|our)\s+((?:coffee |feed |food |hardware |flower |pet )?(?:farm|restaurant|practice|agency|studio|shop|store|truck|bakery|salon|clinic|ranch))(?:'s)?\b/i.exec(text)
-  if (owned) add({ slot: 'business_type', value: owned[1]!.toLowerCase(), quote: owned[0].trim(), reason: 'the objective names the kind of business' })
+  const owned = new RegExp(String.raw`\b(?:my|our)\s+((?:(?!(?:family|own|small|little)\b)[a-z][\w'-]*\s+){0,2}?(?:${BUSINESS_NOUNS}))(?:'s)?\b`, 'i').exec(text)
+  if (owned) {
+    // "my existing business" names no kind of business: drop non-descriptive words and skip generic nouns.
+    const kind = owned[1]!.toLowerCase().replace(/\b(?:existing|current|new|whole|entire)\s+/g, '').trim()
+    if (!GENERIC.test(kind)) add({ slot: 'business_type', value: kind, quote: owned[0].trim(), reason: 'the objective names the kind of business' })
+  }
 
   // What "worked" means, when the objective says it in words rather than numbers.
   const metrics: Array<[RegExp, string]> = [
