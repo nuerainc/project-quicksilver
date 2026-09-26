@@ -24,7 +24,7 @@
     "verify:llm": "npm run verify:llm --workspace=@quicksilver/agent",
     "setup:azure": "node scripts/setup-azure.mjs",
     "principal:token": "node --experimental-strip-types --no-warnings scripts/principal-token.ts",
-    "kernel:test": "node --experimental-strip-types --no-warnings --test packages/kernel/src/kernel.test.ts packages/kernel/src/authority.test.ts packages/kernel/src/process.test.ts packages/kernel/src/workflows/workflows.test.ts packages/kernel/src/nqc/nqc.test.ts packages/kernel/src/runtime/runtime.test.ts packages/kernel/src/identity/identity.test.ts packages/kernel/src/identity/separation.test.ts packages/kernel/src/triggers/triggers.test.ts packages/kernel/src/runtime/store-contract.test.ts packages/kernel/src/playbooks/playbook.test.ts",
+    "kernel:test": "node --experimental-strip-types --no-warnings --test packages/kernel/src/kernel.test.ts packages/kernel/src/authority.test.ts packages/kernel/src/process.test.ts packages/kernel/src/workflows/workflows.test.ts packages/kernel/src/nqc/nqc.test.ts packages/kernel/src/runtime/runtime.test.ts packages/kernel/src/identity/identity.test.ts packages/kernel/src/identity/separation.test.ts packages/kernel/src/triggers/triggers.test.ts packages/kernel/src/runtime/store-contract.test.ts packages/kernel/src/playbooks/playbook.test.ts packages/kernel/src/playbooks/shadow.test.ts",
     "agent:test": "node --experimental-strip-types --no-warnings --test packages/agent/src/models.test.ts packages/agent/src/schemas.test.ts packages/agent/src/contracts.test.ts",
     "lint": "npm run lint --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",

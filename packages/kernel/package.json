@@ -32,7 +32,8 @@
     "./triggers": "./src/triggers/index.ts",
     "./triggers/cron": "./src/triggers/cron.ts",
     "./runtime/postgres": "./src/runtime/postgres-store.ts",
-    "./playbooks": "./src/playbooks/playbook.ts"
+    "./playbooks": "./src/playbooks/playbook.ts",
+    "./playbooks/shadow": "./src/playbooks/shadow.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"
