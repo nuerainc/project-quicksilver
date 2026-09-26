@@ -162,8 +162,15 @@ const { graph, questions, report } = await createIntent('I have $500 and want to
 - Stated values become `HUMAN_SPECIFIED`, with the quote.
 - The mode (Genesis, Onboard or Operate) is inferred from a cue and explained,
   or asked about when the text gives no cue.
-- Slots the mode needs but the text doesn't give become open unknowns, ranked
-  by impact. The top three become the questions.
+- Values the text clearly implies are inferred, not asked (`implied.ts`).
+  - "We run a feed store" settles the business type, and "we sell hay to
+    ranchers" settles the revenue model.
+  - They are recorded as `AGENT_INFERRED` at confidence 0.8, with the quote
+    and the reason.
+  - The same applies to success metrics said in words, data sources to
+    connect, and the cadence and scope of recurring work.
+- Slots the mode needs but the text doesn't state or imply become open
+  unknowns, ranked by impact. The top three become the questions.
 
 ## Parsers and evaluation
 
@@ -190,11 +197,11 @@ npm run aura:test
 | ≥ 90% parsing accuracy | Baseline 80.8%; the model parser is measured on Azure |
 | 100% provenance tagging | Enforced by validation; true on all 52 labeled objectives |
 | 0 unsupported inferences | Enforced by validation; 0 on all 52 |
-| ≥ 80% top-3 agreement on impact ranking | **Not met: 56.3%** (chance 63.0%) on 32 objectives, founder rankings vs scorer v2, 2026-09-25 |
+| ≥ 80% top-3 agreement on impact ranking | **Not met: 56.3%** (chance 63.0%) on 32 objectives vs scorer v2, 2026-09-25. Scorer v3 (implied intent) needs fresh rankings |
 | All inferred values explained | Enforced by validation |
 | Tests pass | `npm run aura:test` |
 
-Not yet built: the web entry point, implied-intent parsing, and the choice predictor.
+Not yet built: the web entry point.
 
 ## Human rankings for the impact criterion
 

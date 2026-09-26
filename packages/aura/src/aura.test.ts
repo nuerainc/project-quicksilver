@@ -173,3 +173,26 @@ test('top-3 agreement: set overlap per objective, skips small sets, flags missin
   const tied = [{ variableId: 'x', score: 0.9 }, { variableId: 'y', score: 0.8 }, { variableId: 'z', score: 0.7 }, { variableId: 'w', score: 0.7 }]
   assert.equal(topThreeAgreement({ a: tied }, { a: ['x', 'y', 'w'] }).meanAgreement, 1, 'a pick tied with Aura’s third counts')
 })
+
+test('implied intent: what the objective clearly implies is inferred with its quote, not asked', async () => {
+  const feed = await createIntent('We run a feed store. Set up Quicksilver for it with read-only access.', { requestedBy: 'entity-founder', now: NOW })
+  const bt = feed.graph.variables.find((v) => v.id === 'business_type')!
+  assert.equal(bt.value, 'feed store')
+  assert.equal(bt.provenance, 'AGENT_INFERRED')
+  assert.ok(bt.confidence < 1)
+  assert.equal(bt.sources[0]!.quote, 'We run a feed store')
+  assert.match(bt.explanation!, /Implied by "We run a feed store"/)
+  assert.ok(!feed.impact.some((i) => i.variableId === 'business_type'), 'Aura no longer asks what the business is')
+  assert.deepEqual(feed.issues, [])
+
+  const hay = await createIntent('We sell hay and alfalfa to local ranchers. Help us understand our margins.', { requestedBy: 'entity-founder', now: NOW })
+  assert.equal(hay.graph.variables.find((v) => v.id === 'revenue_model')!.value, 'Sales of hay and alfalfa to ranchers')
+  assert.equal(hay.graph.variables.find((v) => v.id === 'success_metric')!.value, 'Margins')
+
+  const brief = await createIntent('Send me a weekly report on sales and open decisions.', { requestedBy: 'entity-founder', now: NOW })
+  assert.equal(brief.graph.variables.find((v) => v.id === 'cadence')!.value, 'Weekly')
+
+  // Nothing implied, nothing inferred: a vague objective still gets asked.
+  const vague = await createIntent('Bring my existing business into Quicksilver.', { requestedBy: 'entity-founder', now: NOW })
+  assert.ok(vague.impact.some((i) => i.variableId === 'business_type'))
+})

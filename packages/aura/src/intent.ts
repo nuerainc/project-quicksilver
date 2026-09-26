@@ -1,4 +1,5 @@
 import { scoreImpact, type ImpactItem } from './impact.ts'
+import { IMPLIED_CONFIDENCE, inferImplied } from './implied.ts'
 import { parseObjectiveBaseline, type ObjectiveParser, type ParsedObjective } from './parse.ts'
 import { provenanceReport, validateIntentGraph, type GraphIssue } from './provenance.ts'
 import type { AutonomyDepth, DecisionEdge, GraphVariable, IntentGraph, OperatingMode, VariableSource } from './types.ts'
@@ -103,7 +104,21 @@ export async function createIntent(objective: string, options: CreateIntentOptio
     edges.push({ from: 'objective', to: id, relation: 'depends-on' })
   }
 
-  // Slots the mode needs that were not stated become open unknowns.
+  // Values the text clearly implies (for example, "we run a feed store"
+  // settles the business type) are inferred with their quote, not asked about.
+  const slotsForMode = mode ? MODE_SLOTS[mode] : []
+  for (const imp of inferImplied(objective)) {
+    const slot = slotsForMode.find((s) => s.id === imp.slot)
+    if (!slot || variables.some((v) => v.id === slot.id)) continue
+    variables.push({
+      id: slot.id, label: slot.label, kind: slot.id === 'success_metric' ? 'metric' : 'assumption', value: imp.value,
+      provenance: 'AGENT_INFERRED', confidence: IMPLIED_CONFIDENCE, importance: slot.importance, sources: human(imp.quote),
+      explanation: `Implied by "${imp.quote}": ${imp.reason}.`, updatedAt: at, updatedBy: 'aura:implied',
+    })
+    edges.push({ from: 'objective', to: slot.id, relation: 'depends-on' })
+  }
+
+  // Slots the mode needs that were not stated or implied become open unknowns.
   for (const slot of mode ? MODE_SLOTS[mode] : []) {
     if (variables.some((v) => v.id === slot.id)) continue
     variables.push({ id: slot.id, label: slot.label, kind: 'unknown', provenance: 'AGENT_INFERRED', confidence: 0, importance: slot.importance, sources: [], updatedAt: at, updatedBy: 'aura:baseline-parser' })
