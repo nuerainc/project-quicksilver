@@ -38,8 +38,10 @@ those names and that knowledge base id, the same way the app refuses project
 
 To create this project's own endpoints (Sanity Dashboard → Context):
 
-1. Deploy the schema first (step 4). An endpoint with a dataset source needs
-   a deployed schema.
+1. Deploy the schema (step 4) **and the Studio**: from `apps/studio`, run
+   `npx sanity deploy`. An endpoint with a dataset source reads the schema from
+   a deployed Studio. The Nuera Studio is
+   https://project-quicksilver.sanity.studio (`appId` is in `sanity.cli.ts`).
 2. **GROQ-mode endpoint:** new MCP named `nuera-quicksilver-agent`, source
    dataset `f87t11g1` / `production`. Names can't be changed later.
 3. **Knowledge base:** new knowledge base (for example "Nuera Quicksilver
@@ -59,3 +61,9 @@ the nine Quicksilver content types. No Challenge data was copied or modified.
 Schema deployment and Context MCP configuration remain pending. The local
 Studio dev server also needs its Vite dependency scan resolved before it can be
 opened in a browser from this environment.
+
+**Status (2026-09-25):** done. Endpoints `nuera-quicksilver-agent` (dataset
+`f87t11g1`/`production`) and `nuera-quicksilver-kb` (knowledge base
+`kbzyKoLrbQiu`, 12 evidence and policy documents; its 2 flagged conflicts are
+the seeded contradictions and are left open on purpose). Both report "Ready to
+connect". The challenge endpoints were left unchanged.
