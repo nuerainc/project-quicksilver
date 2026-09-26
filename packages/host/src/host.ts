@@ -21,6 +21,7 @@ import { createHostMetrics, type HostMetrics } from './metrics.ts'
 import { SecretsVault, VaultError } from './vault.ts'
 import { handleIntentRoute, type IntentApiDeps } from './intent-api.ts'
 import { handleShadowRoute, type ShadowApiDeps } from './shadow-api.ts'
+import { handleGenesisRoute, type GenesisApiDeps } from './genesis-api.ts'
 
 /**
  * The single-tenant Quicksilver host: one process that runs the governed
@@ -52,6 +53,8 @@ export interface HostDependencies {
   intent?: IntentApiDeps
   /** Shadow mode for the Onboard pilot (M4). Routes return 404 when absent. */
   shadow?: ShadowApiDeps
+  /** Genesis run (M5): records and evaluates only. Routes return 404 when absent. */
+  genesis?: GenesisApiDeps
 }
 
 const CONSOLE_HEADERS = {
@@ -351,6 +354,20 @@ export class QuicksilverHost {
       if (handled) return handled
     }
 
+    // Genesis run (M5): records and evaluates; never moves money
+    if (parts[1] === 'genesis' && this.deps.genesis) {
+      const vault = this.vault
+      const handled = await handleGenesisRoute({
+        method, parts, principal, tenantId: this.config.tenantId, access: this.access,
+        readBody: () => readJson(req, this.config.http.maxBodyBytes),
+      }, {
+        ...(vault ? { vaultNames: async () => (await vault.list(this.hostPrincipal)).filter((s) => !s.disabled).map((s) => s.name) } : {}),
+        ...this.deps.genesis,
+        ...(this.deps.now ? { now: this.deps.now } : {}),
+      })
+      if (handled) return handled
+    }
+
     // Runs
     if (path === '/api/runs' && method === 'GET') {
       const denied = this.authorize(principal, 'run:read')
@@ -526,8 +543,8 @@ function headerValue(req: IncomingMessage, name: string): string | null {
 
 function routeLabel(method: string, path: string): string {
   if (path.startsWith('/webhooks/')) return `${method} /webhooks/:id`
-  const normalized = path.replace(/^\/api\/runs\/[^/]+/, '/api/runs/:id').replace(/^\/api\/secrets\/[^/]+/, '/api/secrets/:name').replace(/^\/api\/intents\/[^/]+/, '/api/intents/:id').replace(/^\/api\/intent-ledger\/[^/]+/, '/api/intent-ledger/:company')
-  const known = ['/healthz', '/readyz', '/metrics', '/api/whoami', '/api/runs', '/api/runs/:id', '/api/runs/:id/cancel', '/api/runs/:id/redrive', '/api/dead-letters', '/api/stats', '/api/schedules', '/api/webhooks', '/api/workflows', '/api/secrets', '/api/secrets/:name', '/api/admin/reload-secrets', '/api/intents', '/api/intents/:id', '/api/intents/:id/answers', '/api/intent-ledger/:company']
+  const normalized = path.replace(/^\/api\/runs\/[^/]+/, '/api/runs/:id').replace(/^\/api\/secrets\/[^/]+/, '/api/secrets/:name').replace(/^\/api\/intents\/[^/]+/, '/api/intents/:id').replace(/^\/api\/intent-ledger\/[^/]+/, '/api/intent-ledger/:company').replace(/^\/api\/genesis\/experiments\/[^/]+/, '/api/genesis/experiments/:id')
+  const known = ['/healthz', '/readyz', '/metrics', '/api/whoami', '/api/runs', '/api/runs/:id', '/api/runs/:id/cancel', '/api/runs/:id/redrive', '/api/dead-letters', '/api/stats', '/api/schedules', '/api/webhooks', '/api/workflows', '/api/secrets', '/api/secrets/:name', '/api/admin/reload-secrets', '/api/intents', '/api/intents/:id', '/api/intents/:id/answers', '/api/intent-ledger/:company', '/api/genesis', '/api/genesis/experiments', '/api/genesis/money', '/api/genesis/experiments/:id/start', '/api/genesis/experiments/:id/measurements', '/api/genesis/experiments/:id/evaluate', '/api/genesis/experiments/:id/decide']
   return known.includes(normalized) ? `${method} ${normalized}` : `${method} other`
 }
 

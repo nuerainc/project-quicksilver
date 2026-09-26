@@ -24,6 +24,19 @@ button.ghost { background: transparent; color: var(--accent); }
 .ok { color: var(--ok); } .warn { color: var(--warn); } .bad { color: var(--bad); }
 .msg { font-size: 13px; min-height: 1.2em; }
 .list-intent { cursor: pointer; } .list-intent:hover { color: var(--accent); }
+body { overflow-wrap: anywhere; }
+input[type=checkbox] { width: auto; margin: 0 6px 0 0; vertical-align: middle; }
+.check { display: flex; align-items: center; color: var(--ink); font-size: 14px; margin-top: 8px; }
+.blockers { border: 1px solid var(--bad); border-left-width: 4px; border-radius: 6px; padding: 8px 12px; margin-bottom: 12px; }
+.blockers.clear { border-color: var(--ok); }
+.blockers ul { margin: 4px 0 0; padding-left: 18px; }
+.bar { height: 12px; background: var(--line); border-radius: 6px; overflow: hidden; margin: 6px 0; }
+.bar > span { display: block; height: 100%; background: var(--accent); }
+.bar.over > span { background: var(--bad); }
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 6px 12px; margin: 8px 0; }
+.stat .k { font-size: 12px; color: var(--muted); } .stat .v { font-size: 16px; font-variant-numeric: tabular-nums; }
+.mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+h3 { font-size: 14px; margin: 12px 0 4px; }
 </style>
 </head>
 <body>
@@ -64,6 +77,40 @@ button.ghost { background: transparent; color: var(--accent); }
     </div>
     <div id="recs"></div>
   </section>
+
+  <section id="ledger-section" hidden>
+    <h2>Intent ledger</h2>
+    <p class="msg">Read-only: what the providers have stated, in the order they stated it.</p>
+    <div class="row">
+      <div><label for="ledger-company">Company id</label><input id="ledger-company" maxlength="100" placeholder="nuera-feed" autocomplete="off"></div>
+      <button id="ledger-load" style="flex:0 0 auto">Show ledger</button>
+    </div>
+    <div class="msg" id="ledger-msg"></div>
+    <div id="ledger"></div>
+  </section>
+
+  <section id="genesis-section" hidden>
+    <h2>Genesis run</h2>
+    <p class="msg">Records and evaluates only. Nothing here moves money: the money form records money that has already moved.</p>
+    <div class="msg" id="genesis-msg"></div>
+    <div id="genesis"></div>
+    <h3>Record money</h3>
+    <div class="row">
+      <div><label for="m-kind">Kind</label><select id="m-kind"><option value="spend">spend</option><option value="compute">compute</option><option value="revenue">revenue</option><option value="refund">refund</option></select></div>
+      <div><label for="m-amount">Amount (USD)</label><input id="m-amount" type="number" min="0.01" step="0.01" inputmode="decimal"></div>
+      <div><label for="m-category">Category</label><input id="m-category" maxlength="40" placeholder="advertising" autocomplete="off"></div>
+    </div>
+    <label for="m-description">What it was</label>
+    <input id="m-description" maxlength="500" autocomplete="off">
+    <div class="row">
+      <div><label for="m-source-type">Source</label><select id="m-source-type"><option>receipt</option><option>invoice</option><option>provider-usage</option><option>payment-processor</option><option>bank</option><option>manual</option></select></div>
+      <div><label for="m-source-ref">Source reference</label><input id="m-source-ref" maxlength="200" placeholder="receipt number, invoice id" autocomplete="off"></div>
+      <div><label for="m-experiment">Experiment</label><select id="m-experiment"><option value="">none</option></select></div>
+    </div>
+    <label class="check"><input id="m-confirm" type="checkbox">I approve this as myself if the rules say the founder must decide</label>
+    <button id="m-record">Record money</button>
+    <div class="msg" id="money-msg"></div>
+  </section>
 </main>
 <script>
 (() => {
@@ -82,7 +129,7 @@ button.ghost { background: transparent; color: var(--accent); }
   async function api(path, body) {
     const r = await fetch(path, { method: body === undefined ? 'GET' : 'POST', headers: { authorization: 'Bearer ' + token, ...(body !== undefined ? { 'content-type': 'application/json' } : {}) }, ...(body !== undefined ? { body: JSON.stringify(body) } : {}) })
     const data = await r.json().catch(() => ({}))
-    if (!r.ok) throw new Error(data.error || ('HTTP ' + r.status))
+    if (!r.ok) { const e = new Error(data.error || ('HTTP ' + r.status)); e.status = r.status; e.data = data; throw e }
     return data
   }
   const say = (id, text, cls = '') => { $(id).className = 'msg ' + cls; $(id).textContent = text }
@@ -90,7 +137,7 @@ button.ghost { background: transparent; color: var(--accent); }
   async function signIn() {
     token = $('token').value.trim()
     try { sessionStorage.setItem('qs-token', token) } catch {}
-    try { const me = await api('/api/whoami'); say('who', 'Signed in as ' + me.id + ' (' + me.roles.join(', ') + ')', 'ok'); await loadIntents() }
+    try { const me = await api('/api/whoami'); say('who', 'Signed in as ' + me.id + ' (' + me.roles.join(', ') + ')', 'ok'); $('ledger-section').hidden = false; await loadIntents(); await loadGenesis() }
     catch (e) { say('who', e.message, 'bad') }
   }
   async function loadIntents() {
@@ -144,6 +191,143 @@ button.ghost { background: transparent; color: var(--accent); }
     try { const r = await api('/api/shadow/' + encodeURIComponent(current.id) + '/generate', { departments }); say('shadow-summary', 'The agent proposed ' + r.added.length + (r.refused && r.refused.length ? ' (' + r.refused.length + ' refused)' : '') + '. Nothing was executed.', 'ok'); setTimeout(() => loadShadow(current.id), 800) }
     catch (e) { say('shadow-summary', e.message, 'bad') }
   })
+
+  // ── Intent ledger (read-only) ──────────────────────────────────────────
+  const reasonsOf = (e) => (e && e.data && Array.isArray(e.data.reasons) && e.data.reasons.length ? e.data.reasons : [])
+  function fail(box, e) {
+    const reasons = reasonsOf(e)
+    box.className = 'msg bad'
+    box.replaceChildren(el('div', {}, e.message), ...(reasons.length ? [el('ul', {}, ...reasons.map((r) => el('li', {}, r)))] : []))
+  }
+  const fmtTime = (iso) => { const d = new Date(iso); return isNaN(d) ? String(iso) : d.toLocaleString() }
+  async function loadLedger() {
+    const company = $('ledger-company').value.trim()
+    const box = $('ledger')
+    box.replaceChildren()
+    if (!company) { say('ledger-msg', 'Enter a company id.', 'warn'); return }
+    try { sessionStorage.setItem('qs-company', company) } catch {}
+    say('ledger-msg', 'Loading…')
+    let data
+    try { data = await api('/api/intent-ledger/' + encodeURIComponent(company)) } catch (e) { fail($('ledger-msg'), e); return }
+    const v = data.verified
+    say('ledger-msg', v.valid ? 'Verified: ' + v.entries + ' entries, hash chain intact.' : 'NOT verified: broken at entry ' + v.brokenAt + ' (' + v.reason + ').', v.valid ? 'ok' : 'bad')
+    const st = data.state
+    const providers = st.providers.map((p) => el('div', { class: 'item' }, p.name + ' ', el('span', { class: 'tag' }, p.kind), el('span', { class: 'tag' }, 'authority ' + Math.round(p.authority * 100) + '%'), el('span', { class: 'tag mono' }, p.id)))
+    const pname = (id) => (st.providers.find((p) => p.id === id) || { name: id }).name
+    const goals = Object.values(st.goals).map((g) => {
+      const weights = Object.entries(st.weights).filter(([, w]) => g.id in w).map(([pid, w]) => pname(pid) + ' ' + w[g.id])
+      const autonomy = Object.entries(st.autonomy).filter(([, a]) => g.id in a).map(([pid, a]) => pname(pid) + ': ' + a[g.id])
+      return el('div', { class: 'item' },
+        el('div', {}, g.label + ' ', el('span', { class: 'tag' }, g.horizon), g.expiresAt ? el('span', { class: 'tag warn' }, 'lapses ' + new Date(g.expiresAt).toLocaleDateString()) : ''),
+        el('div', { class: 'msg' }, 'Weight: ' + (weights.join(' · ') || 'not set') + ' · Autonomy: ' + (autonomy.join(' · ') || 'not set') + (g.serves.length ? ' · serves ' + g.serves.join(', ') : '')))
+    })
+    const rule = st.rule ? (st.rule.kind === 'veto' ? 'veto by ' + st.rule.vetoBy.map(pname).join(', ') : st.rule.kind === 'final-say' ? 'final say: ' + pname(st.rule.providerId) : st.rule.kind) : 'not set'
+    const commitments = Object.values(st.commitments).map((c) => el('div', { class: 'item' }, '“' + c.text + '” ', el('span', { class: 'tag' }, c.audience)))
+    const entries = data.entries.slice(-12).reverse().map((e) => el('div', { class: 'item' },
+      el('span', { class: 'tag' }, '#' + e.seq), el('strong', {}, e.change.type), ' by ' + e.actor.id + ' (' + e.actor.role + ')',
+      el('div', { class: 'msg' }, fmtTime(e.at) + ' · ', el('span', { class: 'mono' }, e.hash.slice(0, 12) + '…'), e.reason ? ' · ' + e.reason : '')))
+    box.replaceChildren(
+      el('h3', {}, 'Providers'), ...(providers.length ? providers : [el('div', { class: 'msg' }, 'None.')]),
+      el('h3', {}, 'Goals'), ...(goals.length ? goals : [el('div', { class: 'msg' }, 'No goals yet.')]),
+      el('h3', {}, 'Decision rule'), el('div', {}, rule),
+      ...(commitments.length ? [el('h3', {}, 'Commitments'), ...commitments] : []),
+      el('h3', {}, 'Recent entries'), ...entries)
+  }
+
+  // ── Genesis run ────────────────────────────────────────────────────────
+  const usd = (n) => (n < 0 ? '−$' : '$') + Math.abs(n).toFixed(2)
+  const statusCls = (s) => (s === 'killed' ? 'bad' : s === 'running' || s === 'scaled' ? 'ok' : s === 'held' ? 'warn' : '')
+  function stat(k, v, cls = '') { return el('div', { class: 'stat' }, el('div', { class: 'k' }, k), el('div', { class: 'v ' + cls }, v)) }
+  async function genesisAction(path, body, box) {
+    try { const r = await api('/api/genesis/experiments/' + path, body); await loadGenesis(); return r }
+    catch (e) { fail(box, e); return null }
+  }
+  function experimentItem(x) {
+    const d = x.definition, m = d.metric, id = d.id
+    const enc = encodeURIComponent(id)
+    const msg = el('div', { class: 'msg' })
+    const last = x.measurements.length ? x.measurements[x.measurements.length - 1] : null
+    const active = x.status === 'running' || x.status === 'held'
+    const controls = []
+    if (x.status === 'draft') controls.push(el('button', { style: 'flex:0 0 auto', onclick: () => genesisAction(enc + '/start', {}, msg) }, 'Start'))
+    if (active) {
+      const val = el('input', { type: 'number', step: 'any', 'aria-label': 'Measurement for ' + id, placeholder: m.label })
+      const src = el('input', { maxlength: '300', 'aria-label': 'Source for ' + id, placeholder: 'Where the number came from' })
+      controls.push(el('div', { class: 'row' }, val, src, el('button', { class: 'ghost', style: 'flex:0 0 auto', onclick: () => {
+        if (val.value.trim() === '') { msg.className = 'msg bad'; msg.textContent = 'Enter a number.'; return }
+        genesisAction(enc + '/measurements', { value: Number(val.value), source: src.value }, msg)
+      } }, 'Record measurement')))
+      controls.push(el('button', { class: 'ghost', style: 'flex:0 0 auto', onclick: async () => {
+        const r = await genesisAction(enc + '/evaluate', {}, msg)
+        if (r) { const box = document.getElementById('exp-msg-' + id) || msg; box.className = 'msg ' + (r.awaitingDecision ? 'warn' : 'ok'); box.textContent = r.evaluation.verdict + ': ' + r.evaluation.explanation + (r.applied ? ' Applied: ' + r.applied + '.' : r.awaitingDecision ? ' Waiting for your decision.' : '') }
+      } }, 'Evaluate'))
+    }
+    if (x.awaitingDecision) {
+      const note = el('input', { maxlength: '500', 'aria-label': 'Decision note for ' + id, placeholder: 'Note (optional)' })
+      controls.push(el('div', { class: 'row' }, note, el('button', { style: 'flex:0 0 auto', onclick: () => genesisAction(enc + '/decide', note.value.trim() ? { note: note.value } : {}, msg) }, 'Decide: apply ' + x.evaluation.verdict)))
+    }
+    msg.id = 'exp-msg-' + id
+    return el('div', { class: 'item' },
+      el('div', {}, el('strong', {}, id), ' ', el('span', { class: 'tag ' + statusCls(x.status) }, x.status), x.awaitingDecision ? el('span', { class: 'tag warn' }, 'awaiting your decision: ' + x.evaluation.verdict) : ''),
+      el('div', {}, d.hypothesis),
+      el('div', { class: 'msg' }, m.label + (m.unit ? ' (' + m.unit + ')' : '') + ': kill ' + m.kill + ' · hold ' + m.hold + ' · scale ' + m.scale + ' (' + m.direction.replace(/-/g, ' ') + ')'),
+      el('div', { class: 'msg' }, 'Latest: ' + (last ? last.value + ' from ' + last.source + ', ' + fmtTime(last.at) : 'no measurement yet') + ' · spent ' + usd(x.spentUsd) + ' of ' + usd(d.budgetUsd) + (x.endsAt ? ' · ends ' + new Date(x.endsAt).toLocaleDateString() : ' · ' + d.durationDays + ' days once started')),
+      x.evaluation ? el('div', { class: 'msg' }, 'Evaluation now: ' + x.evaluation.verdict + '. ' + x.evaluation.explanation) : '',
+      ...controls, msg)
+  }
+  async function loadGenesis() {
+    let g
+    try { g = await api('/api/genesis') } catch (e) {
+      if (e.status === 404) { $('genesis-section').hidden = true; return }
+      $('genesis-section').hidden = false; fail($('genesis-msg'), e); return
+    }
+    $('genesis-section').hidden = false
+    const t = g.totals
+    const pct = t.budgetUsd > 0 ? Math.max(0, Math.min(100, (t.capitalUsedUsd / t.budgetUsd) * 100)) : 0
+    const blockers = g.blockers.length
+      ? el('div', { class: 'blockers', role: 'alert' }, el('strong', { class: 'bad' }, 'The run cannot start yet'), el('ul', {}, ...g.blockers.map((b) => el('li', {}, b))), g.vaultNote ? el('div', { class: 'msg warn' }, g.vaultNote) : '')
+      : el('div', { class: 'blockers clear' }, el('strong', { class: 'ok' }, 'Nothing blocks the run.'))
+    const v = g.ledger.verified
+    const recent = g.ledger.recent.slice(0, 5).map((e) => el('div', { class: 'item' }, el('span', { class: 'tag' }, '#' + e.seq), el('span', { class: 'tag' }, e.kind), usd(e.amountUsd) + ' · ' + e.category + ' · ' + e.description, el('div', { class: 'msg' }, e.source.type + ': ' + e.source.ref + ' · by ' + e.recordedBy + (e.experimentId ? ' · ' + e.experimentId : '') + ' · ', el('span', { class: 'mono' }, e.hash.slice(0, 12) + '…'))))
+    $('genesis').replaceChildren(
+      blockers,
+      el('div', { class: 'msg' }, 'Run ' + g.runId + ': ' + usd(g.config.budgetUsd) + ' over ' + g.config.durationDays + ' days, digital only · ' + (g.run.startedAt ? 'started ' + new Date(g.run.startedAt).toLocaleDateString() + ', ' + g.run.daysLeft + ' day(s) left' : 'not started')),
+      el('div', { class: 'bar' + (t.remainingUsd < 0 ? ' over' : ''), role: 'img', 'aria-label': 'Capital used ' + Math.round(pct) + '% of budget' }, el('span', { style: 'width:' + pct.toFixed(1) + '%' })),
+      el('div', { class: 'stats' },
+        stat('Capital used (incl. compute ' + usd(t.computeUsd) + ')', usd(t.capitalUsedUsd) + ' of ' + usd(t.budgetUsd)),
+        stat('Remaining', usd(t.remainingUsd), t.remainingUsd < t.budgetUsd * 0.1 ? 'warn' : ''),
+        stat('Revenue', usd(t.revenueUsd)),
+        stat('Net', usd(t.netUsd), t.netUsd < 0 ? 'bad' : 'ok'),
+        stat('Return on capital', t.returnOnCapital === null ? '—' : String(t.returnOnCapital))),
+      el('div', { class: 'msg ' + (v.valid ? 'ok' : 'bad') }, 'Money ledger: ' + g.ledger.entries + ' entries, ' + (v.valid ? 'hash chain verified.' : 'DOES NOT VERIFY: ' + v.errors.join(' '))),
+      el('h3', {}, 'Experiments'),
+      ...(g.experiments.length ? g.experiments.map(experimentItem) : [el('div', { class: 'msg' }, 'No experiments drafted yet.')]),
+      ...(recent.length ? [el('h3', {}, 'Recent money entries'), ...recent] : []))
+    const sel = $('m-experiment'), keep = sel.value
+    sel.replaceChildren(el('option', { value: '' }, 'none'), ...g.experiments.map((x) => el('option', { value: x.definition.id }, x.definition.id + ' (' + x.status + ')')))
+    sel.value = g.experiments.some((x) => x.definition.id === keep) ? keep : ''
+  }
+  async function recordMoney() {
+    const box = $('money-msg')
+    const amount = Number($('m-amount').value)
+    const body = { kind: $('m-kind').value, amountUsd: amount, category: $('m-category').value.trim(), description: $('m-description').value, source: { type: $('m-source-type').value, ref: $('m-source-ref').value }, confirm: $('m-confirm').checked }
+    if (!body.category) delete body.category
+    if ($('m-experiment').value) body.experimentId = $('m-experiment').value
+    try {
+      const r = await api('/api/genesis/money', body)
+      box.className = 'msg ok'
+      box.textContent = 'Recorded entry #' + r.entry.seq + ' (' + r.entry.kind + ' ' + usd(r.entry.amountUsd) + ')' + (r.decision ? ' · kernel: ' + r.decision.recommendation + ', spend risk ' + r.decision.riskLevel : '') + '. ' + r.note
+      $('m-confirm').checked = false; $('m-amount').value = ''; $('m-description').value = ''; $('m-source-ref').value = ''
+      await loadGenesis()
+    } catch (e) {
+      fail(box, e)
+      if (e.status === 409 && e.data && e.data.decision && !body.confirm) box.append(el('div', { class: 'warn' }, 'Not recorded. If you approve it, tick the box above and record it again.'))
+    }
+  }
+  $('ledger-load').addEventListener('click', loadLedger)
+  $('ledger-company').addEventListener('keydown', (ev) => { if (ev.key === 'Enter') loadLedger() })
+  try { $('ledger-company').value = sessionStorage.getItem('qs-company') || '' } catch {}
+  $('m-record').addEventListener('click', recordMoney)
   if (token) signIn()
 })()
 </script>
