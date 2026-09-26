@@ -1,0 +1,559 @@
+{
+ "version": 1,
+ "createdAt": "2026-09-26",
+ "instructions": "Answer as the intent provider for a company you run. Each item has two reasonable options; neither is wrong. Go with your first instinct, and say whether you lean slightly or clearly.",
+ "dimensions": [
+  {
+   "id": "horizon",
+   "left": "Short term",
+   "right": "Long term"
+  },
+  {
+   "id": "risk",
+   "left": "Safe",
+   "right": "Bold"
+  },
+  {
+   "id": "reputation",
+   "left": "Reputation",
+   "right": "Revenue"
+  },
+  {
+   "id": "customer",
+   "left": "Customer interest",
+   "right": "Company interest"
+  },
+  {
+   "id": "autonomy",
+   "left": "Decide yourself",
+   "right": "Ask me first"
+  },
+  {
+   "id": "relationships",
+   "left": "Relationships",
+   "right": "Efficiency"
+  }
+ ],
+ "order": [
+  "h4",
+  "r5",
+  "p5",
+  "c2",
+  "a1",
+  "e1",
+  "r1",
+  "p1",
+  "c1",
+  "a2",
+  "e2",
+  "h1",
+  "p2",
+  "c3",
+  "a3",
+  "e3",
+  "h2",
+  "r2",
+  "m-a",
+  "c4",
+  "a4",
+  "e4",
+  "m-e",
+  "h3",
+  "r3",
+  "p3",
+  "m-c",
+  "a5",
+  "e5",
+  "h5",
+  "m-h",
+  "r4",
+  "p4",
+  "c5",
+  "m-r",
+  "m-p"
+ ],
+ "items": [
+  {
+   "id": "h1",
+   "dimension": "horizon",
+   "stem": "A big order would keep the whole crew busy this month and push the new product back a quarter.",
+   "a": {
+    "text": "Take the order",
+    "pole": "left"
+   },
+   "b": {
+    "text": "Stay on the new product",
+    "pole": "right"
+   }
+  },
+  {
+   "id": "h2",
+   "dimension": "horizon",
+   "stem": "The company had a good year and has spare cash.",
+   "a": {
+    "text": "Reinvest it in equipment that pays off over three years",
+    "pole": "right"
+   },
+   "b": {
+    "text": "Pay it out to the owners now",
+    "pole": "left"
+   }
+  },
+  {
+   "id": "h3",
+   "dimension": "horizon",
+   "stem": "Training everyone on a better system would mean two slow weeks.",
+   "a": {
+    "text": "Skip it and keep this month's pace",
+    "pole": "left"
+   },
+   "b": {
+    "text": "Do it; the company will be faster a year from now",
+    "pole": "right"
+   }
+  },
+  {
+   "id": "h4",
+   "dimension": "horizon",
+   "stem": "You want more sales.",
+   "a": {
+    "text": "Run a discount promotion that lifts sales this month",
+    "pole": "left"
+   },
+   "b": {
+    "text": "Build a customer email list that grows sales slowly over years",
+    "pole": "right"
+   }
+  },
+  {
+   "id": "h5",
+   "dimension": "horizon",
+   "stem": "The shop roof leaks.",
+   "a": {
+    "text": "Replace it for $6,000 now to avoid bigger costs later",
+    "pole": "right"
+   },
+   "b": {
+    "text": "Patch it for $800 and deal with it later",
+    "pole": "left"
+   }
+  },
+  {
+   "id": "r1",
+   "dimension": "risk",
+   "stem": "There's a chance to launch a new product line.",
+   "a": {
+    "text": "30% chance it doubles revenue, 70% chance it loses $20,000",
+    "pole": "right"
+   },
+   "b": {
+    "text": "Improve the current line for a reliable 5% gain",
+    "pole": "left"
+   }
+  },
+  {
+   "id": "r2",
+   "dimension": "risk",
+   "stem": "The company is ready to grow.",
+   "a": {
+    "text": "Grow in the town you already know",
+    "pole": "left"
+   },
+   "b": {
+    "text": "Open where nobody sells what you sell, but demand is unproven",
+    "pole": "right"
+   }
+  },
+  {
+   "id": "r3",
+   "dimension": "risk",
+   "stem": "This quarter's marketing budget.",
+   "a": {
+    "text": "Put 10% into a new channel nobody has tested",
+    "pole": "right"
+   },
+   "b": {
+    "text": "Keep it all on channels that already work",
+    "pole": "left"
+   }
+  },
+  {
+   "id": "r4",
+   "dimension": "risk",
+   "stem": "One large customer wants a contract that would be half your revenue.",
+   "a": {
+    "text": "Sign it",
+    "pole": "right"
+   },
+   "b": {
+    "text": "Keep customers small and spread out",
+    "pole": "left"
+   }
+  },
+  {
+   "id": "r5",
+   "dimension": "risk",
+   "stem": "How much cash should the company keep on hand?",
+   "a": {
+    "text": "Six months of expenses, even if it sits idle",
+    "pole": "left"
+   },
+   "b": {
+    "text": "Two months, and put the rest to work",
+    "pole": "right"
+   }
+  },
+  {
+   "id": "p1",
+   "dimension": "reputation",
+   "stem": "A popular product sells well, but you think it's mediocre.",
+   "a": {
+    "text": "Keep selling it",
+    "pole": "right"
+   },
+   "b": {
+    "text": "Stop selling it and lose the sales",
+    "pole": "left"
+   }
+  },
+  {
+   "id": "p2",
+   "dimension": "reputation",
+   "stem": "A supplier offers to make a cheaper line you could sell under your name.",
+   "a": {
+    "text": "Keep your name only on what you make yourself",
+    "pole": "left"
+   },
+   "b": {
+    "text": "Take the deal and the extra sales",
+    "pole": "right"
+   }
+  },
+  {
+   "id": "p3",
+   "dimension": "reputation",
+   "stem": "You have $2,000 to spend.",
+   "a": {
+    "text": "Ads that bring in measurable sales",
+    "pole": "right"
+   },
+   "b": {
+    "text": "Sponsor a local event that gets your name out but brings no direct sales",
+    "pole": "left"
+   }
+  },
+  {
+   "id": "p4",
+   "dimension": "reputation",
+   "stem": "A well-known brand with a mixed public image offers a big distribution deal.",
+   "a": {
+    "text": "Take it",
+    "pole": "right"
+   },
+   "b": {
+    "text": "Pass",
+    "pole": "left"
+   }
+  },
+  {
+   "id": "p5",
+   "dimension": "reputation",
+   "stem": "There's a shortage, and customers would pay more for what you sell.",
+   "a": {
+    "text": "Keep your usual prices",
+    "pole": "left"
+   },
+   "b": {
+    "text": "Raise prices to match demand",
+    "pole": "right"
+   }
+  },
+  {
+   "id": "c1",
+   "dimension": "customer",
+   "stem": "A customer wants the premium package, but the basic one would do everything they need.",
+   "a": {
+    "text": "Tell them the basic one will do",
+    "pole": "left"
+   },
+   "b": {
+    "text": "Sell them the premium package",
+    "pole": "right"
+   }
+  },
+  {
+   "id": "c2",
+   "dimension": "customer",
+   "stem": "A supplier cuts its prices.",
+   "a": {
+    "text": "Keep the savings as margin",
+    "pole": "right"
+   },
+   "b": {
+    "text": "Pass the savings on to customers",
+    "pole": "left"
+   }
+  },
+  {
+   "id": "c3",
+   "dimension": "customer",
+   "stem": "How should service contracts renew?",
+   "a": {
+    "text": "Automatically, unless the customer cancels",
+    "pole": "right"
+   },
+   "b": {
+    "text": "Only when the customer chooses to renew",
+    "pole": "left"
+   }
+  },
+  {
+   "id": "c4",
+   "dimension": "customer",
+   "stem": "An order arrived late because the shipping company slipped.",
+   "a": {
+    "text": "Refund the shipping out of your own pocket",
+    "pole": "left"
+   },
+   "b": {
+    "text": "Apologize and point to the shipping company",
+    "pole": "right"
+   }
+  },
+  {
+   "id": "c5",
+   "dimension": "customer",
+   "stem": "Choose a return policy.",
+   "a": {
+    "text": "14 days, unopened items only",
+    "pole": "right"
+   },
+   "b": {
+    "text": "30 days, no questions asked",
+    "pole": "left"
+   }
+  },
+  {
+   "id": "a1",
+   "dimension": "autonomy",
+   "stem": "A routine supplier bill arrives 5% higher than last month.",
+   "a": {
+    "text": "Pay it and note the change",
+    "pole": "left"
+   },
+   "b": {
+    "text": "Ask me before paying",
+    "pole": "right"
+   }
+  },
+  {
+   "id": "a2",
+   "dimension": "autonomy",
+   "stem": "A customer asks for a small discount to close a sale.",
+   "a": {
+    "text": "Check with me every time",
+    "pole": "right"
+   },
+   "b": {
+    "text": "Use your judgment up to 10%",
+    "pole": "left"
+   }
+  },
+  {
+   "id": "a3",
+   "dimension": "autonomy",
+   "stem": "A cheaper shipping company with good reviews turns up.",
+   "a": {
+    "text": "Switch, and tell me afterward",
+    "pole": "left"
+   },
+   "b": {
+    "text": "Propose it and wait for my answer",
+    "pole": "right"
+   }
+  },
+  {
+   "id": "a4",
+   "dimension": "autonomy",
+   "stem": "A social media post is drafted and ready.",
+   "a": {
+    "text": "Show it to me first",
+    "pole": "right"
+   },
+   "b": {
+    "text": "Post it",
+    "pole": "left"
+   }
+  },
+  {
+   "id": "a5",
+   "dimension": "autonomy",
+   "stem": "Two jobs are booked for the same morning.",
+   "a": {
+    "text": "Move the smaller one and let both customers know",
+    "pole": "left"
+   },
+   "b": {
+    "text": "Ask me which one moves",
+    "pole": "right"
+   }
+  },
+  {
+   "id": "e1",
+   "dimension": "relationships",
+   "stem": "Your supplier of ten years is 8% more expensive than a new one.",
+   "a": {
+    "text": "Stay with them",
+    "pole": "left"
+   },
+   "b": {
+    "text": "Switch to the new one",
+    "pole": "right"
+   }
+  },
+  {
+   "id": "e2",
+   "dimension": "relationships",
+   "stem": "A long-time customer has an old discount that makes them barely profitable.",
+   "a": {
+    "text": "Move them to normal pricing",
+    "pole": "right"
+   },
+   "b": {
+    "text": "Keep serving them as before",
+    "pole": "left"
+   }
+  },
+  {
+   "id": "e3",
+   "dimension": "relationships",
+   "stem": "Your local bookkeeper costs more than an online service.",
+   "a": {
+    "text": "Switch to the online service",
+    "pole": "right"
+   },
+   "b": {
+    "text": "Keep the local bookkeeper",
+    "pole": "left"
+   }
+  },
+  {
+   "id": "e4",
+   "dimension": "relationships",
+   "stem": "A partner business sends you customers but takes a lot of your time.",
+   "a": {
+    "text": "Keep investing in the relationship",
+    "pole": "left"
+   },
+   "b": {
+    "text": "Scale it back",
+    "pole": "right"
+   }
+  },
+  {
+   "id": "e5",
+   "dimension": "relationships",
+   "stem": "Your biggest customer wants a quarterly update.",
+   "a": {
+    "text": "Email the report and save the half day",
+    "pole": "right"
+   },
+   "b": {
+    "text": "Meet them in person",
+    "pole": "left"
+   }
+  },
+  {
+   "id": "m-h",
+   "dimension": "horizon",
+   "mirrors": "h4",
+   "stem": "To grow sales:",
+   "a": {
+    "text": "Build a customer base slowly over years",
+    "pole": "right"
+   },
+   "b": {
+    "text": "Run a promotion that pays off this month",
+    "pole": "left"
+   }
+  },
+  {
+   "id": "m-r",
+   "dimension": "risk",
+   "mirrors": "r5",
+   "stem": "Cash on hand:",
+   "a": {
+    "text": "Keep a thin cushion and invest the rest",
+    "pole": "right"
+   },
+   "b": {
+    "text": "Keep a large reserve, even if it sits idle",
+    "pole": "left"
+   }
+  },
+  {
+   "id": "m-p",
+   "dimension": "reputation",
+   "mirrors": "p5",
+   "stem": "Demand spikes and supply is short.",
+   "a": {
+    "text": "Raise prices while you can",
+    "pole": "right"
+   },
+   "b": {
+    "text": "Hold your usual prices",
+    "pole": "left"
+   }
+  },
+  {
+   "id": "m-c",
+   "dimension": "customer",
+   "mirrors": "c2",
+   "stem": "Your costs fall.",
+   "a": {
+    "text": "Lower prices for customers",
+    "pole": "left"
+   },
+   "b": {
+    "text": "Keep the difference",
+    "pole": "right"
+   }
+  },
+  {
+   "id": "m-a",
+   "dimension": "autonomy",
+   "mirrors": "a1",
+   "stem": "A regular bill comes in a little higher than usual.",
+   "a": {
+    "text": "Ask me first",
+    "pole": "right"
+   },
+   "b": {
+    "text": "Pay it and tell me",
+    "pole": "left"
+   }
+  },
+  {
+   "id": "m-e",
+   "dimension": "relationships",
+   "mirrors": "e1",
+   "stem": "A new supplier undercuts your long-time one by 8%.",
+   "a": {
+    "text": "Switch",
+    "pole": "right"
+   },
+   "b": {
+    "text": "Stay",
+    "pole": "left"
+   }
+  }
+ ],
+ "redLines": {
+  "prompt": "List anything the company must never do, at any price, beyond what the law already forbids. One per line. Leave it empty if there are none.",
+  "examples": [
+   "Never sell to a customer I know will misuse the product",
+   "Never lay someone off by text or email",
+   "No work on Sundays"
+  ]
+ }
+}

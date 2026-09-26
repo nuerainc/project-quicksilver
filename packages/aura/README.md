@@ -87,6 +87,35 @@ entry.
 - **Reversals are reported, never blocked.** `weightReversals` lists weights
   moved back and forth within a window.
 
+## Intent profile (calibration)
+
+`eval/intent-profile-v1.json` holds 36 quick two-option items. Each measures
+one of six dimensions:
+
+- short vs long term
+- safe vs bold
+- reputation vs revenue
+- customer vs company interest
+- decide yourself vs ask me
+- relationships vs efficiency
+
+Each dimension has 5 items, plus one reworded repeat with the options swapped,
+placed at least 12 questions later. The provider says whether they lean
+slightly or clearly, and lists their red lines at the end.
+
+`scoreProfile` gives each dimension:
+
+- a score from −1 to +1 and a plain reading, for example "Long term (clear)"
+- agreement across its items
+- whether its repeated pair agreed
+- a confidence level: a pair that disagrees gives low confidence, never a firm value
+
+Answering "a" every time shows up as inconsistency. Honesty and legality are
+never items; they are fixed limits. The profile seeds the provider's weights.
+The 38 choice scenarios then check whether Aura can predict the provider's
+choices from it. Dimensions are added in later versions only where they
+explain scenarios Aura got wrong.
+
 ## Entry point
 
 ```ts
@@ -121,7 +150,7 @@ npm run aura:test
 
 | Criterion | Status |
 |---|---|
-| Choice agreement ≥ 70% and ≥ 2× chance (primary, revised charter) | 38 blind scenarios in `eval/choice-scenarios.json`; founder labels pending |
+| Choice agreement ≥ 70% and ≥ 2× chance (primary, revised charter) | Founder takes the intent profile (`eval/intent-profile-v1.json`), then Aura predicts the 38 blind scenarios in `eval/choice-scenarios.json` |
 | ≥ 90% parsing accuracy | Baseline 80.8%; the model parser is measured on Azure |
 | 100% provenance tagging | Enforced by validation; true on all 52 labeled objectives |
 | 0 unsupported inferences | Enforced by validation; 0 on all 52 |

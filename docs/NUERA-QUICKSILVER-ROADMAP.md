@@ -44,8 +44,10 @@ The M2 host runs on the founder's computer; always-on hosting is part of M5.
     kernel RBAC (`intent:provide`, `intent:rules`)
 
 The first impact-ranking test scored 56.3% (below the 63% chance rate); the
-revised charter makes choice agreement the primary measure, with 38 blind
-scenarios awaiting founder labels.
+revised charter makes choice agreement the primary measure. Calibration now
+starts from a 36-item intent profile (six dimensions, consistency checks, red
+lines). The 38 blind choice scenarios test whether Aura can predict the
+founder's choices from that profile.
 
 Still to build:
 
