@@ -15,7 +15,8 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "start": "tsx src/main.ts"
+    "start": "tsx src/main.ts",
+    "onboard": "tsx src/onboard-cli.ts"
   },
   "dependencies": {
     "@quicksilver/agent": "*",
