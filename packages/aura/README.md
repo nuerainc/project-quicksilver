@@ -173,6 +173,25 @@ flaws and one missing ingredient:
 - "Ask" was chosen twice, both times when other people's data or authority
   was involved.
 
+**Exploratory re-scoring (after seeing the answers; not a claim):**
+
+- Other profile-based rules score the same, 6/38: least sacrifice (maximize
+  the worst dimension) and least regret. The same holds with the customer
+  dimension removed.
+- "Always pick a" scores 15/38.
+- Mapping the founder's scenario choices back onto the profile dimensions
+  shows they diverge from the profile. The profile's one strong reading
+  (company interest, 10/10) points the other way in the scenarios
+  (customer-friendly choices). Horizon and reputation lean long-term and
+  revenue where the profile said balanced.
+- The profile, as measured by abstract policy items, does not transfer to
+  concrete situations. The next profile version should measure in context
+  (for example, commercial terms vs treatment of a specific customer).
+
+The only blind check left on these answers is the model:
+`npm run aura:choices:model` gives the Azure model the scenarios with and
+without the profile, never the answers.
+
 v1 stays recorded as failed; it is not retuned. v2 changes the method:
 requirements eliminate options first, then the least-sacrifice option wins
 (no goal badly sacrificed), with extremes only for strong profile leans. It

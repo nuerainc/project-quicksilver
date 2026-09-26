@@ -3,7 +3,7 @@
   "version": "0.3.0",
   "private": true,
   "license": "MIT",
-  "description": "Quicksilver agent harness — models, MCP, prompts",
+  "description": "Quicksilver agent harness \u2014 models, MCP, prompts",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
   "type": "module",
@@ -21,7 +21,8 @@
     "verify:llm": "tsx src/verify-llm.ts",
     "benchmark:stress": "tsx src/benchmark-stress.ts",
     "test": "node --experimental-strip-types --no-warnings --test src/models.test.ts",
-    "intent:eval": "tsx src/intent-eval.ts"
+    "intent:eval": "tsx src/intent-eval.ts",
+    "choices:eval": "tsx src/choice-eval.ts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.0",
