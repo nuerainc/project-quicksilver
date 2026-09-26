@@ -14,3 +14,5 @@ stay private unless they choose the same.
 The impact rankings are in `../impact-rankings.json` (set v1) and
 `../impact-rankings-v3.json`. `npm run aura:choices:cv` reproduces the
 choice cross-validation.
+
+- `principles.json`: the 15 decision principles the founder confirmed on 2026-09-26 (all confirmed, none edited or rejected). They were drafted from his set 1 and set 2 answers, so results on those sets that use them are supporting evidence only.

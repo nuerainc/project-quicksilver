@@ -57,7 +57,10 @@
  *   npm run aura:choices:model -- --set v2 --founder [--principles data/aura/principles.json] [--votes 3] --detail
  *
  * --founder reads the founder's committed files: the other set's answers and
- * profile v2 as examples, profile v1 readings, and this set's answers to score.
+ * profile v2 as examples, profile v1 readings, his confirmed principles
+ * (eval/founder/principles.json), and this set's answers to score. The
+ * principles were drafted from both sets' answers, so any result on set 1 or
+ * set 2 that uses them is supporting evidence only.
  * --profile-v2 <answers.json> adds any provider's profile-v2 answers as examples.
  * It runs these variants side by side:
  *   none                — baseline
@@ -105,7 +108,7 @@ let examplesPath = arg('--examples')
 const examplesTextPath = arg('--examples-text')
 
 // --principles <export.json>: the provider's confirmed decision principles (confirmed + edited only).
-const principlesPath = arg('--principles')
+let principlesPath = arg('--principles')
 const set = arg('--set') ?? 'v1'
 if (set !== 'v1' && set !== 'v2') { console.log('--set must be v1 or v2'); process.exit(1) }
 const founder = process.argv.includes('--founder')
@@ -115,6 +118,7 @@ if (founder) {
   profilePath ??= join(founderDir, 'profile-answers-v1.json')
   choicesPath ??= join(founderDir, `scenario-answers-${set}.json`)
   examplesPath ??= join(founderDir, `scenario-answers-${other}.json`)
+  if (!principlesPath && existsSync(join(founderDir, 'principles.json'))) principlesPath = join(founderDir, 'principles.json')
 }
 const profileV2Path = arg('--profile-v2') ?? (founder ? join(founderDir, 'profile-answers-v2.json') : undefined)
 const votes = Math.max(1, Number(arg('--votes') ?? 1) || 1)
