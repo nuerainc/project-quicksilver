@@ -49,7 +49,8 @@
     "aura:choices:cv": "node --experimental-strip-types --no-warnings packages/aura/src/choices-cv.ts",
     "aura:dims": "node --experimental-strip-types --no-warnings packages/aura/src/dims-cli.ts",
     "operator": "node --experimental-strip-types --no-warnings packages/operator/src/cli.ts",
-    "operator:test": "node --experimental-strip-types --no-warnings --test packages/operator/src/operator.test.ts"
+    "operator:test": "node --experimental-strip-types --no-warnings --test packages/operator/src/operator.test.ts packages/operator/src/channels.test.ts",
+    "operator:gateway": "node --experimental-strip-types --no-warnings packages/operator/src/gateway-cli.ts"
   },
   "engines": {
     "node": ">=20"
