@@ -16,11 +16,25 @@
  *   npm run e2e:live                 # run both scenarios, keep the decisions it creates
  *   npm run e2e:live -- --cleanup    # ...then delete everything it created
  *
- * Needs: SANITY_AUTH_TOKEN (write) in the root .env, and on the deployment
+ * Needs: SANITY_AUTH_TOKEN (write) in the root .env; QUICKSILVER_SUPERVISOR_TOKEN,
+ * a human supervisor's bearer token for the deployment (a per-person principal
+ * with decision:read, decision:approve, decision:execute and decision:rollback,
+ * or the interim shared NQC_SUPERVISOR_TOKEN); and on the deployment
  * QUICKSILVER_PROCESS_ENGINE=on plus QUICKSILVER_ALLOW_FAULT_INJECTION=on
  * (scenario B forces execution outcomes; every forced run is stamped
  * `faultInjection` on the decision and its metric).
  * Base URL: QUICKSILVER_E2E_BASE_URL, default https://quicksilver-seven.vercel.app
+ *
+ * Credentials: the supervisor token is sent as `Authorization: Bearer` to the
+ * /api/decisions/* routes only. /api/plan is called without it, so the plan's
+ * requester is not the approver (separation of duties).
+ *
+ * Fault injection cannot run where NODE_ENV=production (A-10): the web app
+ * refuses to start with QUICKSILVER_ALLOW_FAULT_INJECTION=on in production and
+ * the execute route treats it as off. Scenario B needs it, so point this run at
+ * a non-production deployment (a preview or a local `next dev`). Against a
+ * production deployment the script prints a note, skips scenario B and still
+ * runs scenario A.
  *
  * Safety: scenario A breaks the live definition for about a minute (while one
  * plan runs). The exact original is backed up first and restored in a
@@ -69,6 +83,11 @@ if (!token) {
   console.error('SANITY_AUTH_TOKEN (write scope) is required in the root .env.')
   process.exit(1)
 }
+const supervisorToken = process.env.QUICKSILVER_SUPERVISOR_TOKEN?.trim()
+if (!supervisorToken) {
+  console.error('QUICKSILVER_SUPERVISOR_TOKEN is not set. The decision routes (approve, execute, observe, resume, rollback) require a human supervisor\'s bearer token since 30b085e; set it to a supervisor principal token for the deployment under test (or the interim NQC_SUPERVISOR_TOKEN) and run again.')
+  process.exit(1)
+}
 const sanity = createClient({
   projectId,
   dataset: process.env.NEXT_PUBLIC_SANITY_DATASET || 'production',
@@ -97,9 +116,12 @@ async function post(path: string, body: unknown = {}, timeoutMs = 60_000): Promi
   const ctrl = new AbortController()
   const t = setTimeout(() => ctrl.abort(), timeoutMs)
   try {
+    // The supervisor token goes to the decision routes only (see the header).
+    const headers: Record<string, string> = { 'content-type': 'application/json' }
+    if (path.startsWith('/api/decisions/')) headers.authorization = `Bearer ${supervisorToken}`
     const res = await fetch(`${BASE}${path}`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers,
       body: JSON.stringify(body),
       signal: ctrl.signal,
     })
@@ -251,17 +273,32 @@ async function cleanup() {
 
 async function main() {
   console.log(`Quicksilver live e2e — ${BASE}`)
-  // Probe 1: is the fault-injection code deployed at all? New code validates
-  // `inject` and returns 400 for an unknown kind; older code ignores the body
-  // and returns 404 for the missing decision.
+  // Probe 1: is the supervisor token accepted, and is the fault-injection code
+  // deployed at all? The execute route authenticates first (401/403 for a bad
+  // token), then validates `inject` and returns 400 for an unknown kind; older
+  // code ignores the body and returns 404 for the missing decision.
   const codeProbe = await post('/api/decisions/e2e-probe-does-not-exist/execute', { inject: 'not-a-kind' })
+  if (codeProbe.status === 401 || codeProbe.status === 403 || codeProbe.status === 503) {
+    check('Preflight', 'the supervisor token is accepted by the deployment', false, `${codeProbe.status}: ${codeProbe.json?.error ?? ''} — check QUICKSILVER_SUPERVISOR_TOKEN (a human with decision:execute) and the deployment's QUICKSILVER_PRINCIPALS / QUICKSILVER_TENANT_ID`)
+    throw new Abort('supervisor token refused')
+  }
+  check('Preflight', 'the supervisor token is accepted by the deployment', true)
   const deployed = codeProbe.status === 400
   check('Preflight', 'fault-injection code is deployed', deployed, deployed ? '' : `got ${codeProbe.status}: the deployment predates fault injection; push and wait for Vercel to finish`)
   if (!deployed) throw new Abort('fault-injection code not deployed')
-  // Probe 2: is it switched on? 403 = off, 404 = on (the decision doesn't exist).
+  // Probe 2: is it switched on? 403 = off (or NODE_ENV=production, A-10), 404 = on (the decision doesn't exist).
   const probe = await post('/api/decisions/e2e-probe-does-not-exist/execute', { inject: 'failure' })
-  check('Preflight', 'fault injection enabled on the deployment', probe.status === 404, probe.status === 403 ? 'disabled — set QUICKSILVER_ALLOW_FAULT_INJECTION=on in Vercel and redeploy' : `${probe.status}`)
-  if (probe.status !== 404) throw new Abort('fault injection not enabled')
+  const faultInjection = probe.status === 404
+  if (!faultInjection) {
+    if (probe.status !== 403) {
+      check('Preflight', 'fault-injection probe answered 403 or 404', false, `${probe.status}: ${probe.json?.error ?? ''}`)
+      throw new Abort('unexpected fault-injection probe result')
+    }
+    console.log('\n  NOTE: fault injection is off on this deployment (QUICKSILVER_ALLOW_FAULT_INJECTION is not on, or NODE_ENV=production, where it can never run: A-10).')
+    console.log('        Scenario B (retry rollback) depends on it and is SKIPPED. Point QUICKSILVER_E2E_BASE_URL at a non-production deployment with the flag on to run it.')
+  } else {
+    check('Preflight', 'fault injection enabled on the deployment', true)
+  }
 
   let resumed: string[] = []
   try {
@@ -270,7 +307,8 @@ async function main() {
     if (!(e instanceof Abort)) throw e
   }
   try {
-    if (resumed.length) await scenarioRetryRollback(resumed)
+    if (!faultInjection) console.log('\n── B. Retry rollback ── skipped (fault injection unavailable; see the note above)')
+    else if (resumed.length) await scenarioRetryRollback(resumed)
     else check('B. Retry rollback', 'skipped (scenario A produced no resumable decision)', false)
   } catch (e) {
     if (!(e instanceof Abort)) throw e

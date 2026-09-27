@@ -1,6 +1,6 @@
 import { createHash, timingSafeEqual } from 'node:crypto'
 import type { SanityClient } from '@sanity/client'
-import { AccessController, type Permission } from '@quicksilver/kernel'
+import { AccessController, PERMISSIONS, type Permission, type PrincipalKind } from '@quicksilver/kernel'
 import { StaticTokenIdentityProvider, principalsFromJson } from '@quicksilver/kernel/identity/tokens'
 
 export interface PolicyRevision {
@@ -231,4 +231,75 @@ export function checkDecisionRouteCaller(route: DecisionRoute, authorization: st
   const allowed = permissions.some((permission) => accessController.authorize(principal, permission, { tenantId, kind: 'decision' }).allowed)
   if (!allowed) return { ok: false, status: 403, reason: 'This credential is not permitted to perform this action.' }
   return { ok: true, principalId: principal.id }
+}
+
+/**
+ * What the shared `NQC_SUPERVISOR_TOKEN` can do on the decision routes: the
+ * credential checks above accept it for approve, execute, rollback, observe
+ * and resume (the last two need `decision:read`).
+ */
+export const SHARED_SUPERVISOR_PERMISSIONS: readonly Permission[] = Object.freeze<Permission[]>([
+  'decision:read',
+  'decision:approve',
+  'decision:execute',
+  'decision:rollback',
+])
+
+/** Who a credential belongs to, as `GET /api/whoami` reports it. Never carries a token or digest. */
+export interface WhoamiBody {
+  principalId: string
+  kind: PrincipalKind
+  tenantId: string
+  displayName?: string
+  /** Permissions this principal holds in `QUICKSILVER_TENANT_ID` (empty for another tenant). */
+  permissions: Permission[]
+  /** Which credential scheme matched: a per-person principal, or the interim shared supervisor token. */
+  credential: 'principal' | 'shared-supervisor'
+}
+
+export type WhoamiResult =
+  | { ok: true; status: 200; body: WhoamiBody }
+  | { ok: false; status: 401 | 503; body: { error: string } }
+
+// A silent controller for listing permissions: probing every permission
+// would otherwise log a "denied" line for each one the principal lacks.
+const quietAccessController = new AccessController()
+
+/**
+ * The pure core of `GET /api/whoami`: validate the Authorization header with
+ * the same helpers the decision routes use and report who it belongs to. It
+ * grants nothing; each route still runs its own check.
+ */
+export function checkWhoami(authorization: string | null, env: CredentialEnv): WhoamiResult {
+  let provider: StaticTokenIdentityProvider | null
+  try {
+    provider = principalProvider(env)
+  } catch {
+    return { ok: false, status: 503, body: { error: 'Principals are misconfigured.' } }
+  }
+  const tenantId = tenantOf(env)
+  if (provider) {
+    const principal = provider.authenticateHeader(authorization)
+    if (!principal) return { ok: false, status: 401, body: { error: 'A valid credential is required.' } }
+    const permissions = PERMISSIONS.filter((permission) => quietAccessController.authorize(principal, permission, { tenantId, kind: 'decision' }).allowed)
+    return {
+      ok: true,
+      status: 200,
+      body: {
+        principalId: principal.id,
+        kind: principal.kind,
+        tenantId: principal.tenantId,
+        ...(principal.displayName ? { displayName: principal.displayName } : {}),
+        permissions,
+        credential: 'principal',
+      },
+    }
+  }
+  const shared = checkSharedSupervisorToken(authorization, env)
+  if (!shared.ok) return { ok: false, status: shared.status === 503 ? 503 : 401, body: { error: shared.reason } }
+  return {
+    ok: true,
+    status: 200,
+    body: { principalId: shared.supervisorId, kind: 'human', tenantId, permissions: [...SHARED_SUPERVISOR_PERMISSIONS], credential: 'shared-supervisor' },
+  }
 }

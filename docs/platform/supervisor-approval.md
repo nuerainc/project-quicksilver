@@ -7,9 +7,15 @@ documents resolved when the plan is evaluated.
 
 ## Approval flow
 
-1. A supervisor request is authenticated with the server-side
-   `NQC_SUPERVISOR_TOKEN`; the supervisor identity comes from
-   `NQC_SUPERVISOR_ID`, never from a request body.
+1. A supervisor request is authenticated from its `Authorization: Bearer`
+   header: a per-person principal token when `QUICKSILVER_PRINCIPALS` is set
+   (human, holding `decision:approve` in `QUICKSILVER_TENANT_ID`), otherwise
+   the interim shared `NQC_SUPERVISOR_TOKEN` with the identity in
+   `NQC_SUPERVISOR_ID`. The approver recorded (`approvedBy`,
+   `approvalRecord.supervisorId`) is always that authenticated principal,
+   never a request body field: the approve body accepts only `action` and
+   `comment`, and a body naming an approver (`approvedBy`, `supervisorId`, ...)
+   is refused with 400.
 2. The configured identity must resolve to a human Sanity entity. If a policy
    lists required approvers, that identity must appear in every applicable
    policy's approval requirements.
@@ -43,10 +49,58 @@ NQC_SUPERVISOR_TOKEN=<random secret with at least 32 characters>
 ```
 
 Approval, rejection, evidence-request, and rollback endpoints require
-`Authorization: Bearer <NQC_SUPERVISOR_TOKEN>`. Keep the token in a trusted
-server-side caller; never add it to `NEXT_PUBLIC_*` variables or browser code.
-The current single-token identity is an interim trusted-server credential, not
-SSO, user sessions, team RBAC, or multi-tenant authorization.
+`Authorization: Bearer <token>` (a per-person principal token, or the interim
+`NQC_SUPERVISOR_TOKEN`). Execute requires a human with `decision:execute`;
+observe and resume require `decision:read` or `decision:propose`. Never put a
+token in `NEXT_PUBLIC_*` variables or in the built browser bundle; the only way
+it reaches a browser is a person pasting their own token into the sign-in box
+below. The single shared token is an interim credential, not SSO, user
+sessions, team RBAC, or multi-tenant authorization.
+
+## Signing in on the decision page
+
+The web app's home page (the objective console with the decision cards) has a
+**Supervisor or principal token** box above the CEO intent field.
+
+1. Paste your own token (from `npm run principal:token`, or the interim
+   `NQC_SUPERVISOR_TOKEN` in a single-supervisor setup) and press **Sign in**.
+   The field is a password field and is emptied after sign-in.
+2. The page calls `GET /api/whoami` with the token. It validates the header
+   with the same helpers the decision routes use and returns only the
+   principal id, kind, tenant, display name and permissions (no token, digest
+   or other secret), or 401. The page shows "Signed in as ..." with the
+   decision actions you can take. A token the server rejects (401) is not
+   kept.
+3. The Approve, Reject, Request more evidence, Execute, Observe, Resume and
+   Propose rollback buttons send `Authorization: Bearer <token>`. A 401 shows
+   "Sign in to do this"; a 403 shows "Your account can't do this (needs
+   `<permission>`)" followed by the server's reason (for example separation of
+   duties). Nothing is retried automatically.
+4. **Sign out** removes the token from the tab.
+
+How the token is stored:
+
+- Only in the tab's `sessionStorage` (key `quicksilver.console.token`) and in
+  page memory. The browser clears `sessionStorage` when the tab closes. It is
+  never written to `localStorage` or a cookie.
+- It is sent only to this app's own `/api/decisions/<id>/<route>` endpoints and
+  `/api/whoami` (`mayCarryConsoleToken` in `apps/web/lib/console-auth.ts`), never
+  to `/api/plan`, `/api/query`, `/api/workflows/*` or another origin. Plans made
+  from the page are therefore still recorded as `console:anonymous`, so the
+  person who approves is not the requester.
+- If the browser blocks storage (some private windows), the token is kept in
+  page memory only and is lost on reload; the page says so.
+- Anyone who can run script in the page can read the token. The web app has no
+  content security policy yet (threat model T-67); use the page on a trusted
+  machine and sign out when done.
+
+## Live end-to-end run
+
+`npm run e2e:live` sends `QUICKSILVER_SUPERVISOR_TOKEN` (a human supervisor's
+token for the deployment under test) to the decision routes and exits with a
+message when it is unset. Its fault-injection scenario cannot run where
+`NODE_ENV=production` (A-10), so target a non-production deployment; against
+production it prints a note and skips that scenario.
 
 Policy changes after planning or approval invalidate the decision for
 execution. Request a fresh plan so the kernel evaluates the current policy

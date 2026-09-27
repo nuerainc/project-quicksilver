@@ -1,7 +1,10 @@
 /**
  * POST /api/decisions/[id]/action — act on a proposed decision.
  *
- * Body: { action: 'approve' | 'reject' | 'request-evidence' }
+ * Body: { action: 'approve' | 'reject' | 'request-evidence', comment?: string }
+ * (no other fields). The approver recorded (`approvedBy`,
+ * `approvalRecord.supervisorId`) is the principal authenticated from the
+ * `Authorization: Bearer` header, never anything in the body.
  *
  * Updates the decision document in Sanity with the new status, approver,
  * and (for execute) the executedAt timestamp. Returns the updated decision.
@@ -17,7 +20,7 @@ import { NextResponse } from 'next/server'
 import { getDedicatedSanityProjectId } from '@/lib/sanity-config'
 import { createClient } from '@sanity/client'
 import { randomUUID } from 'node:crypto'
-import { z } from 'zod'
+import { DecisionActionBody } from '@/lib/decision-action-body'
 import { authorizeTransition, checkSeparationOfDuties } from '@quicksilver/kernel'
 import { currentPolicySnapshotVersion, decisionActionFingerprint, soleOperatorId, verifySupervisorCredential } from '@/lib/nqc-approval'
 import {
@@ -43,10 +46,7 @@ function getSanityClient() {
   })
 }
 
-const ActionBody = z.object({
-  action: z.enum(['approve', 'reject', 'request-evidence']),
-  comment: z.string().optional(),
-})
+const ActionBody = DecisionActionBody
 
 export async function POST(
   req: Request,

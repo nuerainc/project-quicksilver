@@ -1,6 +1,15 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useEffect, useState, useTransition } from 'react'
+import {
+  authFailureMessage,
+  clearConsoleToken,
+  consoleHeaders,
+  readConsoleToken,
+  saveConsoleToken,
+  type ConsoleDecisionRoute,
+  type ConsoleWhoami,
+} from '@/lib/console-auth'
 
 type DecisionDecision = {
   authorized: boolean
@@ -114,6 +123,60 @@ export default function HomePage() {
   const [error, setError] = useState<string | null>(null)
   const [, startTransition] = useTransition()
 
+  // Console sign-in: the token lives in sessionStorage (this tab only) and in
+  // memory; it is sent only to /api/decisions/* and /api/whoami.
+  const [token, setToken] = useState<string | null>(null)
+  const [who, setWho] = useState<ConsoleWhoami | null>(null)
+  const [authNote, setAuthNote] = useState<string | null>(null)
+
+  useEffect(() => {
+    const stored = readConsoleToken()
+    if (stored) {
+      setToken(stored)
+      void lookupWhoami(stored)
+    }
+    // Run once on mount.
+  }, [])
+
+  async function lookupWhoami(t: string) {
+    try {
+      const res = await fetch('/api/whoami', { headers: consoleHeaders('/api/whoami', t), cache: 'no-store' })
+      const data = await res.json().catch(() => null)
+      if (res.status === 200 && data) {
+        setWho(data as ConsoleWhoami)
+        return
+      }
+      setWho(null)
+      if (res.status === 401) {
+        // The server does not recognise this token: do not keep it.
+        clearConsoleToken()
+        setToken(null)
+        setAuthNote('That token was not accepted. Paste a valid supervisor or principal token.')
+        return
+      }
+      setAuthNote(`Signed in, but the server could not confirm who this is (${res.status}${data?.error ? `: ${data.error}` : ''}).`)
+    } catch {
+      setWho(null)
+      setAuthNote('Signed in, but the server could not be reached to confirm who this is.')
+    }
+  }
+
+  function handleSignIn(pasted: string) {
+    const t = pasted.trim()
+    if (!t) return
+    setAuthNote(saveConsoleToken(t) ? null : 'This browser blocked session storage, so the token is kept in this page only and is lost on reload.')
+    setToken(t)
+    setWho(null)
+    void lookupWhoami(t)
+  }
+
+  function handleSignOut() {
+    clearConsoleToken()
+    setToken(null)
+    setWho(null)
+    setAuthNote(null)
+  }
+
   async function handlePlan() {
     setBusy(true)
     setError(null)
@@ -153,15 +216,26 @@ export default function HomePage() {
     }
   }
 
-  async function postJSON<T = unknown>(url: string, body: Record<string, unknown>): Promise<T> {
+  /**
+   * POST to a decision route with the signed-in token. A 401 or 403 becomes a
+   * plain message; nothing is retried automatically.
+   */
+  async function callDecisionRoute<T = unknown>(decisionDocId: string, route: ConsoleDecisionRoute, body: Record<string, unknown>): Promise<T> {
     setError(null)
+    if (!token) throw new Error(authFailureMessage(401, route)!)
+    const url = `/api/decisions/${encodeURIComponent(decisionDocId)}/${route}`
     const res = await fetch(url, {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: consoleHeaders(url, token, { 'content-type': 'application/json' }),
       body: JSON.stringify(body),
     })
-    const data = await res.json()
-    if (!res.ok) throw new Error(data.error ?? data.detail ?? `${url} failed`)
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) {
+      const serverMessage = typeof data?.error === 'string'
+        ? [data.error, ...(Array.isArray(data.reasons) ? data.reasons : [])].join(' ')
+        : undefined
+      throw new Error(authFailureMessage(res.status, route, serverMessage) ?? data.error ?? data.detail ?? `${route} failed`)
+    }
     return data as T
   }
 
@@ -171,7 +245,7 @@ export default function HomePage() {
   ) {
     setActingId(decisionDocId)
     try {
-      const data = await postJSON<{ status?: string; process?: ProcessInfo }>(`/api/decisions/${decisionDocId}/action`, { action })
+      const data = await callDecisionRoute<{ status?: string; process?: ProcessInfo }>(decisionDocId, 'action', { action })
       startTransition(() => {
         setStatuses((s) => ({
           ...s,
@@ -191,7 +265,7 @@ export default function HomePage() {
   async function handleResume(decisionDocId: string) {
     setActingId(decisionDocId)
     try {
-      const data = await postJSON<{ status: string; process?: ProcessInfo }>(`/api/decisions/${decisionDocId}/resume`, {})
+      const data = await callDecisionRoute<{ status: string; process?: ProcessInfo }>(decisionDocId, 'resume', {})
       startTransition(() => {
         setStatuses((s) => ({ ...s, [decisionDocId]: data.status as DecisionStatus }))
         if (data.process) setProcesses((p) => ({ ...p, [decisionDocId]: data.process }))
@@ -206,11 +280,11 @@ export default function HomePage() {
   async function handleExecute(decisionDocId: string) {
     setActingId(decisionDocId)
     try {
-      const data = await postJSON<{
+      const data = await callDecisionRoute<{
         status: 'executed' | 'failed'
         process?: ProcessInfo
         rolledBackParent?: { id: string; status?: string; error?: string; process?: ProcessInfo } | null
-      }>(`/api/decisions/${decisionDocId}/execute`, {})
+      }>(decisionDocId, 'execute', {})
       startTransition(() => {
         setStatuses((s) => {
           const next = { ...s, [decisionDocId]: data.status }
@@ -235,7 +309,7 @@ export default function HomePage() {
   async function handleObserve(decisionDocId: string) {
     setActingId(decisionDocId)
     try {
-      const data = await postJSON<Observation>(`/api/decisions/${decisionDocId}/observe`, {})
+      const data = await callDecisionRoute<Observation>(decisionDocId, 'observe', {})
       startTransition(() => {
         setObservations((o) => ({ ...o, [decisionDocId]: data }))
         if (data.deviationDetected) {
@@ -252,8 +326,9 @@ export default function HomePage() {
   async function handleRollback(decisionDocId: string) {
     setActingId(decisionDocId)
     try {
-      const data = await postJSON<{ rollbackDecisionId: string; parentStatus?: string; parentProcess?: ProcessInfo; process?: ProcessInfo }>(
-        `/api/decisions/${decisionDocId}/rollback`,
+      const data = await callDecisionRoute<{ rollbackDecisionId: string; parentStatus?: string; parentProcess?: ProcessInfo; process?: ProcessInfo }>(
+        decisionDocId,
+        'rollback',
         {},
       )
       const obs = observations[decisionDocId]
@@ -299,6 +374,8 @@ export default function HomePage() {
         </p>
       </header>
 
+      <ConsoleSignIn token={token} who={who} note={authNote} onSignIn={handleSignIn} onSignOut={handleSignOut} />
+
       <section className="mb-8 rounded border border-quicksilver-border bg-quicksilver-panel p-6">
         <h2 className="mb-3 font-mono text-xs uppercase tracking-widest text-quicksilver-accent">
           CEO intent
@@ -341,6 +418,75 @@ export default function HomePage() {
         Company → State → Intent → Decision → Action → State
       </footer>
     </main>
+  )
+}
+
+/**
+ * Sign-in for the decision buttons. The pasted token is kept in this tab's
+ * sessionStorage only and sent only to this app's /api/decisions/* routes and
+ * /api/whoami. The input is a password field and is cleared after sign-in.
+ */
+function ConsoleSignIn({
+  token, who, note, onSignIn, onSignOut,
+}: {
+  token: string | null
+  who: ConsoleWhoami | null
+  note: string | null
+  onSignIn: (token: string) => void
+  onSignOut: () => void
+}) {
+  const [draft, setDraft] = useState('')
+  return (
+    <section aria-label="Supervisor sign-in" className="mb-8 rounded border border-quicksilver-border bg-quicksilver-panel p-4">
+      {token ? (
+        <div className="flex flex-wrap items-center justify-between gap-3 font-mono text-xs">
+          <span className="text-quicksilver-signal">
+            {who
+              ? <>Signed in as <strong>{who.displayName ?? who.principalId}</strong> <span className="text-quicksilver-accent">({who.kind}{who.displayName ? ` · ${who.principalId}` : ''}) · can: {who.permissions.filter((p) => p.startsWith('decision:')).map((p) => p.slice('decision:'.length)).join(', ') || 'no decision actions'}</span></>
+              : 'Signed in'}
+          </span>
+          <button
+            onClick={onSignOut}
+            className="rounded border border-quicksilver-border px-3 py-1.5 uppercase tracking-widest text-quicksilver-accent transition hover:text-quicksilver-signal"
+          >
+            Sign out
+          </button>
+        </div>
+      ) : (
+        <form
+          className="flex flex-wrap items-center gap-2"
+          onSubmit={(e) => {
+            e.preventDefault()
+            onSignIn(draft)
+            setDraft('')
+          }}
+        >
+          <label htmlFor="console-token" className="font-mono text-xs uppercase tracking-widest text-quicksilver-accent">
+            Supervisor or principal token
+          </label>
+          <input
+            id="console-token"
+            type="password"
+            autoComplete="off"
+            spellCheck={false}
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            className="min-w-0 flex-1 rounded border border-quicksilver-border bg-quicksilver-bg px-2 py-1.5 font-mono text-xs text-quicksilver-signal focus:border-quicksilver-quicksilver focus:outline-none"
+          />
+          <button
+            type="submit"
+            disabled={!draft.trim()}
+            className="rounded border border-quicksilver-quicksilver bg-quicksilver-quicksilver/5 px-3 py-1.5 font-mono text-xs uppercase tracking-widest text-quicksilver-signal transition hover:bg-quicksilver-quicksilver/15 disabled:opacity-40"
+          >
+            Sign in
+          </button>
+          <p className="w-full font-mono text-[11px] text-quicksilver-accent">
+            Needed for approve, execute, observe, resume and rollback. Kept in this tab only (cleared when the tab closes).
+          </p>
+        </form>
+      )}
+      {note && <p className="mt-2 font-mono text-xs text-yellow-300">{note}</p>}
+    </section>
   )
 }
 
