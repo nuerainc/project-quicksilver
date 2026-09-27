@@ -344,4 +344,5 @@ for (const v of variants) {
   console.log(`Arm "${v.name}": ${right}/${scored.length} = ${pct(right / scored.length)}${failed ? ` (${failed} model errors counted as misses)` : ''} — chance 25%`)
   if (process.argv.includes('--detail')) for (const s of scored) if (predictions[v.name]![s.id] !== actual[s.id]) console.log(`  ${s.id} (${s.category}): predicted ${predictions[v.name]![s.id] ?? 'error'}, actual ${actual[s.id]}`)
 }
-if (founder || variants.some((v) => v.arm === 'all')) console.log('Exploratory: these methods were built after the founder\'s set 1 and set 2 answers were seen; a criterion test needs a frozen method and a fresh set or shadow verdicts.')
+if (frozen) console.log(`Criterion test: predictor v${frozen.version} was frozen, and its picks recorded, before this set was answered. Target: at least 70% and double chance.`)
+else if (founder || variants.some((v) => v.arm === 'all')) console.log('Exploratory: these methods were built after the founder\'s set 1 and set 2 answers were seen; a criterion test needs a frozen method and a fresh set or shadow verdicts.')

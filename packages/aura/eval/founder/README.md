@@ -16,3 +16,4 @@ The impact rankings are in `../impact-rankings.json` (set v1) and
 choice cross-validation.
 
 - `principles.json`: the 15 decision principles the founder confirmed on 2026-09-26 (all confirmed, none edited or rejected). They were drafted from his set 1 and set 2 answers, so results on those sets that use them are supporting evidence only.
+- `scenario-answers-v3.json`: the founder's answers to set v3 (2026-09-27, 01:25–02:38 UTC), all 30 with notes. Answered after predictor v3's picks (`v3-picks.json`) were committed and pushed (617d5f0, 01:20 UTC).
