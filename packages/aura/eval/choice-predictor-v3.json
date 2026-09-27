@@ -1,0 +1,21 @@
+{
+ "version": 3,
+ "frozenAt": "2026-09-26",
+ "status": "frozen before set v3 was answered and before any v3 picks were made",
+ "set": "v3",
+ "variant": "all+goals",
+ "votes": 3,
+ "founder": true,
+ "method": "The planner model is shown everything the founder has given: his 15 confirmed principles, his profile v1 readings, his answers to scenario sets 1 and 2 (68 decisions) and his profile v2 answers (24 dilemmas). For each scenario it lists every goal he stated or clearly implied, checks each option against each goal separately, and then chooses. It is asked 3 times per scenario; the majority pick counts (ties go to the earliest).",
+ "whyThisVariant": "Best on sets 1 and 2 across two runs (exploratory, 2026-09-26; 3 votes each). Run 1 of 7 variants: all+goals 46/68 (67.6%); all+goals+rolling 44; all 43; all+rolling 42; rules+examples 42; examples 40; none 28. Run 2: all+goals 45/68 (66.2%); all+cases+goals 44; all+cases 43. The closest-cases method did not beat it, so it is not used.",
+ "criterion": "Aura 0.4.0 choice agreement: >= 70% and at least double chance (25%) on set v3, i.e. at least 21/30. Picks are written to a file and committed before the founder answers; scoring reads that file.",
+ "run": "npm run aura:choices:model -- --frozen v3 --picks-out packages/aura/eval/founder/v3-picks.json",
+ "score": "npm run aura:choices:model -- --frozen v3 --picks-in packages/aura/eval/founder/v3-picks.json --choices packages/aura/eval/founder/scenario-answers-v3.json --detail",
+ "hashes": {
+  "scenarios": "827d27358e5416530b1439e32091182e7853931290fe83881fe456fc8013f3c1",
+  "system": "7ea06c849b548b639a319251623e8b1941daed7d76985d28aaa7e9d4a260d884",
+  "principles": "2fe48cd158f328d11b9e87cf878053a5646b27dad9649e4699024f4997a6ae0e",
+  "profile": "3094320c669a7545dbd21f911873e5964b5286b4b8e1567b914aadbf9125f9ea",
+  "examples": "50b432b6f1791b03e8110e5da8da4ea2d9be810a6f0d22492d3635b35b4260f8"
+ }
+}
