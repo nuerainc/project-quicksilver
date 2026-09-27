@@ -85,6 +85,8 @@ export interface RunResult {
   /** Why the runtime chose this status (failed checks, bad evidence, budget). */
   notes: string[]
   usage: { inputTokens: number; outputTokens: number }
+  /** The whole transcript, for the session archive (memory.ts). */
+  messages: LoopMessage[]
 }
 
 export interface OperatorDeps {
@@ -139,7 +141,7 @@ export async function runOperator(deps: OperatorDeps, options: RunOptions): Prom
   const end = async (status: RunStatus, summary: string): Promise<RunResult> => {
     await deps.audit.append({ runId, kind: 'run-end', at: now(), data: { status, summary, steps, toolCalls, notes } })
     emit({ type: 'end', status, summary })
-    return { runId, status, summary, steps, toolCalls, notes, usage }
+    return { runId, status, summary, steps, toolCalls, notes, usage, messages }
   }
 
   while (steps < maxSteps) {
