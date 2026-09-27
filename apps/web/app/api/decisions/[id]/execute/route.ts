@@ -23,14 +23,19 @@
  * kernel still authorizes the resulting transition), and every injected run
  * is stamped `faultInjection` on both the decision and its metric, so the
  * audit trail never passes a staged outcome off as an organic one.
+ *
+ * The caller must present a human principal's bearer token with
+ * `decision:execute` (checked before anything is read); that principal is
+ * recorded as `executionAudit.executorId`.
  */
 
 import { NextResponse } from 'next/server'
 import { getDedicatedSanityProjectId } from '@/lib/sanity-config'
 import { createClient } from '@sanity/client'
-import { currentPolicySnapshotVersion, decisionActionFingerprint } from '@/lib/nqc-approval'
+import { authorizeDecisionRoute, currentPolicySnapshotVersion, decisionActionFingerprint } from '@/lib/nqc-approval'
 import { z } from 'zod'
 import { authorizeTransition } from '@quicksilver/kernel'
+import { developmentFlagEnabled } from '@quicksilver/kernel/production-flags'
 import {
   EXECUTOR_ACTOR,
   KERNEL_ACTOR,
@@ -120,8 +125,9 @@ function simulateExecution(decisionId: string, actionDescription: string): Simul
 type FaultInjection = 'success' | 'failure' | 'deviation'
 const Body = z.object({ inject: z.enum(['success', 'failure', 'deviation']).optional() }).optional()
 
+/** On only when the switch is on and NODE_ENV is not production (A-10). */
 function faultInjectionAllowed(): boolean {
-  return (process.env.QUICKSILVER_ALLOW_FAULT_INJECTION ?? '').trim().toLowerCase() === 'on'
+  return developmentFlagEnabled(process.env, 'QUICKSILVER_ALLOW_FAULT_INJECTION')
 }
 
 /** A forced outcome on the downtime metric (baseline 32 h/week). */
@@ -146,6 +152,11 @@ export async function POST(
   const { id } = await ctx.params
   if (!id) return NextResponse.json({ error: 'Missing decision id' }, { status: 400 })
 
+  // Authenticate before any read or write: only a human with decision:execute
+  // may execute, and that principal is recorded as the executor.
+  const executor = authorizeDecisionRoute(req, 'execute')
+  if (!executor.ok) return NextResponse.json({ error: executor.reason }, { status: executor.status })
+
   let body: unknown = {}
   try {
     body = await req.json()
@@ -158,7 +169,7 @@ export async function POST(
   }
   const inject = parsedBody.data?.inject
   if (inject && !faultInjectionAllowed()) {
-    return NextResponse.json({ error: 'Fault injection is disabled (QUICKSILVER_ALLOW_FAULT_INJECTION is not on).' }, { status: 403 })
+    return NextResponse.json({ error: 'Fault injection is disabled (QUICKSILVER_ALLOW_FAULT_INJECTION is not on, or NODE_ENV is production).' }, { status: 403 })
   }
 
   if (!process.env.NEXT_PUBLIC_SANITY_PROJECT_ID) {
@@ -264,7 +275,7 @@ export async function POST(
         ...(approval?.id ? { approvalId: approval.id } : {}),
         actionFingerprint,
         policySnapshotVersion: decision.policySnapshotVersion,
-        executorId: EXECUTOR_ACTOR.id,
+        executorId: executor.principalId,
         startedAt,
         completedAt: now,
         outcome: outcome.success ? 'succeeded' : 'failed',
@@ -329,7 +340,7 @@ export async function POST(
       ...(approval?.id ? { approvalId: approval.id } : {}),
       actionFingerprint,
       policySnapshotVersion: decision.policySnapshotVersion,
-      executorId: EXECUTOR_ACTOR.id,
+      executorId: executor.principalId,
       startedAt,
       completedAt: now,
       outcome: outcome.success ? 'succeeded' : 'failed',

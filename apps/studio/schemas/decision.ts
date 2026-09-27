@@ -107,7 +107,7 @@ export default defineType({
         { name: 'approvalId', type: 'string' },
         { name: 'actionFingerprint', type: 'string' },
         { name: 'policySnapshotVersion', type: 'string' },
-        { name: 'executorId', type: 'string' },
+        { name: 'executorId', type: 'string', description: 'The authenticated human principal (decision:execute) who executed the decision.' },
         { name: 'startedAt', type: 'datetime' },
         { name: 'completedAt', type: 'datetime' },
         { name: 'outcome', type: 'string', options: { list: ['succeeded', 'failed'] } },

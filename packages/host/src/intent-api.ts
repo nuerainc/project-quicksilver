@@ -124,6 +124,9 @@ export async function handleIntentRoute(ctx: IntentApiContext, deps: IntentApiDe
     if (parts.length === 4 && parts[3] === 'answers' && method === 'POST') {
       const denied = allow('intent:provide')
       if (denied) return denied
+      // An answer is recorded as HUMAN_SPECIFIED, the provider's own words, which
+      // only a human may change: refuse service and agent principals (threat model F-3).
+      if (principal.kind !== 'human') return { status: 403, body: { error: 'Only a human answers intent questions.' } }
       const graph = await deps.graphs.get(parts[2]!).catch(() => undefined)
       if (!graph) return { status: 404, body: { error: 'No such intent.' } }
       const body = await ctx.readBody()
@@ -132,9 +135,9 @@ export async function handleIntentRoute(ctx: IntentApiContext, deps: IntentApiDe
       if (typeof variableId !== 'string' || typeof answer !== 'string' || !answer.trim() || answer.length > 1_000) return { status: 422, body: { error: 'variableId and a 1 to 1,000 character answer are required.' } }
       const numeric = /^\s*\$?\s*-?\d[\d,]*(\.\d+)?\s*$/.test(answer) ? Number(answer.replace(/[$,\s]/g, '')) : undefined
       // Question quality (charter revision 2): note the question's rank before the answer closes it.
-      const fb = principal.kind === 'human' ? recordQuestionFeedback(graph, { id: principal.id, kind: 'human' }, variableId, 'answered', now(), ranker) : undefined
+      const fb = recordQuestionFeedback(graph, { id: principal.id, kind: 'human' }, variableId, 'answered', now(), ranker)
       const openBefore = openQuestions(graph, ranker).map((q) => q.variableId)
-      const result = applyBeliefUpdate(fb?.ok ? fb.graph : graph, { id: principal.id, kind: 'human' }, {
+      const result = applyBeliefUpdate(fb.ok ? fb.graph : graph, { id: principal.id, kind: 'human' }, {
         variableId,
         value: numeric ?? answer.trim(),
         provenance: 'HUMAN_SPECIFIED',
@@ -143,7 +146,7 @@ export async function handleIntentRoute(ctx: IntentApiContext, deps: IntentApiDe
       }, now())
       if (!result.accepted) return { status: 422, body: { error: 'The answer was not accepted.', reasons: result.reasons } }
       await deps.graphs.put(result.graph)
-      if (deps.ranker && fb?.ok && ranker) await deps.ranker.save(learnFromAnswer(ranker, graph, variableId, openBefore))
+      if (deps.ranker && fb.ok && ranker) await deps.ranker.save(learnFromAnswer(ranker, graph, variableId, openBefore))
       return { status: 200, body: { intent: summary(result.graph, ranker), change: result.change } }
     }
     if (parts.length === 4 && parts[3] === 'dismiss' && method === 'POST') {

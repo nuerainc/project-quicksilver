@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { executeWorkflowGraph, validateWorkflowGraph, type NqcEvaluationResponse, type WorkflowGraph } from '@quicksilver/kernel'
 import { persistEvaluations } from '@/lib/evaluation-store'
 import { identifyRequester } from '@/lib/nqc-approval'
+import { isProductionEnv } from '@quicksilver/kernel/production-flags'
 import { executeGovernedAgent, isLlmConfigured, queryQuicksilverAgent, type GovernedNueraAgentResult, type QueryAgentOutput } from '@quicksilver/agent'
 
 const requestSchema = z.object({
@@ -14,7 +15,8 @@ const MAX_QUERY_AGENT_STEPS = 3
 
 /** Live workflow path currently permits read-only query agents only. */
 export async function POST(request: Request) {
-  if (process.env.QUICKSILVER_WORKFLOW_LIVE_RUNS !== 'on') {
+  // Off unless switched on, and never in production (A-10).
+  if (process.env.QUICKSILVER_WORKFLOW_LIVE_RUNS !== 'on' || isProductionEnv(process.env)) {
     return NextResponse.json({ error: 'Live workflow runs are disabled. Enable them only in a trusted development environment.' }, { status: 503 })
   }
   if (!isLlmConfigured()) return NextResponse.json({ error: 'No model provider is configured for live workflow runs.' }, { status: 503 })

@@ -32,7 +32,7 @@ import { AccessController } from '@quicksilver/kernel/identity'
 import { principalsFromJson } from '@quicksilver/kernel/identity/tokens'
 import { InMemoryWorkflowRunStore, type WorkflowRunStore } from '@quicksilver/kernel/runtime'
 
-import { ConfigError, loadHostConfig, type HostConfig } from './config.ts'
+import { ConfigError, assertNoDevelopmentFlagsInProduction, loadHostConfig, type HostConfig } from './config.ts'
 import type { AgentRunner, EvaluationSink } from './handlers.ts'
 import { QuicksilverHost } from './host.ts'
 import { Logger, parseLogLevel } from './log.ts'
@@ -298,6 +298,8 @@ async function main(): Promise<void> {
     return
   }
   const envFiles = loadEnvFiles(baseDir)
+  // Development-only switches must be off in production (A-10); stop before anything starts.
+  assertNoDevelopmentFlagsInProduction(process.env)
   const configName = process.env.QUICKSILVER_HOST_CONFIG ?? 'quicksilver.host.json'
   const configPath = isAbsolute(configName) ? configName : resolve(baseDir, configName)
   const config = await loadHostConfig(configPath, { tenantId: process.env.QUICKSILVER_TENANT_ID?.trim() || 'default' })

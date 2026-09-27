@@ -53,6 +53,20 @@ export type SupervisorCredentialResult =
   | { ok: true; supervisorId: string }
   | { ok: false; reason: string; status: 401 | 403 | 503 }
 
+/**
+ * The environment the credential checks read. The pure checks
+ * (`checkSupervisorCredential`, `checkDecisionRouteCaller`) take it as an
+ * argument so they can be tested without touching `process.env`; the
+ * request-level wrappers pass `process.env`.
+ */
+export interface CredentialEnv {
+  readonly [name: string]: string | undefined
+  QUICKSILVER_PRINCIPALS?: string
+  QUICKSILVER_TENANT_ID?: string
+  NQC_SUPERVISOR_TOKEN?: string
+  NQC_SUPERVISOR_ID?: string
+}
+
 let principalRegistry: { source: string; provider: StaticTokenIdentityProvider } | undefined
 const accessController = new AccessController({
   audit: (decision) => {
@@ -60,13 +74,18 @@ const accessController = new AccessController({
   },
 })
 
-function principalProvider(): StaticTokenIdentityProvider | null {
-  const source = process.env.QUICKSILVER_PRINCIPALS
+/** Per-person principals (cached per source string), or null when unset. Throws when misconfigured. */
+function principalProvider(env: CredentialEnv = process.env): StaticTokenIdentityProvider | null {
+  const source = env.QUICKSILVER_PRINCIPALS
   if (!source?.trim()) return null
   if (principalRegistry?.source !== source) {
     principalRegistry = { source, provider: new StaticTokenIdentityProvider(principalsFromJson(source)) }
   }
   return principalRegistry.provider
+}
+
+function tenantOf(env: CredentialEnv): string {
+  return env.QUICKSILVER_TENANT_ID?.trim() || 'default'
 }
 
 export type RequesterResult = { ok: true; requestedBy: string } | { ok: false; reason: string; status: 401 | 503 }
@@ -108,31 +127,38 @@ export function soleOperatorId(): string | null {
  * `NQC_SUPERVISOR_TOKEN` credential is used.
  */
 export function verifySupervisorCredential(request: Request, permission: Permission = 'decision:approve'): SupervisorCredentialResult {
+  return checkSupervisorCredential(request.headers.get('authorization'), permission, process.env)
+}
+
+/** The pure core of `verifySupervisorCredential`: the Authorization header value and the environment in, a verdict out. */
+export function checkSupervisorCredential(authorization: string | null, permission: Permission, env: CredentialEnv): SupervisorCredentialResult {
   let provider: StaticTokenIdentityProvider | null
   try {
-    provider = principalProvider()
+    provider = principalProvider(env)
   } catch {
     return { ok: false, status: 503, reason: 'Supervisor principals are misconfigured.' }
   }
   if (provider) {
-    const principal = provider.authenticateHeader(request.headers.get('authorization'))
+    const principal = provider.authenticateHeader(authorization)
     if (!principal) return { ok: false, status: 401, reason: 'A valid supervisor credential is required.' }
-    const tenantId = process.env.QUICKSILVER_TENANT_ID?.trim() || 'default'
-    const decision = accessController.authorize(principal, permission, { tenantId, kind: 'decision' })
+    const decision = accessController.authorize(principal, permission, { tenantId: tenantOf(env), kind: 'decision' })
     if (!decision.allowed || principal.kind !== 'human') {
       return { ok: false, status: 403, reason: 'This credential is not permitted to perform this supervisor action.' }
     }
     return { ok: true, supervisorId: principal.id }
   }
+  return checkSharedSupervisorToken(authorization, env)
+}
 
-  const expected = process.env.NQC_SUPERVISOR_TOKEN
-  const supervisorId = process.env.NQC_SUPERVISOR_ID
+/** The interim single `NQC_SUPERVISOR_TOKEN` credential (used only while `QUICKSILVER_PRINCIPALS` is unset). */
+function checkSharedSupervisorToken(authorization: string | null, env: CredentialEnv): SupervisorCredentialResult {
+  const expected = env.NQC_SUPERVISOR_TOKEN
+  const supervisorId = env.NQC_SUPERVISOR_ID
   if (!expected || expected.length < 32 || !supervisorId) {
     return { ok: false, status: 503, reason: 'Supervisor approval is not configured.' }
   }
 
-  const authorization = request.headers.get('authorization') ?? ''
-  const match = /^Bearer\s+(.+)$/i.exec(authorization)
+  const match = /^Bearer\s+(.+)$/i.exec(authorization ?? '')
   if (!match) return { ok: false, status: 401, reason: 'A valid supervisor credential is required.' }
 
   const supplied = Buffer.from(match[1]!, 'utf8')
@@ -143,3 +169,66 @@ export function verifySupervisorCredential(request: Request, permission: Permiss
   return { ok: true, supervisorId }
 }
 
+export type DecisionRoute = 'execute' | 'observe' | 'resume'
+
+/**
+ * What each decision route requires of its caller (any one listed permission
+ * suffices). `execute` also requires a human principal: it goes through
+ * `checkSupervisorCredential`, exactly like approve and rollback.
+ */
+export const DECISION_ROUTE_PERMISSIONS: Readonly<Record<DecisionRoute, readonly Permission[]>> = Object.freeze({
+  execute: Object.freeze<Permission[]>(['decision:execute']),
+  observe: Object.freeze<Permission[]>(['decision:read', 'decision:propose']),
+  resume: Object.freeze<Permission[]>(['decision:read', 'decision:propose']),
+})
+
+export type DecisionRouteAuthResult =
+  | { ok: true; principalId: string }
+  | { ok: false; reason: string; status: 401 | 403 | 503 }
+
+/**
+ * Authenticate and authorize the caller of a decision route before the route
+ * reads or writes anything (threat model F-2). Request-level wrapper over
+ * `checkDecisionRouteCaller` with `process.env`.
+ */
+export function authorizeDecisionRoute(request: Request, route: DecisionRoute): DecisionRouteAuthResult {
+  return checkDecisionRouteCaller(route, request.headers.get('authorization'), process.env)
+}
+
+/**
+ * The pure decision-route check: route, Authorization header value and
+ * environment in, a verdict out.
+ *
+ * - `execute`: the supervisor credential check with `decision:execute` (a
+ *   human principal), the same check approve and rollback use.
+ * - `observe`, `resume`: any valid principal holding `decision:read` or
+ *   `decision:propose` in `QUICKSILVER_TENANT_ID`.
+ *
+ * Without `QUICKSILVER_PRINCIPALS`, the interim shared supervisor token is the
+ * only accepted credential (a supervisor holds all three permissions).
+ */
+export function checkDecisionRouteCaller(route: DecisionRoute, authorization: string | null, env: CredentialEnv): DecisionRouteAuthResult {
+  const permissions = Object.hasOwn(DECISION_ROUTE_PERMISSIONS, route) ? DECISION_ROUTE_PERMISSIONS[route] : undefined
+  if (!permissions) return { ok: false, status: 403, reason: 'Unknown decision route.' }
+  if (route === 'execute') {
+    const supervisor = checkSupervisorCredential(authorization, 'decision:execute', env)
+    return supervisor.ok ? { ok: true, principalId: supervisor.supervisorId } : supervisor
+  }
+
+  let provider: StaticTokenIdentityProvider | null
+  try {
+    provider = principalProvider(env)
+  } catch {
+    return { ok: false, status: 503, reason: 'Principals are misconfigured.' }
+  }
+  if (!provider) {
+    const shared = checkSharedSupervisorToken(authorization, env)
+    return shared.ok ? { ok: true, principalId: shared.supervisorId } : shared
+  }
+  const principal = provider.authenticateHeader(authorization)
+  if (!principal) return { ok: false, status: 401, reason: 'A valid credential is required.' }
+  const tenantId = tenantOf(env)
+  const allowed = permissions.some((permission) => accessController.authorize(principal, permission, { tenantId, kind: 'decision' }).allowed)
+  if (!allowed) return { ok: false, status: 403, reason: 'This credential is not permitted to perform this action.' }
+  return { ok: true, principalId: principal.id }
+}

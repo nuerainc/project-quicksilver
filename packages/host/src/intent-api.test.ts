@@ -19,8 +19,11 @@ async function start() {
   const founder = person('entity-founder', ['intent-provider', 'viewer'])
   const ops = person('entity-ops', ['intent-admin', 'viewer'])
   const viewer = person('entity-viewer', ['viewer'])
+  // A service principal configured with intent-provider (threat model F-3).
+  const service = generateToken()
+  const serviceConfig: TokenPrincipalConfig = { id: 'svc:intent-import', kind: 'service', tenantId: TENANT, roles: ['intent-provider', 'viewer'], tokenDigest: service.tokenDigest }
   const host = new QuicksilverHost(parseHostConfig({ tenantId: TENANT, http: { host: '127.0.0.1', port: 0 }, workflows: {} }), {
-    principals: [founder.config, ops.config, viewer.config],
+    principals: [founder.config, ops.config, viewer.config, serviceConfig],
     logger: new Logger({ level: 'error', sink: { write: () => {} } }),
     intent: { graphs: new MemoryIntentGraphStore(), ledger: new MemoryLedgerStore() },
   })
@@ -30,7 +33,7 @@ async function start() {
     headers: { authorization: `Bearer ${token}`, ...(body !== undefined ? { 'content-type': 'application/json' } : {}) },
     ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
   }).then(async (r) => ({ status: r.status, body: await r.json() as any }))
-  return { host, call, tokens: { founder: founder.token, ops: ops.token, viewer: viewer.token } }
+  return { host, call, tokens: { founder: founder.token, ops: ops.token, viewer: viewer.token, service: service.token } }
 }
 
 test('an objective becomes an intent with questions; answers are recorded as the provider\'s own', async () => {
@@ -56,6 +59,27 @@ test('an objective becomes an intent with questions; answers are recorded as the
     assert.equal((await call('/api/intents', tokens.viewer)).body.intents.length, 1)
     assert.equal((await call('/api/intents', tokens.viewer, { objective: 'x' })).status, 403, 'viewers cannot state intent')
     assert.equal((await call('/api/intents', tokens.founder, { objective: '' })).status, 422)
+  } finally {
+    await host.stop({ abort: true })
+  }
+})
+
+test('a service principal cannot answer intent questions, even with intent-provider (F-3)', async () => {
+  const { host, call, tokens } = await start()
+  try {
+    const created = await call('/api/intents', tokens.founder, { objective: 'We run a feed store. Help us understand our margins.' })
+    assert.equal(created.status, 201)
+    const intent = created.body.intent
+    const q = intent.questions[0]
+    const refused = await call(`/api/intents/${intent.id}/answers`, tokens.service, { variableId: q.variableId, answer: 'Books and the point-of-sale system' })
+    assert.equal(refused.status, 403)
+    assert.match(refused.body.error, /Only a human/)
+    const after = await call(`/api/intents/${intent.id}`, tokens.viewer)
+    const v = after.body.graph.variables.find((x: any) => x.id === q.variableId)
+    assert.notEqual(v?.provenance, 'HUMAN_SPECIFIED', 'nothing was recorded as a human\'s words')
+    assert.ok(after.body.intent.questions.some((x: any) => x.variableId === q.variableId), 'the question is still open')
+    // The human provider can still answer it.
+    assert.equal((await call(`/api/intents/${intent.id}/answers`, tokens.founder, { variableId: q.variableId, answer: 'Books and the point-of-sale system' })).status, 200)
   } finally {
     await host.stop({ abort: true })
   }

@@ -4,6 +4,7 @@ import { dirname, isAbsolute, resolve } from 'node:path'
 import { validatePrincipal, type Principal } from '@quicksilver/kernel/identity'
 import { validateCron } from '@quicksilver/kernel/triggers/cron'
 import { validateWorkflowGraph, type WorkflowGraph } from '@quicksilver/kernel/workflows/graph'
+import { productionFlagProblems } from '@quicksilver/kernel/production-flags'
 
 /**
  * Host configuration (single tenant).
@@ -101,6 +102,18 @@ export class ConfigError extends Error {
   }
 }
 
+/**
+ * Refuse to start with a development-only switch on in production (threat
+ * model A-10): `QUICKSILVER_ALLOW_FAULT_INJECTION` or
+ * `QUICKSILVER_WORKFLOW_LIVE_RUNS` set to `on` while `NODE_ENV=production`.
+ * The host shares its `.env` with the web app, so it checks both. Throws a
+ * `ConfigError` naming each switch; returns quietly when it is safe.
+ */
+export function assertNoDevelopmentFlagsInProduction(env: Readonly<Record<string, string | undefined>>): void {
+  const problems = productionFlagProblems(env)
+  if (problems.length) throw new ConfigError(problems)
+}
+
 const ID = /^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/
 const WEBHOOK_ID = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$/
 const SECRET_REF = /^(vault:[a-z0-9][a-z0-9._-]{0,127}|env:[A-Z_][A-Z0-9_]{0,127})$/
@@ -153,7 +166,8 @@ export function parseHostConfig(input: unknown): HostConfig {
   if (typeof tenantId !== 'string' || !ID.test(tenantId)) p.push('tenantId is required (letters, digits, . _ : -).')
 
   const http = {
-    host: typeof raw.http?.host === 'string' ? raw.http.host : '0.0.0.0',
+    // Loopback unless the config says otherwise: a public bind (0.0.0.0) must be explicit (threat model A-4).
+    host: typeof raw.http?.host === 'string' ? raw.http.host : '127.0.0.1',
     port: raw.http?.port ?? 8787,
     metricsPublic: raw.http?.metricsPublic === true,
     maxBodyBytes: raw.http?.maxBodyBytes ?? 262_144,

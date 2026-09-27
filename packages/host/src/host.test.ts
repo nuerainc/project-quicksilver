@@ -296,8 +296,12 @@ test('vault-backed webhook secrets rotate through the API without a restart', as
     },
   })
   try {
-    const body = '{"n":1}'
-    const send = (secret: string, id: string) => fetch(`${h.base}/webhooks/erp-orders`, { method: 'POST', headers: signed(secret, body, id), body })
+    // One body per delivery: the same secret, second and body give the same
+    // signature, and a seen signature under a new delivery id is a replay (F-1).
+    const send = (secret: string, id: string) => {
+      const body = JSON.stringify({ n: 1, delivery: id })
+      return fetch(`${h.base}/webhooks/erp-orders`, { method: 'POST', headers: signed(secret, body, id), body })
+    }
     assert.equal((await send(first, 'a')).status, 202)
     const second = generateWebhookSecret()
     const put = await (await api(h, '/api/secrets/erp-webhook', { method: 'PUT', token: h.tokens.admin, body: { value: second } })).json() as { reloadedWebhooks: string[] }

@@ -276,12 +276,95 @@ test('ReplayCache: entries expire and the cache stays bounded', () => {
   const now = { t: 0 }
   const cache = new InMemoryReplayCache({ maxEntries: 2, now: () => now.t })
   assert.equal(cache.remember('a', 100), true)
-  assert.equal(cache.remember('a', 100), false)
+  assert.equal(cache.remember('a', 100), '', 'a live key returns the binding it was first seen with (none)')
   now.t = 150
   assert.equal(cache.remember('a', 300), true, 'expired entries may be reused')
   cache.remember('b', 300)
   cache.remember('c', 300)
-  assert.equal(cache.remember('c', 300), false)
+  assert.equal(cache.remember('c', 300), '')
+})
+
+test('ReplayCache: the first binding is kept and returned; a later one never overwrites it', () => {
+  const cache = new InMemoryReplayCache({ now: () => 0 })
+  assert.equal(cache.remember('sig', 100, 'evt_1'), true)
+  assert.equal(cache.remember('sig', 100, 'evt_attacker'), 'evt_1')
+  assert.equal(cache.remember('sig', 100), 'evt_1')
+  assert.equal(cache.remember('sig', 100, 'evt_1'), 'evt_1')
+})
+
+test('Webhook: a seen signature with a swapped delivery id is refused (F-1, run path)', async () => {
+  const { queue, trigger, now } = webhooks()
+  const body = '{"order":42}'
+  const signed = signedHeaders(body, now.t, { delivery: 'evt_1' })
+  assert.equal((await trigger.receive('erp-orders', signed, body)).status, 202)
+  const swapped = new Headers(signed)
+  swapped.set('x-quicksilver-delivery', 'evt_attacker')
+  const replay = await trigger.receive('erp-orders', swapped, body)
+  assert.equal(replay.status, 409)
+  assert.equal(!replay.body.accepted && replay.body.error, 'Replayed delivery.')
+  // Same signature, delivery id dropped: refused.
+  const stripped = new Headers(signed)
+  stripped.delete('x-quicksilver-delivery')
+  assert.equal((await trigger.receive('erp-orders', stripped, body)).status, 409)
+  // Same signature, same delivery id: the idempotent exact resend, same run.
+  const resend = await trigger.receive('erp-orders', signed, body)
+  assert.equal(resend.status, 200)
+  assert.equal(resend.body.accepted && resend.body.deduplicated, true)
+  const runs = await queue.store.list()
+  assert.equal(runs.length, 1, 'exactly one run for one signed delivery')
+  assert.equal(runs[0]!.idempotencyKey, 'webhook:erp-orders:evt_1')
+
+  // First seen without a delivery id, then replayed with one: refused.
+  const body2 = '{"order":43}'
+  const bare = signedHeaders(body2, now.t)
+  assert.equal((await trigger.receive('erp-orders', bare, body2)).status, 202)
+  const added = new Headers(bare)
+  added.set('x-quicksilver-delivery', 'evt_new')
+  assert.equal((await trigger.receive('erp-orders', added, body2)).status, 409)
+  assert.equal((await queue.store.list()).length, 2)
+})
+
+test('Webhook: a seen signature with a swapped delivery id never reaches the deliver sink (F-1, task path)', async () => {
+  const now = { t: iso('2026-09-27T12:00:00Z') }
+  const queue = new WorkflowRunQueue({ store: new InMemoryWorkflowRunStore(), access: new AccessController(), now: () => now.t })
+  const keys: string[] = []
+  const tasks = new Map<string, string>()
+  const trigger = new WebhookTrigger({
+    queue,
+    now: () => now.t,
+    endpoints: [{
+      id: 'task-form', tenantId: 'acme', secrets: [secret], principal: hookPrincipal,
+      deliver: async (d) => {
+        keys.push(d.idempotencyKey)
+        const existing = tasks.get(d.idempotencyKey)
+        if (existing) return { status: 200, body: { accepted: true, taskId: existing, deduplicated: true } }
+        tasks.set(d.idempotencyKey, `task-${tasks.size + 1}`)
+        return { status: 202, body: { accepted: true, taskId: tasks.get(d.idempotencyKey)! } }
+      },
+    }],
+  })
+  const body = '{"objective":"Brief me"}'
+  const signed = signedHeaders(body, now.t, { delivery: 'evt_1' })
+  assert.equal((await trigger.receive('task-form', signed, body)).status, 202)
+  const swapped = new Headers(signed)
+  swapped.set('x-quicksilver-delivery', 'evt_attacker')
+  assert.equal((await trigger.receive('task-form', swapped, body)).status, 409)
+  const stripped = new Headers(signed)
+  stripped.delete('x-quicksilver-delivery')
+  assert.equal((await trigger.receive('task-form', stripped, body)).status, 409)
+  const resend = await trigger.receive('task-form', signed, body)
+  assert.equal(resend.status, 200, 'the exact resend resolves to the same task')
+  assert.deepEqual(keys, ['webhook:task-form:evt_1', 'webhook:task-form:evt_1'], 'the swapped id never reached the sink')
+  assert.equal(tasks.size, 1, 'one task for one signed delivery')
+
+  const body2 = '{"objective":"Brief me again"}'
+  const bare = signedHeaders(body2, now.t)
+  assert.equal((await trigger.receive('task-form', bare, body2)).status, 202)
+  const added = new Headers(bare)
+  added.set('x-quicksilver-delivery', 'evt_new')
+  assert.equal((await trigger.receive('task-form', added, body2)).status, 409)
+  assert.equal(tasks.size, 2)
+  assert.equal((await queue.store.list()).length, 0, 'the task path never enqueues a run')
 })
 
 test('Webhook: setSecrets rotates secrets in place and list() never exposes them', async () => {

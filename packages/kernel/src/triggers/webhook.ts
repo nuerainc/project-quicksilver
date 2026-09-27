@@ -58,13 +58,21 @@ export interface WebhookEndpoint {
 }
 
 export interface ReplayCache {
-  /** Returns true if the key was newly recorded, false if it was already seen. */
-  remember(key: string, expiresAt: number): boolean | Promise<boolean>
+  /**
+   * Record `key` until `expiresAt`, bound to `binding` (for webhooks: the
+   * delivery id the signature arrived with, `''` when there was none).
+   *
+   * Returns `true` if the key was newly recorded. If the key is already live,
+   * returns the binding it was first recorded with (never overwritten).
+   * `false` (a cache that keeps no bindings) means "seen, binding unknown",
+   * which the webhook trigger treats as a replay.
+   */
+  remember(key: string, expiresAt: number, binding?: string): boolean | string | Promise<boolean | string>
 }
 
 /** Bounded in-memory replay cache. Use a shared store (e.g. Postgres/Redis) across replicas. */
 export class InMemoryReplayCache implements ReplayCache {
-  private readonly seen = new Map<string, number>()
+  private readonly seen = new Map<string, { expiresAt: number; binding: string }>()
   private readonly maxEntries: number
   private readonly now: () => number
 
@@ -73,15 +81,15 @@ export class InMemoryReplayCache implements ReplayCache {
     this.now = options.now ?? Date.now
   }
 
-  remember(key: string, expiresAt: number): boolean {
+  remember(key: string, expiresAt: number, binding = ''): true | string {
     const now = this.now()
     const existing = this.seen.get(key)
-    if (existing !== undefined && existing > now) return false
+    if (existing !== undefined && existing.expiresAt > now) return existing.binding
     if (this.seen.size >= this.maxEntries) {
-      for (const [k, exp] of this.seen) if (exp <= now) this.seen.delete(k)
+      for (const [k, entry] of this.seen) if (entry.expiresAt <= now) this.seen.delete(k)
       while (this.seen.size >= this.maxEntries) this.seen.delete(this.seen.keys().next().value!)
     }
-    this.seen.set(key, expiresAt)
+    this.seen.set(key, { expiresAt, binding })
     return true
   }
 }
@@ -198,13 +206,18 @@ export class WebhookTrigger {
     const deliveryId = deliveryHeader ?? `sig:${signatureHex.slice(0, 32)}`
     const idempotencyKey = `webhook:${endpoint.id}:${deliveryId}`
 
-    // Replay protection: a (signature) may be used once within the tolerance window.
-    // Same delivery id with a *new* signature (a legitimate retry) falls through to idempotent enqueue.
-    const fresh = await this.replayCache.remember(`${endpoint.id}:${signatureHex}`, this.now() + this.toleranceSeconds * 2_000)
-    if (!fresh) {
-      if (deliveryHeader === null) return fail(409, 'Replayed delivery.')
-      // With an explicit delivery id, a replay resolves to the existing run below.
-    }
+    // Replay protection. The signature does not cover the delivery id, so the
+    // cache remembers which delivery id each signature was first seen with.
+    // A seen signature is accepted again only with that same delivery id (an
+    // exact resend, which resolves to the existing run or task below). A seen
+    // signature with no delivery id, a different one, or one where the first
+    // had none is a replay (F-1): 409, nothing is enqueued or delivered.
+    // Same delivery id with a *new* signature (a legitimate retry) is fresh and
+    // falls through to the idempotent enqueue.
+    const binding = deliveryHeader ?? ''
+    const seen = await this.replayCache.remember(`${endpoint.id}:${signatureHex}`, this.now() + this.toleranceSeconds * 2_000, binding)
+    const fresh = seen === true
+    if (!fresh && (deliveryHeader === null || seen !== binding)) return fail(409, 'Replayed delivery.')
 
     if (endpoint.deliver) {
       try {

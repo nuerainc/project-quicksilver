@@ -19,6 +19,7 @@ import { NextResponse } from 'next/server'
 import { getDedicatedSanityProjectId } from '@/lib/sanity-config'
 import { createClient } from '@sanity/client'
 import { loadDecisionLifecycle } from '@/lib/process-engine'
+import { authorizeDecisionRoute } from '@/lib/nqc-approval'
 
 function getSanityClient() {
   return createClient({
@@ -31,11 +32,15 @@ function getSanityClient() {
 }
 
 export async function POST(
-  _req: Request,
+  req: Request,
   ctx: { params: Promise<{ id: string }> },
 ) {
   const { id } = await ctx.params
   if (!id) return NextResponse.json({ error: 'Missing decision id' }, { status: 400 })
+
+  // A valid principal with decision:read or decision:propose, before any read or write.
+  const caller = authorizeDecisionRoute(req, 'observe')
+  if (!caller.ok) return NextResponse.json({ error: caller.reason }, { status: caller.status })
 
   if (!process.env.NEXT_PUBLIC_SANITY_PROJECT_ID) {
     return NextResponse.json({ error: 'Sanity not configured' }, { status: 500 })

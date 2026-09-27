@@ -42,8 +42,11 @@ npm run host                             # start; Ctrl+C to stop
   (7:00 after the switch to standard time) on weekdays. A slot missed while
   the computer was off runs when the host starts again, if it is less than an
   hour late.
-- The API listens on `127.0.0.1:8787` only. Webhooks need a public address,
-  so the local example has none.
+- The API listens on `127.0.0.1:8787` only. `http.host` defaults to
+  `127.0.0.1` when the config omits it; listening on every interface needs an
+  explicit `"http": { "host": "0.0.0.0" }` (the container example sets it,
+  behind Compose's `127.0.0.1` port mapping or Caddy). Webhooks need a public
+  address, so the local example has none.
 
 With Docker and Postgres:
 

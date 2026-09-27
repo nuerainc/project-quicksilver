@@ -38,7 +38,8 @@
     "./playbooks/genesis": "./src/playbooks/genesis.ts",
     "./playbooks/operate": "./src/playbooks/operate.ts",
     "./simulation": "./src/simulation/index.ts",
-    "./waes": "./src/waes.ts"
+    "./waes": "./src/waes.ts",
+    "./production-flags": "./src/production-flags.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"
