@@ -14,7 +14,8 @@
     "./prompts": "./src/prompts.ts",
     "./planner": "./src/planner.ts",
     "./intent": "./src/intent-parser.ts",
-    "./shadow": "./src/shadow-agent.ts"
+    "./shadow": "./src/shadow-agent.ts",
+    "./decision-predictor": "./src/decision-predictor.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

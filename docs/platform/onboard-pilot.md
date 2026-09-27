@@ -230,3 +230,28 @@ a running accuracy over all decisions (journal and shadow verdicts):
 This is a **baseline**, labeled as one everywhere it appears. It is the bar
 any real Aura choice model has to beat on the same decisions, not a
 measure of Aura itself.
+
+## Sealed predictions on your own decisions (Aura)
+
+Aura learns your intent from your own decisions, in your own business. For each
+real decision you face:
+
+```bash
+npm run onboard -- predict "<situation>" "<option a>" "<option b>" [...up to 5] [--category pricing]
+npm run onboard -- decide --pending <id> --chose <n> --note "<one-line reason>"
+npm run onboard -- pending       # sealed decisions still waiting for you
+npm run onboard -- decisions     # the journal and the running score
+```
+
+- `predict` asks the model 3 times (the v3 method: everything you have given,
+  then each option against each goal, told plainly that it is your own
+  decision) and seals the result in `data/intent/pending.json`. You do not see
+  it until you decide.
+- `decide --pending` records your choice and reason in the journal, then
+  reveals and scores the prediction. A reason is required: reasons are what
+  Aura learns most from.
+- Ask when unsure: when the 3 votes disagree, Aura would have asked you
+  instead of acting. The score shows agreement where it would act and how
+  often it would ask, so the threshold (`--threshold`, default all votes) can
+  be set from real data.
+- Every logged decision becomes an example for the next prediction.

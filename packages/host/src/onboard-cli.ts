@@ -14,6 +14,9 @@
  *   npm run onboard -- handover <companyId> <department> advise|propose|act-with-approval|act-within-limits ["reason"]
  *   npm run onboard -- principles import <principles.json> <companyId>
  *   npm run onboard -- principles list <companyId>
+ *   npm run onboard -- predict "<situation>" "<option a>" "<option b>" [...] [--category <tag>]   (Aura seals its prediction)
+ *   npm run onboard -- pending
+ *   npm run onboard -- decide --pending <id> --chose <n> --note "<one-line reason>"
  *
  * `principles import` reads the review page's export ({ principles: [{ id, text,
  * status: confirmed|edited|rejected, appliesTo?, examples? }] }) and records the
@@ -61,7 +64,7 @@ import {
   type LearnerState,
   type Transaction,
 } from '@quicksilver/aura'
-import { decisionsAsExamples, FileDecisionStore, newDecisionId, prequentialOnDecisions, recordDecision, verdictsAsDecisions, type Decision } from '@quicksilver/aura'
+import { decisionsAsExamples, FileDecisionStore, FilePendingStore, newDecisionId, predictionScoreboard, prequentialOnDecisions, recordDecision, resolvePending, validatePending, verdictsAsDecisions, type Decision, type SealedPrediction } from '@quicksilver/aura'
 import { availableTransitions, nextAutomaticTransition, type Facts } from '@quicksilver/kernel/process'
 import { validatePlaybook, type PlaybookDefinition } from '@quicksilver/kernel/playbooks'
 import { fileRankerStore } from './ranker-store.ts'
@@ -293,7 +296,60 @@ switch (cmd) {
   //   npm run onboard -- decide "<situation>" "<option a>" "<option b>" [...up to 5] --chose <n> [--note "..."] [--category <tag>]
   //   npm run onboard -- decisions [--export examples|json] [--no-shadow]
   // Journal: data/intent/decisions.jsonl (append-only). Judged shadow verdicts are included as decisions.
+  // ── Sealed predictions on your own decisions ─────────────────────────
+  //   npm run onboard -- predict "<situation>" "<option a>" "<option b>" [...up to 5] [--category <tag>] [--votes 3] [--threshold 1]
+  //   npm run onboard -- pending
+  //   npm run onboard -- decide --pending <id> --chose <n> --note "<one-line reason>"
+  // Aura predicts before you decide and keeps the prediction sealed until you have.
+  case 'predict': {
+    const [situation, ...optionTexts] = positional
+    const v = validatePending({ situation, options: optionTexts, category: flag('--category') })
+    if (!v.ok) fail(`${v.error}\nUsage: predict "<situation>" "<option a>" "<option b>" [...up to 5] [--category <tag>]`)
+    const { loadRepoEnv, founderContext, predictOwnDecision } = await import('@quicksilver/agent/decision-predictor')
+    loadRepoEnv()
+    const journal = await new FileDecisionStore(join(dir, 'decisions.jsonl')).list()
+    const principlesPath = resolve(root, 'data/aura/principles.json')
+    const ctx = founderContext({ principlesPath, journal })
+    const votes = Number(flag('--votes') ?? 3), threshold = Number(flag('--threshold') ?? 1)
+    const now = new Date()
+    const prediction = await predictOwnDecision(ctx, v.value, { votes, threshold, now })
+    if (!prediction) fail('The model did not answer; nothing was recorded. Check the model settings in .env and try again.')
+    const id = `pend-${now.getTime().toString(36)}`
+    await new FilePendingStore(join(dir, 'pending.json')).add({ id, at: now.toISOString(), by: actorId, ...v.value, prediction })
+    console.log(`Aura has made its prediction and sealed it (${id}). It stays hidden until you decide.`)
+    v.value.options.forEach((o, i) => console.log(`  ${i + 1}) ${o.text}`))
+    console.log(`Now decide: npm run onboard -- decide --pending ${id} --chose <n> --note "<one-line reason>"`)
+    break
+  }
+  case 'pending': {
+    const open = await new FilePendingStore(join(dir, 'pending.json')).list()
+    if (!open.length) { console.log('No sealed decisions waiting.'); break }
+    for (const p of open) console.log(`  ${p.id}  ${p.at.slice(0, 10)}  ${p.situation.slice(0, 80)}${p.situation.length > 80 ? '…' : ''}\n      ${p.options.map((o, i) => `${i + 1}) ${o.text}`).join('  ')}`)
+    break
+  }
   case 'decide': {
+    const pendingId = flag('--pending')
+    if (pendingId) {
+      const pstore = new FilePendingStore(join(dir, 'pending.json'))
+      const p = await pstore.get(pendingId)
+      if (!p) fail(`No sealed decision "${pendingId}". See: npm run onboard -- pending`)
+      const chose = flag('--chose')
+      if (!chose) fail('Usage: decide --pending <id> --chose <n> --note "<one-line reason>"')
+      const now = new Date()
+      const r = resolvePending(p, { chosen: /^\d+$/.test(chose) ? Number(chose) : chose, note: flag('--note') }, { id: newDecisionId(now), now, by: actorId })
+      if (!r.ok) fail(r.error)
+      const store = new FileDecisionStore(join(dir, 'decisions.jsonl'))
+      await store.append(r.decision)
+      await pstore.close(p.id)
+      const text = (id: string) => `${id}) ${p.options.find((o) => o.id === id)?.text ?? ''}`
+      const pr = r.decision.prediction
+      console.log(`You chose ${text(r.decision.chosen)}`)
+      console.log(`Aura predicted ${text(pr.pick)} (${Math.round(pr.confidence * 100)}% of ${pr.votes.length} votes; it would have ${pr.wouldAct ? 'acted' : 'asked you first'}).`)
+      console.log(pr.pick === r.decision.chosen ? 'Match.' : `Miss.${pr.wouldAct ? '' : ' Asking was the right call.'}`)
+      const sb = predictionScoreboard((await store.list()) as Array<Decision & { prediction?: SealedPrediction }>)
+      console.log(`So far: ${sb.agreed}/${sb.predicted} predicted right; where Aura would act, ${sb.actedAgreed}/${sb.acted}; it would have asked on ${sb.asked}.`)
+      break
+    }
     const [situation, ...optionTexts] = positional
     const chose = flag('--chose')
     if (!situation || optionTexts.length < 2 || !chose) fail('Usage: decide "<situation>" "<option a>" "<option b>" [...up to 5] --chose <n> [--note "..."] [--category <tag>]')
@@ -320,11 +376,13 @@ switch (cmd) {
     if (exportAs === 'json') { console.log(JSON.stringify({ decisions: all }, null, 1)); break }
     console.log(`${all.length} decision(s): ${journal.length} logged, ${shadow.length} from shadow verdicts.`)
     for (const d of all.slice(-10).reverse()) console.log(`  ${d.at.slice(0, 10)} [${d.source}${d.category ? `, ${d.category}` : ''}] ${d.situation.slice(0, 90)}${d.situation.length > 90 ? '…' : ''} → ${d.chosen}`)
+    const sb = predictionScoreboard(journal as Array<Decision & { prediction?: SealedPrediction }>)
+    if (sb.predicted) console.log(`Sealed predictions: ${sb.agreed}/${sb.predicted} right (${Math.round(100 * sb.agreed / sb.predicted)}%). Where Aura would act: ${sb.actedAgreed}/${sb.acted}${sb.acted ? ` (${Math.round(100 * sb.actedAgreed / sb.acted)}%)` : ''}. It would have asked on ${sb.asked}${sb.asked ? `, and ${sb.askedWouldMiss} of those it would have got wrong` : ''}.`)
     const b = prequentialOnDecisions(all)
     if (b.decisions) console.log(`Running accuracy (baseline, predict-then-learn): ${Math.round(b.accuracy! * 100)}% over ${b.decisions}; chance ${Math.round(b.chance! * 100)}%; second half ${Math.round(b.laterAccuracy! * 100)}%.`)
     console.log('Export for choice-eval: npm run -s onboard -- decisions --export examples > data/aura/decision-examples.txt')
     break
   }
   default:
-    console.log('Commands: start, answer, dismiss, connect, backtest, recommend, judge, outcome, status, company, handover, principles. See the header of packages/host/src/onboard-cli.ts.')
+    console.log('Commands: start, answer, dismiss, connect, backtest, recommend, judge, outcome, status, company, handover, principles, predict, pending, decide, decisions. See the header of packages/host/src/onboard-cli.ts.')
 }
