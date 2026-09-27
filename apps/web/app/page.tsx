@@ -12,6 +12,10 @@ import {
   type ConsoleWhoami,
   type SoleOperatorPrompt,
 } from '@/lib/console-auth'
+import { DEMO_PRINCIPALS } from '@/lib/demo-mode'
+
+/** Inlined at build: the public demo (Sanity Challenge edition) offers one-click demo sign-in. */
+const DEMO = (process.env.NEXT_PUBLIC_QUICKSILVER_DEMO_MODE ?? '').trim().toLowerCase() === 'on'
 
 /** A refused console call, with the server's status and body (for the sole-operator prompt). */
 class ConsoleCallError extends Error {
@@ -497,6 +501,22 @@ function ConsoleSignIn({
             Sign out
           </button>
         </div>
+      ) : DEMO ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="font-mono text-xs uppercase tracking-widest text-quicksilver-accent">Demo sign-in</span>
+          {DEMO_PRINCIPALS.map((p) => (
+            <button
+              key={p.id}
+              onClick={() => onSignIn(p.token)}
+              className="rounded border border-quicksilver-quicksilver bg-quicksilver-quicksilver/5 px-3 py-1.5 font-mono text-xs text-quicksilver-signal transition hover:bg-quicksilver-quicksilver/15"
+            >
+              {p.displayName}, {p.title} <span className="text-quicksilver-accent">({p.purpose})</span>
+            </button>
+          ))}
+          <p className="w-full font-mono text-[11px] text-quicksilver-accent">
+            Synthetic company, public dataset. Plan as Marcus, then sign out and approve as Sarah: separation of duties means neither can do both.
+          </p>
+        </div>
       ) : (
         <form
           className="flex flex-wrap items-center gap-2"
@@ -809,14 +829,24 @@ function DecisionCard({
     : 0
   const totalFlags = kernelFlagCount + reviewFlagCount
 
+  // Whether one of the lifecycle buttons below applies to this status; when
+  // none does, say why instead of showing an empty row.
+  const hasLifecycleAction =
+    status === 'awaiting-approval' ||
+    status === 'approved' ||
+    status === 'executed' ||
+    status === 'failed' ||
+    status === 'rollback-suggested' ||
+    (status === 'proposed' && process?.engine === 'on')
+
   return (
     <article className="rounded border border-quicksilver-border bg-quicksilver-panel p-6">
       <header className="mb-4 flex items-baseline justify-between gap-4">
         <h3 className="text-base text-quicksilver-signal">{d.action.description}</h3>
         <span
-          className={`shrink-0 rounded-full border px-2 py-0.5 font-mono text-xs whitespace-nowrap ${statusTone[status]}`}
+          className={`shrink-0 rounded-full border px-2 py-0.5 font-mono text-xs whitespace-nowrap ${statusTone[status] ?? statusTone.proposed}`}
         >
-          risk {decision?.riskLevel ?? '?'}/5 · {statusLabel[status]}
+          risk {decision?.riskLevel ?? '?'}/5 · {statusLabel[status] ?? status}
         </span>
       </header>
 
@@ -860,6 +890,10 @@ function DecisionCard({
         {docId && status === 'rollback-suggested' && (
           <ActionButton label="Propose rollback" onClick={() => onRollback(docId)} busy={actingId === docId} tone="primary" />
         )}
+
+        {docId && !hasLifecycleAction && (
+          <span className="font-mono text-xs text-quicksilver-accent">{noActionReason(status, process)}</span>
+        )}
       </div>
 
       <button
@@ -876,6 +910,24 @@ function DecisionCard({
 
       {expanded && (
         <div className="mt-4 space-y-3 border-t border-quicksilver-border pt-4">
+          <div>
+            <h4 className="font-mono text-xs uppercase tracking-widest text-quicksilver-accent">Proposed action</h4>
+            <dl className="mt-1 grid grid-cols-1 gap-1 font-mono text-xs sm:grid-cols-2">
+              <div><dt className="inline text-quicksilver-accent">actor </dt><dd className="inline text-quicksilver-signal">{d.action.actorId}</dd></div>
+              <div><dt className="inline text-quicksilver-accent">capability </dt><dd className="inline text-quicksilver-signal">{d.action.capabilityId}</dd></div>
+              <div><dt className="inline text-quicksilver-accent">operational impact </dt><dd className="inline text-quicksilver-signal">{d.action.operationalImpact}</dd></div>
+              <div><dt className="inline text-quicksilver-accent">uncertainty </dt><dd className="inline text-quicksilver-signal">{d.action.uncertainty}</dd></div>
+              <div><dt className="inline text-quicksilver-accent">policies cited </dt><dd className="inline text-quicksilver-signal">{d.action.applicablePolicyIds.join(', ') || 'none'}</dd></div>
+              <div><dt className="inline text-quicksilver-accent">evidence cited </dt><dd className="inline text-quicksilver-signal">{d.action.evidenceIds.join(', ') || 'none'}</dd></div>
+            </dl>
+          </div>
+
+          {d.resolvedReferences.policies.length === 0 && d.resolvedReferences.evidence.length === 0 && kernelFlagCount === 0 && !d.review && (
+            <p className="font-mono text-xs text-quicksilver-accent">
+              No policy or evidence in the company model matched the ids above, and neither the kernel nor the reviewer raised anything.
+              {(d.action.applicablePolicyIds.length > 0 || d.action.evidenceIds.length > 0) && ' The planner cited ids that were not found.'}
+            </p>
+          )}
           {d.resolvedReferences.policies.length > 0 && (
             <div>
               <h4 className="font-mono text-xs uppercase tracking-widest text-quicksilver-accent">
@@ -1125,4 +1177,24 @@ function ActionButton({
       {busy ? 'Working…' : label}
     </button>
   )
+}
+
+/** Why a decision card shows no lifecycle button (shown in place of the buttons). */
+function noActionReason(status: string, process: ProcessInfo | undefined): string {
+  switch (status) {
+    case 'rejected':
+      return 'Rejected by the kernel: a hard block (see reasoning & evidence). Nothing to approve.'
+    case 'proposed':
+      return process?.engine === 'invalid'
+        ? 'Held: the process definition in Sanity failed validation, so the kernel moves nothing.'
+        : 'Proposed: waiting in the process definition\'s first state.'
+    case 'rolled-back':
+      return 'Rolled back. Nothing left to do.'
+    case 'rollback-proposed':
+      return 'Rollback proposed: waiting for a supervisor to approve it.'
+    case 'pending':
+      return 'Pending: not yet evaluated.'
+    default:
+      return `Status "${status}" has no console action${process?.stateLabel ? ` (process state: ${process.stateLabel})` : ''}.`
+  }
 }
