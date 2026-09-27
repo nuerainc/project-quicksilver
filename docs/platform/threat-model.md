@@ -383,7 +383,7 @@ Owner type: **code** (a change in this repository), **founder decision**, or
 | B-10 | Host image: install only the host workspace's production dependencies; `**/.env` and `**/.env.*` in `.dockerignore` | code | S |
 | B-11 | Web input limits: byte cap before parsing, `question` at most 2,000 characters, `comment` at most 1,000 | code | S |
 | B-12 | Index the task store (idempotency key and submitter) instead of reading every file | code | S |
-| B-13 | Fix F-3: humans only on `POST /api/intents/:id/answers` | code | S |
+| B-13 | ~~Fix F-3: humans only on `POST /api/intents/:id/answers`~~ **Fixed in `30b085e`** | code | S |
 | B-14 | Multi-tenant hosting with isolation tests (already planned before 0.9.0) | code | L |
 | B-15 | Data rules: which data classes may go to the model provider; which capabilities and data each task client may reach; review the provider's data-handling terms | founder decision | S |
 | B-16 | A shared webhook replay cache, only if more than one host replica ever runs | code | M |
