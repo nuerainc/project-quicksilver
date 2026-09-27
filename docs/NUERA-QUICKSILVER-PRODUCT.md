@@ -251,6 +251,7 @@ it runs a company. Current status is tracked in
 | M4: Playbooks and Onboard pilot | 0.5.0 | Playbook type, Onboard playbook, connectors, shadow mode on Nuera (the host runs on the founder's computer) | M2, M3 | Build ~Dec 15; pilot Jan–Feb 2027 |
 | M5: Genesis demonstration | 0.6.0 | Economic playbook, experiments, ledger, WAES review, **always-on hosting** (moved from M2; payment webhooks need a public address); a $500, 30-day digital-only run | M3, M4. **Built 2026-09-26**; the run waits on the entity and payment accounts | Feb–Mar 2027 |
 | M6: Operate | 0.7.0 | Steady-state operations and reinvestment | M4, M5 | Mar–Apr 2027 |
+| M7: Kernel depth | 0.8.0 | Policy versioning, supersession and scope nesting; capability graph (inheritance, dependencies, conflicts, risk multipliers); what-if simulation; a governed task interface for other Nuera projects | M6. **Parts 1–2 built 2026-09-27**; simulation and the task interface to come | Before the 0.9.0 release candidate |
 
 M2 is deliberately single-tenant. SSO and multi-tenant hosting come before
 the 0.9.0 release candidate. M2 was completed with the host running on the
@@ -282,6 +283,7 @@ promised to be stable until 1.0.0.
 | 0.5.0 | M4 playbooks and Onboard pilot |
 | 0.6.0 | M5 Genesis demonstration |
 | 0.7.0 | M6 Operate |
+| 0.8.0 | M7 Kernel depth |
 | 0.9.0 | Release candidate: all three modes pass the parity gate in testing |
 | **1.0.0** | All three modes pass the parity gate with operational evidence (pilot and demo results, not only tests) |
 

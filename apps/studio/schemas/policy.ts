@@ -10,7 +10,8 @@ export default defineType({
     defineField({
       name: 'scope',
       type: 'string',
-      description: 'e.g. "production.parameter_changes", "finance.transfers"',
+      description:
+        'Dot-separated, e.g. "production.parameter_changes", "finance.transfers". A policy on "finance" also governs capabilities in "finance.*"; a more specific scope may never silently loosen it.',
     }),
     defineField({
       name: 'priority',
@@ -50,6 +51,19 @@ export default defineType({
       name: 'supersedes',
       type: 'array',
       of: [{ type: 'reference', to: [{ type: 'policy' }] }],
+    }),
+    defineField({
+      name: 'lineageId',
+      title: 'Lineage',
+      type: 'string',
+      description:
+        'Optional. Policies that are versions of one rule share a lineage id. Within a lineage only the highest live version applies; older versions are recorded as superseded.',
+    }),
+    defineField({
+      name: 'version',
+      type: 'number',
+      description: 'Optional. Version within the lineage: a positive integer, unique within the lineage.',
+      validation: (r) => r.min(1).integer(),
     }),
     defineField({
       name: 'appliesTo',

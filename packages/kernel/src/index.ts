@@ -1,7 +1,25 @@
 export * from './types.ts'
 export { checkCapability } from './capability.ts'
-export { checkAuthority } from './authority.ts'
-export type { AuthorityOptions, AuthorityResult } from './authority.ts'
+export { checkAuthority, validatePolicySet, scopeIncludes, isValidPolicyVersion, isPolicyLive } from './authority.ts'
+export type { AuthorityOptions, AuthorityResult, PolicySetProblem, PolicySetProblemCode } from './authority.ts'
+export {
+  applyRiskMultiplier,
+  buildCapabilityGraph,
+  checkCapabilityGraph,
+  graphProblemsFor,
+  validateCapabilityGraph,
+} from './capability-graph.ts'
+export type {
+  CapabilityGraph,
+  CapabilityGraphCheck,
+  CapabilityGraphFinding,
+  CapabilityGraphProblem,
+  CapabilityGraphProblemCode,
+  ResolvedCapability,
+  SeparationSettings,
+} from './capability-graph.ts'
+export { findCycles } from './graph-cycles.ts'
+export type { GraphCycle } from './graph-cycles.ts'
 export { computeRisk, averageEvidenceConfidence } from './risk.ts'
 export { authorize } from './approval.ts'
 export type { AuthorizeArgs, AuthorizeResult } from './approval.ts'

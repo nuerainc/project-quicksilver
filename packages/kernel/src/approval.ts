@@ -2,6 +2,13 @@ import type { CapabilityRef, EvidenceRef, EntityRef, PolicyCheck, PolicyRef, Pro
 import { checkCapability } from './capability.ts'
 import { checkAuthority } from './authority.ts'
 import { averageEvidenceConfidence, computeRisk } from './risk.ts'
+import {
+  applyRiskMultiplier,
+  buildCapabilityGraph,
+  checkCapabilityGraph,
+  type CapabilityGraphFinding,
+  type SeparationSettings,
+} from './capability-graph.ts'
 import { WAES_BLOCK_REASONS, type WaesReviewFact } from './waes.ts'
 
 /** Defaults used when the QUICKSILVER_RISK_* env vars are unset or invalid. */
@@ -39,6 +46,12 @@ export interface AuthorizeArgs {
   evidence: EvidenceRef[]
   /** Facts for structured policy conditions (see authority.ts). */
   facts?: import('./process.ts').Facts
+  /**
+   * Separation-of-duties settings for the capability-conflict check (M7):
+   * the configured sole operator and their written justification. Absent =
+   * strict (an actor holding conflicting capabilities is refused).
+   */
+  separation?: SeparationSettings
   thresholds?: {
     autoMax?: RiskLevel     // risk ≤ this → autonomous
     review?: RiskLevel      // risk ≤ this → additional validation, no human needed
@@ -58,6 +71,12 @@ export interface AuthorizeResult {
   policyResolutions: string[]
   /** Governing policies the kernel applied that the planner did not cite. */
   uncitedPolicyIds: string[]
+  /**
+   * Capability graph findings (M7): effective scopes used, the risk multiplier
+   * applied, dependency and conflict findings. Null when the capability is not
+   * in the company model.
+   */
+  capabilityGraph?: CapabilityGraphFinding | null
   averageEvidenceConfidence: number
   recommendation: 'execute-autonomously' | 'request-approval' | 'reject'
 }
@@ -70,6 +89,7 @@ export function authorize(args: AuthorizeArgs): AuthorizeResult {
     policies,
     evidence,
     facts,
+    separation,
     thresholds = {},
   } = args
 
@@ -77,14 +97,28 @@ export function authorize(args: AuthorizeArgs): AuthorizeResult {
   const review = thresholds.review ?? readRiskThreshold('QUICKSILVER_RISK_REVIEW_THRESHOLD', DEFAULT_RISK_REVIEW)
 
   const capability = capabilities.find((c) => c.id === action.capabilityId)
-  const capabilityCheck = checkCapability(actor, action, capabilities)
+  const graph = buildCapabilityGraph(capabilities)
+  const capabilityCheck = checkCapability(actor, action, capabilities, { graph, separation })
+  const graphCheck = checkCapabilityGraph(actor, action.capabilityId, capabilities, graph, separation)
+  const finding = graphCheck.finding
 
   // Filter the evidence pool to only what the action actually cites.
   const actionEvidence = evidence.filter((e) => action.evidenceIds.includes(e.id))
-  const riskLevel = computeRisk(action, capability, actionEvidence)
+  // Risk: the capability's effective base risk (inheritance floor), then the
+  // graph's risk multiplier, before any policy sees it.
+  const riskBeforeMultiplier = computeRisk(
+    action,
+    capability && finding ? { ...capability, baseRiskLevel: finding.baseRiskLevel } : capability,
+    actionEvidence,
+  )
+  const riskLevel = applyRiskMultiplier(riskBeforeMultiplier, finding?.riskMultiplier ?? 1)
+  if (finding) {
+    finding.riskBeforeMultiplier = riskBeforeMultiplier
+    finding.riskAfterMultiplier = riskLevel
+  }
   const authority = checkAuthority(action, policies, {
     riskLevel,
-    governingScopes: capability?.policyScopes ?? [],
+    governingScopes: finding?.effectiveScopes ?? capability?.policyScopes ?? [],
     actorId: actor.id,
     facts: {
       'action.riskLevel': riskLevel,
@@ -98,12 +132,15 @@ export function authorize(args: AuthorizeArgs): AuthorizeResult {
   // Hard blocks: the actor fundamentally cannot do this.
   const blockingReasons: string[] = []
   if (!capabilityCheck.allowed) blockingReasons.push(capabilityCheck.reason)
+  // Every graph refusal is recorded, not only the first one checkCapability reports.
+  for (const reason of graphCheck.blockingReasons) if (!blockingReasons.includes(reason)) blockingReasons.push(reason)
   blockingReasons.push(...authority.blockingReasons)
 
   // Soft concerns: the actor can attempt this, but humans should review.
   const concerns: string[] = []
   if (authority.conflicts.length > 0) concerns.push(...authority.conflicts)
   concerns.push(...authority.approvalReasons)
+  concerns.push(...graphCheck.concerns)
   // WAES gate (M5): customer-facing actions are hard-blocked without a passing review of this content.
   if (action.customerFacing === true || facts?.['action.customerFacing'] === true) {
     const review = (facts?.['waes.review'] ?? 'missing') as WaesReviewFact
@@ -152,6 +189,7 @@ export function authorize(args: AuthorizeArgs): AuthorizeResult {
     policyChecks: authority.checks,
     policyResolutions: authority.resolutions,
     uncitedPolicyIds: authority.uncitedPolicyIds,
+    capabilityGraph: finding,
     averageEvidenceConfidence: evidenceConf,
     recommendation,
   }

@@ -46,6 +46,19 @@ export interface CapabilityRef {
    * policy in these scopes, whether or not the planner cited it.
    */
   policyScopes?: string[] | null
+  /**
+   * M7 capability graph (all optional; see capability-graph.ts).
+   * Parents whose governing scopes, base-risk floor, dependencies, conflicts
+   * and risk multipliers this capability inherits. Inheritance never grants
+   * a right: holding a parent does not let an actor use this capability.
+   */
+  inherits?: string[] | null
+  /** To use this capability the actor must also hold each of these (transitively). */
+  requires?: string[] | null
+  /** The same actor may not hold this capability and any of these. */
+  conflictsWith?: string[] | null
+  /** Finite and >= 1; scales the action's computed risk (see capability-graph.ts). */
+  riskMultiplier?: number | null
 }
 
 /** A policy reference. */
@@ -70,7 +83,25 @@ export interface PolicyRef {
   maxRiskLevel?: RiskLevel | null
   /** Conditions over facts, in the process-guard format. */
   when?: import('./process.ts').Guard | null
+  /**
+   * M7 policy versioning (optional). Policies that are versions of one rule
+   * share a `lineageId`; within a lineage only the highest live `version`
+   * (a positive integer) applies. See authority.ts.
+   */
+  version?: number | null
+  lineageId?: string | null
 }
+
+/** Why a policy did or did not apply, as a stable code for the decision record. */
+export type PolicyCheckReason =
+  | 'applies'
+  | 'expired'
+  | 'not-yet-effective'
+  | 'conditions-not-met'
+  | 'superseded-by-id'
+  | 'superseded-by-version'
+  | 'supersession-cycle'
+  | 'out-of-scope'
 
 /** A policy check result — one row in the decision record. */
 export interface PolicyCheck {
@@ -78,6 +109,10 @@ export interface PolicyCheck {
   policyName: string
   result: 'applies' | 'superseded' | 'conflicts' | 'inapplicable'
   reason: string
+  /** Stable reason code (M7). */
+  reasonCode?: PolicyCheckReason
+  /** For superseded rows: the policy that superseded this one. */
+  supersededById?: string
 }
 
 /** An entity reference for kernel use. */

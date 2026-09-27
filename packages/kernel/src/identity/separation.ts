@@ -52,8 +52,38 @@ export function checkSeparationOfDuties(input: SeparationOfDutiesInput): Separat
 
   if (conflicts.length === 0) return { allowed: true, conflicts, reasons: [], soleOperatorOverride: false }
 
+  return applySoleOperatorOverride({
+    personId: approver,
+    conflicts,
+    soleOperatorId: input.soleOperatorId,
+    justification: input.justification,
+    strictReason: 'Separation of duties: another human must approve this decision.',
+  })
+}
+
+export interface SoleOperatorOverrideInput {
+  /** The person the conflicts are about (the approver, or the acting entity). */
+  personId: string
+  /** Separation-of-duties conflicts found; must be non-empty. */
+  conflicts: string[]
+  soleOperatorId?: string | null
+  justification?: string | null
+  /** Why the conflict is refused when no override applies. */
+  strictReason: string
+}
+
+/**
+ * The one sole-operator override rule, shared by approval separation and the
+ * capability graph's conflicting-capability check (capability-graph.ts): the
+ * configured sole operator may proceed despite a conflict, but only as
+ * themselves and only with a written justification of at least
+ * MIN_SOLE_OPERATOR_JUSTIFICATION characters; the result is stamped
+ * `soleOperatorOverride: true` and the waived conflicts are still reported.
+ */
+export function applySoleOperatorOverride(input: SoleOperatorOverrideInput): SeparationOfDutiesResult {
+  const { conflicts } = input
   const soleOperator = input.soleOperatorId?.trim()
-  if (soleOperator && soleOperator === approver) {
+  if (soleOperator && soleOperator === input.personId.trim()) {
     const justification = input.justification?.trim() ?? ''
     if (justification.length >= MIN_SOLE_OPERATOR_JUSTIFICATION) {
       return { allowed: true, conflicts, reasons: [], soleOperatorOverride: true }
@@ -71,7 +101,7 @@ export function checkSeparationOfDuties(input: SeparationOfDutiesInput): Separat
   return {
     allowed: false,
     conflicts,
-    reasons: [...conflicts, 'Separation of duties: another human must approve this decision.'],
+    reasons: [...conflicts, input.strictReason],
     soleOperatorOverride: false,
   }
 }
