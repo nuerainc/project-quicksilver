@@ -70,6 +70,8 @@
  *   all+rolling         — and this set's earlier answers, each added only after
  *                         it was predicted (predict-then-learn)
  *   all+goals+rolling   — both
+ * --set v3 --founder uses both earlier sets' answers as examples. --concurrency N (default 6)
+ * sets how many model calls run at once; progress and time left print as it goes.
  * --variants a,b,c picks which run. --votes N asks N times and takes the
  * majority (ties go to the earliest pick), which cuts run-to-run noise.
  */
@@ -110,19 +112,22 @@ const examplesTextPath = arg('--examples-text')
 // --principles <export.json>: the provider's confirmed decision principles (confirmed + edited only).
 let principlesPath = arg('--principles')
 const set = arg('--set') ?? 'v1'
-if (set !== 'v1' && set !== 'v2') { console.log('--set must be v1 or v2'); process.exit(1) }
+if (set !== 'v1' && set !== 'v2' && set !== 'v3') { console.log('--set must be v1, v2 or v3'); process.exit(1) }
+const scenarioFile = (v: string) => v === 'v3' ? 'choice-scenarios-v3.json' : v === 'v2' ? 'choice-scenarios-v2.json' : 'choice-scenarios.json'
 const founder = process.argv.includes('--founder')
 const founderDir = join(here, '..', '..', 'aura', 'eval', 'founder')
 const other = set === 'v2' ? 'v1' : 'v2'
+// Set v3: the founder's answers to BOTH earlier sets are examples.
+const founderBoth = founder && set === 'v3'
 if (founder) {
   profilePath ??= join(founderDir, 'profile-answers-v1.json')
-  choicesPath ??= join(founderDir, `scenario-answers-${set}.json`)
-  examplesPath ??= join(founderDir, `scenario-answers-${other}.json`)
+  if (!choicesPath && existsSync(join(founderDir, `scenario-answers-${set}.json`))) choicesPath = join(founderDir, `scenario-answers-${set}.json`)
+  if (!founderBoth) examplesPath ??= join(founderDir, `scenario-answers-${other}.json`)
   if (!principlesPath && existsSync(join(founderDir, 'principles.json'))) principlesPath = join(founderDir, 'principles.json')
 }
 const profileV2Path = arg('--profile-v2') ?? (founder ? join(founderDir, 'profile-answers-v2.json') : undefined)
 const votes = Math.max(1, Number(arg('--votes') ?? 1) || 1)
-const hasExamples = Boolean(examplesPath || examplesTextPath || profileV2Path)
+const hasExamples = Boolean(examplesPath || examplesTextPath || profileV2Path || founderBoth)
 if (set === 'v1' ? !(profilePath || hasExamples || principlesPath) || !choicesPath : !picksOut && !choicesPath) {
   console.log('Usage: --profile <profile-answers.json> --choices <scenario-answers.json> [--detail] [--picks-out <file>]\n   or: --set v2 --picks-out <file> [--profile <profile-answers.json>] [--choices <scenario-answers-v2.json>] [--detail]\n   add: [--examples <other-set-answers.json>] [--principles <principles-export.json>] [--picks-arm <arm>]')
   process.exit(1)
@@ -131,7 +136,7 @@ const base = process.env.INIT_CWD ?? process.cwd()
 const read = (p: string) => JSON.parse(readFileSync(resolve(base, p), 'utf8'))
 const evalDir = join(here, '..', '..', 'aura', 'eval')
 const instrument = read(join(evalDir, 'intent-profile-v1.json'))
-const scenarios = read(join(evalDir, set === 'v2' ? 'choice-scenarios-v2.json' : 'choice-scenarios.json')).scenarios as ChoiceScenario[]
+const scenarios = read(join(evalDir, scenarioFile(set))).scenarios as ChoiceScenario[]
 const profile = profilePath ? scoreProfile(instrument, read(profilePath).answers) : null
 const principles = principlesPath ? acceptedPrinciples(parsePrincipleExport(read(principlesPath))) : null
 if (principles && !principles.length) { console.log('--principles has no confirmed or edited principles.'); process.exit(1) }
@@ -143,15 +148,21 @@ const arms: Arm[] = [
   ...(profile ? ['profile' as const] : []),
   'none',
 ]
-const examplesSet = arg('--examples-set') ?? (set === 'v2' ? 'v1' : 'v2')
+const examplesSet = arg('--examples-set') ?? (set === 'v1' ? 'v2' : 'v1')
 if (examplesPath && examplesSet === set) { console.log('--examples must come from the other scenario set, never the one being predicted.'); process.exit(1) }
 const examplesText = (() => {
   const extra = [
     examplesTextPath ? readFileSync(resolve(base, examplesTextPath), 'utf8').trim() : '',
     profileV2Path ? profileV2AsExamples(read(join(evalDir, 'intent-profile-v2.json')), read(profileV2Path).answers) : '',
   ].filter(Boolean).join('\n\n')
+  if (founderBoth) {
+    const both = (['v1', 'v2'] as const).map((v) => buildExamplesText(read(join(evalDir, scenarioFile(v))).scenarios, read(join(founderDir, `scenario-answers-${v}.json`)).answers))
+    // One header, both sets' decisions under it.
+    const [first, second] = both
+    return [first, second!.split('\n').slice(2).join('\n'), extra].filter(Boolean).join('\n\n')
+  }
   if (!examplesPath) return extra
-  const exScenarios = read(join(evalDir, examplesSet === 'v2' ? 'choice-scenarios-v2.json' : 'choice-scenarios.json')).scenarios as typeof scenarios
+  const exScenarios = read(join(evalDir, scenarioFile(examplesSet))).scenarios as typeof scenarios
   return [buildExamplesText(exScenarios, read(examplesPath).answers), extra].filter(Boolean).join('\n\n')
 })()
 const profileText = profile ? buildProfileText(profile.dimensions) : ''
@@ -202,29 +213,60 @@ async function predictOnce(s: ChoiceScenario, v: Variant, earlierText: string): 
     : z.object({ choice: z.enum(ids), reason: z.string() })
   const prompt = buildChoicePrompt(v.arm, s, { profileText, examplesText, principlesText, earlierText })
   try {
-    const result = await generateText({ model: modelForRole(role), system: systemForArm(v.arm, { goals: v.goals }), prompt, experimental_output: Output.object({ schema }), maxRetries: 2 } as Parameters<typeof generateText>[0])
+    const result = await generateText({ model: modelForRole(role), system: systemForArm(v.arm, { goals: v.goals }), prompt, experimental_output: Output.object({ schema }), maxRetries: 5 } as Parameters<typeof generateText>[0])
     return ((result as unknown as { experimental_output?: { choice: string } }).experimental_output?.choice) ?? null
   } catch {
     return null
   }
 }
 
-async function predict(s: ChoiceScenario, v: Variant, earlierText: string): Promise<string | null> {
-  const picks: string[] = []
-  for (let i = 0; i < votes; i++) { const p = await predictOnce(s, v, earlierText); if (p) picks.push(p) }
-  if (!picks.length) return null
+/** Majority of the votes; ties go to the earliest vote. */
+function majority(picks: Array<string | null>): string | null {
+  const ok = picks.filter((p): p is string => p !== null)
+  if (!ok.length) return null
   const counts = new Map<string, number>()
-  for (const p of picks) counts.set(p, (counts.get(p) ?? 0) + 1)
-  return [...counts.entries()].sort((a, b) => b[1] - a[1] || picks.indexOf(a[0]) - picks.indexOf(b[0]))[0]![0]
+  for (const p of ok) counts.set(p, (counts.get(p) ?? 0) + 1)
+  return [...counts.entries()].sort((a, b) => b[1] - a[1] || ok.indexOf(a[0]) - ok.indexOf(b[0]))[0]![0]
 }
 
-const predictions: Record<string, Record<string, string | null>> = Object.fromEntries(variants.map((v) => [v.name, {}]))
+// --concurrency N (default 6): model calls in flight at once. Every call is independent: a rolling
+// prompt for scenario i holds only the answers to scenarios before i, fixed in advance, never
+// another prediction, so running calls side by side changes nothing but the time taken.
+const concurrency = Math.max(1, Number(arg('--concurrency') ?? 6) || 6)
+interface Task { s: ChoiceScenario; v: Variant; earlierText: string; vote: number }
+const tasks: Task[] = []
 for (let i = 0; i < scenarios.length; i++) {
   const s = scenarios[i]!
-  // Only scenarios before this one, i.e. already predicted, may be shown.
+  // Only scenarios before this one, i.e. already predicted in series order, may be shown.
   const earlierText = rolling ? buildEarlierText(scenarios.slice(0, i), rollingAnswers) : ''
-  for (const v of variants) predictions[v.name]![s.id] = await predict(s, v, v.rolling ? earlierText : '')
+  for (const v of variants) for (let vote = 0; vote < votes; vote++) tasks.push({ s, v, earlierText: v.rolling ? earlierText : '', vote })
 }
+const raw = new Map<string, Array<string | null>>()
+let next = 0, done = 0, lastShown = 0
+const started = Date.now()
+async function worker(): Promise<void> {
+  while (next < tasks.length) {
+    const t = tasks[next++]!
+    const pick = await predictOnce(t.s, t.v, t.earlierText)
+    const key = `${t.v.name}\u0000${t.s.id}`
+    const list = raw.get(key) ?? Array(votes).fill(null)
+    list[t.vote] = pick
+    raw.set(key, list)
+    done++
+    const pctDone = Math.floor((done / tasks.length) * 10)
+    if (pctDone > lastShown) {
+      lastShown = pctDone
+      const secs = (Date.now() - started) / 1000
+      const left = Math.round((secs / done) * (tasks.length - done) / 60)
+      process.stderr.write(`  ${done}/${tasks.length} calls${done < tasks.length ? `, about ${left} min left` : ''}\n`)
+    }
+  }
+}
+process.stderr.write(`${tasks.length} model calls, ${concurrency} at a time\n`)
+await Promise.all(Array.from({ length: Math.min(concurrency, tasks.length) }, worker))
+
+const predictions: Record<string, Record<string, string | null>> = Object.fromEntries(variants.map((v) => [v.name, {}]))
+for (const v of variants) for (const s of scenarios) predictions[v.name]![s.id] = majority(raw.get(`${v.name}\u0000${s.id}`) ?? [])
 
 // Blind picks, written before any answers are read (non-rolling variants only).
 if (picksOut) {
