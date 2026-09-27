@@ -1,0 +1,523 @@
+{
+ "schemaVersion": 1,
+ "id": "operate",
+ "version": 1,
+ "name": "Operate: run, measure, reinvest",
+ "description": "A monthly cycle inside a running business: observe the books and department reports, review each department's autonomy (min of the provider's grant and its shadow evidence), act only within that autonomy (everything else stays a recommendation), measure outcomes, propose a reinvestment plan the founder approves, and run bounded experiments inside the approved pool (kill is automatic). The founder can stop from any state.",
+ "modes": [
+  "operate"
+ ],
+ "trigger": {
+  "kind": "schedule",
+  "cron": "0 9 1 * *"
+ },
+ "requiredVariables": [],
+ "process": {
+  "id": "operate-process",
+  "name": "Operate",
+  "version": 1,
+  "initialState": "observe",
+  "states": [
+   {
+    "id": "observe",
+    "label": "Observe: read the books and department reports"
+   },
+   {
+    "id": "review",
+    "label": "Review: department autonomy (grant vs shadow evidence)"
+   },
+   {
+    "id": "act",
+    "label": "Act: departments act only within their effective autonomy"
+   },
+   {
+    "id": "measure",
+    "label": "Measure outcomes"
+   },
+   {
+    "id": "reinvest",
+    "label": "Reinvest: plan the surplus (founder approves)"
+   },
+   {
+    "id": "experiment",
+    "label": "Experiment: bounded, inside the approved pool"
+   },
+   {
+    "id": "stopped",
+    "label": "Operate stopped",
+    "terminal": true
+   }
+  ],
+  "transitions": [
+   {
+    "id": "observed",
+    "from": "observe",
+    "to": "review",
+    "guard": {
+     "all": [
+      {
+       "fact": "stage.status",
+       "op": "eq",
+       "value": "completed"
+      }
+     ]
+    },
+    "automatic": true
+   },
+   {
+    "id": "reviewed",
+    "from": "review",
+    "to": "act",
+    "guard": {
+     "all": [
+      {
+       "fact": "stage.status",
+       "op": "eq",
+       "value": "completed"
+      }
+     ]
+    },
+    "automatic": true
+   },
+   {
+    "id": "acted",
+    "from": "act",
+    "to": "measure",
+    "guard": {
+     "all": [
+      {
+       "fact": "stage.status",
+       "op": "eq",
+       "value": "completed"
+      }
+     ]
+    },
+    "automatic": true
+   },
+   {
+    "id": "measured",
+    "from": "measure",
+    "to": "reinvest",
+    "guard": {
+     "all": [
+      {
+       "fact": "stage.status",
+       "op": "eq",
+       "value": "completed"
+      }
+     ]
+    },
+    "automatic": true
+   },
+   {
+    "id": "no-surplus",
+    "from": "reinvest",
+    "to": "observe",
+    "label": "No surplus this period: nothing to reinvest",
+    "guard": {
+     "all": [
+      {
+       "fact": "period.surplusUsd",
+       "op": "lte",
+       "value": 0
+      }
+     ]
+    },
+    "automatic": true
+   },
+   {
+    "id": "approve-plan",
+    "from": "reinvest",
+    "to": "observe",
+    "label": "Founder approves the reinvestment plan (no experiment this cycle)",
+    "guard": {
+     "all": [
+      {
+       "fact": "reinvestment.approved",
+       "op": "eq",
+       "value": true
+      }
+     ]
+    },
+    "requiresHumanApproval": true
+   },
+   {
+    "id": "start-experiment",
+    "from": "reinvest",
+    "to": "experiment",
+    "label": "Founder approves the plan and starts a drafted experiment inside its pool",
+    "guard": {
+     "all": [
+      {
+       "fact": "reinvestment.approved",
+       "op": "eq",
+       "value": true
+      },
+      {
+       "fact": "experiment.poolUsd",
+       "op": "gt",
+       "value": 0
+      },
+      {
+       "fact": "experiment.drafted",
+       "op": "eq",
+       "value": true
+      }
+     ]
+    },
+    "requiresHumanApproval": true
+   },
+   {
+    "id": "kill",
+    "from": "experiment",
+    "to": "observe",
+    "label": "Kill: automatic, stopping never needs permission",
+    "guard": {
+     "all": [
+      {
+       "fact": "experiment.verdict",
+       "op": "in",
+       "value": [
+        "kill",
+        "over-budget",
+        "expired"
+       ]
+      }
+     ]
+    },
+    "automatic": true
+   },
+   {
+    "id": "experiment-running",
+    "from": "experiment",
+    "to": "observe",
+    "label": "The experiment runs; the next cycle observes it",
+    "guard": {
+     "all": [
+      {
+       "fact": "experiment.running",
+       "op": "eq",
+       "value": true
+      }
+     ]
+    },
+    "automatic": true
+   },
+   {
+    "id": "stop-observe",
+    "from": "observe",
+    "to": "stopped",
+    "label": "Founder stops Operate",
+    "requiresHumanApproval": true
+   },
+   {
+    "id": "stop-review",
+    "from": "review",
+    "to": "stopped",
+    "label": "Founder stops Operate",
+    "requiresHumanApproval": true
+   },
+   {
+    "id": "stop-act",
+    "from": "act",
+    "to": "stopped",
+    "label": "Founder stops Operate",
+    "requiresHumanApproval": true
+   },
+   {
+    "id": "stop-measure",
+    "from": "measure",
+    "to": "stopped",
+    "label": "Founder stops Operate",
+    "requiresHumanApproval": true
+   },
+   {
+    "id": "stop-reinvest",
+    "from": "reinvest",
+    "to": "stopped",
+    "label": "Founder stops Operate",
+    "requiresHumanApproval": true
+   },
+   {
+    "id": "stop-experiment",
+    "from": "experiment",
+    "to": "stopped",
+    "label": "Founder stops Operate",
+    "requiresHumanApproval": true
+   }
+  ]
+ },
+ "stageGraphs": {
+  "observe": {
+   "schemaVersion": 1,
+   "id": "operate-observe",
+   "version": 1,
+   "entryNodeId": "start",
+   "nodes": [
+    {
+     "id": "start",
+     "kind": "trigger",
+     "label": "Start"
+    },
+    {
+     "id": "work",
+     "kind": "agent",
+     "label": "Read the books for the period and each department's shadow and outcome reports (read only)",
+     "config": {
+      "agentId": "query",
+      "evaluationRequired": true,
+      "impact": "low"
+     }
+    },
+    {
+     "id": "done",
+     "kind": "output",
+     "label": "Done"
+    }
+   ],
+   "edges": [
+    {
+     "id": "e1",
+     "from": "start",
+     "to": "work"
+    },
+    {
+     "id": "e2",
+     "from": "work",
+     "to": "done"
+    }
+   ]
+  },
+  "review": {
+   "schemaVersion": 1,
+   "id": "operate-review",
+   "version": 1,
+   "entryNodeId": "start",
+   "nodes": [
+    {
+     "id": "start",
+     "kind": "trigger",
+     "label": "Start"
+    },
+    {
+     "id": "work",
+     "kind": "agent",
+     "label": "Compare each department's granted autonomy with its shadow evidence; effective autonomy is the lower (proposals only)",
+     "config": {
+      "agentId": "query",
+      "evaluationRequired": true,
+      "impact": "low"
+     }
+    },
+    {
+     "id": "done",
+     "kind": "output",
+     "label": "Done"
+    }
+   ],
+   "edges": [
+    {
+     "id": "e1",
+     "from": "start",
+     "to": "work"
+    },
+    {
+     "id": "e2",
+     "from": "work",
+     "to": "done"
+    }
+   ]
+  },
+  "act": {
+   "schemaVersion": 1,
+   "id": "operate-act",
+   "version": 1,
+   "entryNodeId": "start",
+   "nodes": [
+    {
+     "id": "start",
+     "kind": "trigger",
+     "label": "Start"
+    },
+    {
+     "id": "work",
+     "kind": "agent",
+     "label": "Propose department actions; each goes through the kernel, runs only within the department's effective autonomy, and otherwise stays a recommendation",
+     "config": {
+      "agentId": "query",
+      "evaluationRequired": true,
+      "impact": "low"
+     }
+    },
+    {
+     "id": "done",
+     "kind": "output",
+     "label": "Done"
+    }
+   ],
+   "edges": [
+    {
+     "id": "e1",
+     "from": "start",
+     "to": "work"
+    },
+    {
+     "id": "e2",
+     "from": "work",
+     "to": "done"
+    }
+   ]
+  },
+  "measure": {
+   "schemaVersion": 1,
+   "id": "operate-measure",
+   "version": 1,
+   "entryNodeId": "start",
+   "nodes": [
+    {
+     "id": "start",
+     "kind": "trigger",
+     "label": "Start"
+    },
+    {
+     "id": "work",
+     "kind": "agent",
+     "label": "Measure outcomes of the period's actions against their expected results (read only)",
+     "config": {
+      "agentId": "query",
+      "evaluationRequired": true,
+      "impact": "low"
+     }
+    },
+    {
+     "id": "done",
+     "kind": "output",
+     "label": "Done"
+    }
+   ],
+   "edges": [
+    {
+     "id": "e1",
+     "from": "start",
+     "to": "work"
+    },
+    {
+     "id": "e2",
+     "from": "work",
+     "to": "done"
+    }
+   ]
+  },
+  "reinvest": {
+   "schemaVersion": 1,
+   "id": "operate-reinvest",
+   "version": 1,
+   "entryNodeId": "start",
+   "nodes": [
+    {
+     "id": "start",
+     "kind": "trigger",
+     "label": "Start"
+    },
+    {
+     "id": "work",
+     "kind": "agent",
+     "label": "Draft the reinvestment plan: reserve top-up, reinvestment, experiment pool (a proposal; the founder approves)",
+     "config": {
+      "agentId": "query",
+      "evaluationRequired": true,
+      "impact": "low"
+     }
+    },
+    {
+     "id": "done",
+     "kind": "output",
+     "label": "Done"
+    }
+   ],
+   "edges": [
+    {
+     "id": "e1",
+     "from": "start",
+     "to": "work"
+    },
+    {
+     "id": "e2",
+     "from": "work",
+     "to": "done"
+    }
+   ]
+  },
+  "experiment": {
+   "schemaVersion": 1,
+   "id": "operate-experiment",
+   "version": 1,
+   "entryNodeId": "start",
+   "nodes": [
+    {
+     "id": "start",
+     "kind": "trigger",
+     "label": "Start"
+    },
+    {
+     "id": "work",
+     "kind": "agent",
+     "label": "Draft bounded experiments with fixed kill/hold/scale thresholds inside the approved pool (proposals only)",
+     "config": {
+      "agentId": "query",
+      "evaluationRequired": true,
+      "impact": "low"
+     }
+    },
+    {
+     "id": "done",
+     "kind": "output",
+     "label": "Done"
+    }
+   ],
+   "edges": [
+    {
+     "id": "e1",
+     "from": "start",
+     "to": "work"
+    },
+    {
+     "id": "e2",
+     "from": "work",
+     "to": "done"
+    }
+   ]
+  }
+ },
+ "stepCapabilities": {
+  "observe/work": "capability-read-company-state",
+  "review/work": "capability-review-department-autonomy",
+  "act/work": "capability-propose-department-actions",
+  "measure/work": "capability-measure-outcomes",
+  "reinvest/work": "capability-propose-reinvestment",
+  "experiment/work": "capability-propose-experiments"
+ },
+ "budget": {
+  "amountUsd": 250,
+  "includesCompute": true
+ },
+ "metrics": [
+  {
+   "id": "return-on-capital",
+   "label": "Revenue per dollar of capital used in the period (compute included)",
+   "unit": "ratio",
+   "direction": "higher-is-better",
+   "kill": 0.5,
+   "hold": 1.0,
+   "scale": 1.5
+  }
+ ],
+ "outputs": [
+  "department autonomy review",
+  "period money totals",
+  "founder-approved reinvestment plans",
+  "bounded experiment records",
+  "hash-chained money ledger"
+ ],
+ "owner": "entity-founder"
+}

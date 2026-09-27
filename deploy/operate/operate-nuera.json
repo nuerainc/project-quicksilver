@@ -1,0 +1,48 @@
+{
+ "schemaVersion": 1,
+ "runId": "operate-nuera",
+ "playbookId": "operate",
+ "periodDays": 30,
+ "reserveFloorUsd": 1000,
+ "reinvestShare": 0.5,
+ "experimentShare": 0.3,
+ "maxExperimentUsd": 250,
+ "spend": {
+  "autoMaxUsd": 10,
+  "autoMaxRisk": 2,
+  "dailyCapUsd": 50
+ },
+ "allowedCategories": [
+  "compute",
+  "hosting",
+  "domain",
+  "software",
+  "advertising",
+  "content",
+  "payment-fees"
+ ],
+ "prohibitedCategories": [
+  "physical-goods",
+  "inventory",
+  "hiring",
+  "financial-products",
+  "gambling",
+  "regulated-goods",
+  "data-purchase"
+ ],
+ "waesRequired": true,
+ "waesManualReviewAllowed": true,
+ "handOver": {
+  "minJudged": 20,
+  "minAgreement": 0.8
+ },
+ "prerequisites": {
+  "entityApproved": false,
+  "paymentAccounts": [
+   "operate-payments",
+   "operate-card"
+  ]
+ },
+ "companyId": "nuera",
+ "owner": "entity-founder"
+}

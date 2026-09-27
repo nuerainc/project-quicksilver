@@ -19,3 +19,4 @@ that every operating mode depends on.
 - [TypeScript SDK foundation](sdk-typescript.md)
 - [Python SDK and CLI foundation](sdk-python.md)
 - [Dedicated Sanity project setup](sanity-isolation.md)
+- [Operate (M6): autonomy, reinvestment and bounded experiments](operate.md)

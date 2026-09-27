@@ -24,7 +24,7 @@ and 3.
 | M3: Intent layer | 0.4.0 | Decision graph, provenance tags, impact scoring for open unknowns, the intent entry point, belief updates through the memory governor | 2 | M1; Aura. **Complete 2026-09-26** on built features ([Aura README](../packages/aura/README.md)); Aura's 70% choice-agreement target stays on Aura's own charter ladder |
 | M4: Playbooks and Onboard pilot | 0.5.0 | `playbook` type (process definition plus stage graphs), Onboard playbook, connectors, backtest and shadow mode, a pilot on Nuera (on the local host) | 3 | M2, M3 |
 | M5: Genesis demonstration | 0.6.0 | Economic playbook, `experiment` and `ledgerEntry` types, WAES review in the kernel path, a small-budget spend risk scale, always-on hosting (moved from M2); a $500, 30-day digital-only run | 3 | M3, M4. **Built 2026-09-26** ([Genesis run](platform/genesis-run.md), [always-on hosting](platform/always-on-hosting.md)); the run waits on the entity decision and payment accounts |
-| M6: Operate | 0.7.0 | Steady-state operations, reinvestment, and bounded Genesis experiments inside a running business | 3 | M4, M5 |
+| M6: Operate | 0.7.0 | Steady-state operations, reinvestment, and bounded Genesis experiments inside a running business | 3 | M4, M5. **Built 2026-09-27** ([Operate](platform/operate.md)); operation starts after M4's pilot and M5's run |
 
 **Versioning:** the current version is 0.4.0 (Nuera RDL versioning standard): M1, M2 and M3 are complete. Each milestone raises the minor version.
 The M2 host runs on the founder's computer; always-on hosting is part of M5.

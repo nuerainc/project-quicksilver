@@ -93,14 +93,21 @@ export interface SpendDecision {
 
 const dayOf = (iso: string) => iso.slice(0, 10)
 
+/**
+ * The parts of a run config that `decideSpend` reads. A GenesisRunConfig is a
+ * SpendPolicy, so Genesis callers are unchanged; Operate (M6) passes its own
+ * experiment policy, which is not digital-only and must not claim to be.
+ */
+export type SpendPolicy = Pick<GenesisRunConfig, 'allowedCategories' | 'prohibitedCategories' | 'spend'>
+
 /** Decide a proposed spend under the run config, the ledger so far and the experiment it serves. */
-export function decideSpend(c: GenesisRunConfig, ledger: MoneyLedger, req: SpendRequest, now: Date, experiment?: Experiment): SpendDecision {
+export function decideSpend(c: SpendPolicy, ledger: MoneyLedger, req: SpendRequest, now: Date, experiment?: Experiment): SpendDecision {
   const totals: MoneyTotals = moneyTotals(ledger)
   const risk = spendRiskLevel(req.amountUsd, totals.remainingUsd)
   const reject: string[] = []
   const approve: string[] = []
   if (!(req.amountUsd > 0)) reject.push('The amount must be positive.')
-  if (c.prohibitedCategories.includes(req.category)) reject.push(`"${req.category}" is never allowed in a Genesis run.`)
+  if (c.prohibitedCategories.includes(req.category)) reject.push(`"${req.category}" is never allowed in this run.`)
   else if (!c.allowedCategories.includes(req.category)) reject.push(`"${req.category}" is not an allowed category.`)
   if (req.amountUsd > totals.remainingUsd) reject.push(`Only $${totals.remainingUsd} of the budget is left.`)
   const today = dayOf(now.toISOString())
@@ -121,7 +128,7 @@ export function decideSpend(c: GenesisRunConfig, ledger: MoneyLedger, req: Spend
 }
 
 /** Facts for the Genesis playbook's stage guards. */
-export function genesisFacts(c: GenesisRunConfig, ledger: MoneyLedger, experiments: Experiment[], startedAt: Date | null, now: Date): Facts {
+export function genesisFacts(c: Pick<GenesisRunConfig, 'durationDays'>, ledger: MoneyLedger, experiments: Experiment[], startedAt: Date | null, now: Date): Facts {
   const totals = moneyTotals(ledger)
   const current = experiments.filter((e) => e.status !== 'draft').at(-1)
   const daysElapsed = startedAt ? Math.floor((now.getTime() - startedAt.getTime()) / 86_400_000) : 0
@@ -140,6 +147,6 @@ export function genesisFacts(c: GenesisRunConfig, ledger: MoneyLedger, experimen
 }
 
 /** WAES gate facts under this run's policy: manual founder reviews count only when `waesManualReviewAllowed` is true. */
-export function genesisWaesFacts(c: GenesisRunConfig, review: WaesReview | undefined, content: string, actorId: string): WaesFacts {
+export function genesisWaesFacts(c: Pick<GenesisRunConfig, 'waesManualReviewAllowed'>, review: WaesReview | undefined, content: string, actorId: string): WaesFacts {
   return waesFacts(review, content, actorId, { allowManual: c.waesManualReviewAllowed === true })
 }

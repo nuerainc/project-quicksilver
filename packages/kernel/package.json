@@ -36,6 +36,7 @@
     "./playbooks/shadow": "./src/playbooks/shadow.ts",
     "./playbooks/economics": "./src/playbooks/economics.ts",
     "./playbooks/genesis": "./src/playbooks/genesis.ts",
+    "./playbooks/operate": "./src/playbooks/operate.ts",
     "./waes": "./src/waes.ts"
   },
   "scripts": {
