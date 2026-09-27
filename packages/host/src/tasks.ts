@@ -23,7 +23,10 @@
  *        execute-autonomously → `queued`
  *   8. execution only when the department's effective autonomy (operate's
  *      departmentAutonomy) is `act-within-limits` AND the kernel said
- *      execute-autonomously. Then the capability's configured host workflow is
+ *      execute-autonomously, or after a human approves a request-approval
+ *      task while the department's effective autonomy (re-read at approval)
+ *      is `act-with-approval` or higher. An approval is bound to hashes of the
+ *      stored request and decision; if either changed, the task does not run. Then the capability's configured host workflow is
  *      enqueued on the existing durable run queue; with no workflow it is queued
  *      for a human. Otherwise the task stays a recommendation, logged to the
  *      department's shadow log so it feeds Aura and the hand-over evidence.
@@ -31,7 +34,7 @@
  * The store is append-only: a task's identity and request never change, its
  * audit trail only grows, and every state change appends an audit entry.
  */
-import { randomBytes } from 'node:crypto'
+import { createHash, randomBytes } from 'node:crypto'
 import { readdir } from 'node:fs/promises'
 import { join } from 'node:path'
 
@@ -84,6 +87,21 @@ export interface TaskExecution {
   runId?: string
 }
 
+/** A human's decision on an awaiting-approval task. An approval is bound to the exact request and decision it approved. */
+export interface TaskApproval {
+  decision: 'approved' | 'denied'
+  by: string
+  at: string
+  reason?: string
+  soleOperatorOverride: boolean
+  /** sha256 of the stored request (id, source, submitter, time, objective, capability, department, inputs, key) when approved. */
+  requestHash?: string
+  /** sha256 of the kernel decision record when approved. */
+  decisionHash?: string
+  /** The department's effective autonomy, re-read when approved. */
+  autonomy?: DepartmentAutonomy
+}
+
 export interface Task {
   id: string
   source: TaskSource
@@ -98,7 +116,7 @@ export interface Task {
   status: TaskStatus
   decision: TaskDecision | null
   execution?: TaskExecution
-  approval?: { decision: 'approved' | 'denied'; by: string; at: string; reason?: string; soleOperatorOverride: boolean }
+  approval?: TaskApproval
   shadow?: { intentId: string; recommendationId: string }
   result?: unknown
   audit: TaskAuditEntry[]
@@ -545,14 +563,23 @@ export class TaskService {
     return this.execute(task, capability)
   }
 
-  private async execute(task: Task, capability: TaskCapability | undefined): Promise<Task> {
+  private async execute(task: Task, capability: TaskCapability | undefined, approval?: TaskApproval): Promise<Task> {
     if (!capability?.workflow) {
       return this.patch(task, { execution: { mode: 'human', note: 'No executor is configured for this capability: it is queued for a human to carry out.' } }, 'quicksilver', 'queued-for-human')
     }
     if (!this.deps.runs) {
       return this.patch(task, { execution: { mode: 'human', workflow: capability.workflow, note: 'No run queue is available where this task was submitted (only the running host has one): it is queued for a human.' } }, 'quicksilver', 'queued-for-human')
     }
-    const enq = await this.deps.runs.enqueue({ workflow: capability.workflow, idempotencyKey: `task:${task.id}`, input: { question: task.objective, task: { id: task.id, capabilityId: capability.id, inputs: task.inputs ?? null } } })
+    const enq = await this.deps.runs.enqueue({
+      workflow: capability.workflow,
+      idempotencyKey: `task:${task.id}`,
+      input: {
+        question: task.objective,
+        task: { id: task.id, capabilityId: capability.id, inputs: task.inputs ?? null },
+        // An approved task's run carries who approved it, when, and the hashes it was bound to.
+        ...(approval ? { approval: { by: approval.by, at: approval.at, soleOperatorOverride: approval.soleOperatorOverride, ...(approval.soleOperatorOverride && approval.reason ? { justification: approval.reason } : {}), requestHash: approval.requestHash, decisionHash: approval.decisionHash } } : {}),
+      },
+    })
     if (!enq.ok) {
       return this.patch(task, { execution: { mode: 'human', workflow: capability.workflow, note: `The run could not be enqueued (${enq.reason}): it is queued for a human.` } }, 'quicksilver', 'queued-for-human')
     }
@@ -654,11 +681,56 @@ export class TaskService {
     // The submitter never counts as an approver (sole-operator override only with a written justification).
     const sod = checkSeparationOfDuties({ approverId: p.id, requestedBy: task.submittedBy, proposedBy: task.submittedBy, soleOperatorId: this.deps.soleOperatorId ?? null, justification })
     if (!sod.allowed) throw new TaskError(403, 'separation-of-duties', sod.reasons.join(' '))
-    return this.save(task, {
+
+    // Re-read the department's effective autonomy now, as at submit.
+    const capabilityId = task.decision?.action?.capabilityId ?? task.capabilityId ?? this.deps.catalog.defaultCapabilityId
+    const capability = this.deps.catalog.capabilities.find((c) => c.id === capabilityId)
+    const department = capability?.department ?? task.department ?? this.deps.catalog.capabilities.find((c) => c.id === this.deps.catalog.defaultCapabilityId)!.department
+    const autonomy = await this.deps.autonomy(department)
+    const approval: TaskApproval = {
+      decision: 'approved',
+      by: p.id,
+      at: new Date(this.now()).toISOString(),
+      ...(justification ? { reason: justification } : {}),
+      soleOperatorOverride: sod.soleOperatorOverride,
+      requestHash: requestHash(task),
+      decisionHash: decisionHash(task),
+      autonomy,
+    }
+    const runsAfterApproval = task.decision?.kernel?.recommendation === 'request-approval' && APPROVED_RUN_DEPTHS.includes(autonomy.effective)
+    const why = task.decision?.kernel?.recommendation !== 'request-approval'
+      ? 'the kernel did not ask for approval'
+      : !runsAfterApproval ? `the ${department} department's effective autonomy is ${autonomy.effective} (below act-with-approval)`
+        : !capability?.workflow ? 'no executor is configured for this capability'
+          : !this.deps.runs ? 'no run queue is available here (only the running host has one)' : ''
+    const approved = await this.save(task, {
       status: 'queued',
-      approval: { decision: 'approved', by: p.id, at: new Date(this.now()).toISOString(), ...(justification ? { reason: justification } : {}), soleOperatorOverride: sod.soleOperatorOverride },
-      execution: { mode: 'human', note: `Approved by ${p.id}; queued for a human to carry out. A task runs on its own only when the kernel allows it without approval and its department acts within limits.` },
-    }, p.id, 'approved', justification || undefined)
+      approval,
+      execution: why
+        ? { mode: 'human', note: `Approved by ${p.id}; queued for a human to carry out because ${why}.` }
+        : { mode: 'human', note: `Approved by ${p.id}; about to run as workflow "${capability!.workflow}".` },
+    }, p.id, 'approved', [justification, `Bound to request ${approval.requestHash!.slice(0, 19)} and decision ${approval.decisionHash!.slice(0, 19)}.`].filter(Boolean).join(' '))
+    if (why) return approved
+    return this.runApproved(approved, capability!)
+  }
+
+  /** Run an approved task, but only if the stored request and decision are exactly what was approved. */
+  private async runApproved(approved: Task, capability: TaskCapability): Promise<Task> {
+    const stored = await this.deps.store.get(approved.id)
+    const approval = approved.approval!
+    const problems: string[] = []
+    if (!stored || requestHash(stored) !== approval.requestHash) problems.push('the request')
+    if (!stored || decisionHash(stored) !== approval.decisionHash) problems.push('the decision')
+    if (problems.length) {
+      const note = `Not run: ${problems.join(' and ')} changed since the approval. A human must review it again.`
+      try {
+        return await this.save(approved, { execution: { mode: 'human', note } }, 'quicksilver', 'run-refused', note)
+      } catch (error) {
+        if (error instanceof TaskConflictError) throw new TaskError(409, 'conflict', note)
+        throw error
+      }
+    }
+    return this.execute(approved, capability, approval)
   }
 
   async deny(principal: Principal | undefined, id: string, reason?: unknown): Promise<Task> {
@@ -694,6 +766,21 @@ export class TaskService {
   }
 }
 
+/** Autonomy at which an approved task runs on its own (the founder's decision). */
+export const APPROVED_RUN_DEPTHS: readonly string[] = ['act-with-approval', 'act-within-limits']
+
+const sha256 = (value: unknown) => `sha256:${createHash('sha256').update(canonical(value), 'utf8').digest('hex')}`
+
+/** The hash an approval binds to: the task's stored request. */
+export function requestHash(task: Task): string {
+  return sha256({ id: task.id, source: task.source, submittedBy: task.submittedBy, submittedAt: task.submittedAt, objective: task.objective, capabilityId: task.capabilityId, department: task.department, inputs: task.inputs, idempotencyKey: task.idempotencyKey })
+}
+
+/** The hash an approval binds to: the kernel decision record. */
+export function decisionHash(task: Task): string {
+  return sha256(task.decision)
+}
+
 /** What a caller sees. Readers of every task see the whole record; a client sees a summary of its own. */
 export function taskView(task: Task, full: boolean): TaskView {
   const base = {
@@ -708,7 +795,7 @@ export function taskView(task: Task, full: boolean): TaskView {
     ...(task.idempotencyKey ? { idempotencyKey: task.idempotencyKey } : {}),
     status: task.status,
     ...(task.execution ? { execution: { mode: task.execution.mode, note: task.execution.note, ...(task.execution.runId ? { runId: task.execution.runId } : {}) } } : {}),
-    ...(task.approval ? { approval: { decision: task.approval.decision, at: task.approval.at, ...(full ? { by: task.approval.by, soleOperatorOverride: task.approval.soleOperatorOverride } : {}), ...(task.approval.reason ? { reason: task.approval.reason } : {}) } } : {}),
+    ...(task.approval ? { approval: { decision: task.approval.decision, at: task.approval.at, ...(full ? { by: task.approval.by, soleOperatorOverride: task.approval.soleOperatorOverride, ...(task.approval.requestHash ? { requestHash: task.approval.requestHash, decisionHash: task.approval.decisionHash } : {}), ...(task.approval.autonomy ? { autonomy: task.approval.autonomy } : {}) } : {}), ...(task.approval.reason ? { reason: task.approval.reason } : {}) } } : {}),
     ...(task.result !== undefined ? { result: task.result } : {}),
   }
   if (full) return { ...base, decision: task.decision, ...(task.shadow ? { shadow: task.shadow } : {}), audit: task.audit, revision: task.revision }

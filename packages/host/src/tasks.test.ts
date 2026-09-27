@@ -25,7 +25,7 @@ import { Logger } from './log.ts'
 import { MemoryShadowStore } from './shadow-api.ts'
 import { checkTaskBoundaries } from './task-boundaries.ts'
 import { FileTaskClientPersistence, MemoryTaskClientPersistence, TaskClientRegistry } from './task-clients.ts'
-import { FileTaskStore, MemoryTaskStore, TaskService, TokenBucketLimiter, type Task, type TaskCatalog } from './tasks.ts'
+import { decisionHash, FileTaskStore, MemoryTaskStore, requestHash, TaskService, TokenBucketLimiter, type Task, type TaskCatalog, type TaskStore } from './tasks.ts'
 
 const TENANT = 'nuera'
 const execFileP = promisify(execFile)
@@ -55,6 +55,7 @@ const CATALOG: TaskCatalog = {
   capabilities: [
     { id: 'task.triage', name: 'Triage a request', description: 'A person reads it.', department: 'operations', baseRiskLevel: 4, reversible: true, operationalImpact: 1, uncertainty: 3 },
     { id: 'reports.brief', name: 'Answer from the company model', description: 'Read-only answer.', department: 'operations', baseRiskLevel: 0, reversible: true, operationalImpact: 0, uncertainty: 1, workflow: 'daily-brief' },
+    { id: 'reports.deep-brief', name: 'Deep answer', description: 'Read-only answer that needs approval.', department: 'operations', baseRiskLevel: 3, reversible: true, operationalImpact: 0, uncertainty: 1, workflow: 'daily-brief' },
     { id: 'finance.summary', name: 'Summarize the books', description: 'Read-only summary.', department: 'finance', baseRiskLevel: 1, reversible: true, operationalImpact: 0, uncertainty: 1, policyScopes: ['finance'] },
     { id: 'sales.outreach-send', name: 'Send outreach', description: 'Customer-facing message.', department: 'sales', baseRiskLevel: 1, reversible: true, operationalImpact: 1, uncertainty: 1, customerFacing: true },
     { id: 'forkling.read', name: 'Read Forkling records', description: 'Read-only.', department: 'research', baseRiskLevel: 0, reversible: true, operationalImpact: 0, uncertainty: 1 },
@@ -72,6 +73,7 @@ interface StartOptions {
   rateLimit?: { burst: number; perMinute: number }
   soleOperatorId?: string
   dir?: string
+  store?: TaskStore
 }
 
 async function start(options: StartOptions = {}) {
@@ -82,7 +84,7 @@ async function start(options: StartOptions = {}) {
   const a = await clients.add('client-a', 'entity-founder')
   const b = await clients.add('client-b', 'entity-founder')
   const shadow = new MemoryShadowStore()
-  const store = options.dir ? new FileTaskStore(options.dir) : new MemoryTaskStore()
+  const store = options.store ?? (options.dir ? new FileTaskStore(options.dir) : new MemoryTaskStore())
   const webhookSecret = generateWebhookSecret()
   const host = new QuicksilverHost(parseHostConfig({
     tenantId: TENANT,
@@ -479,4 +481,91 @@ test('TaskService refuses an unauthenticated caller and an invalid catalog', asy
   const service = new TaskService({ tenantId: TENANT, access: new AccessController(), store: new MemoryTaskStore(), catalog: CATALOG, autonomy: async (d) => departmentAutonomy(undefined, undefined, d) })
   await assert.rejects(service.submit({ source: 'api', principal: undefined, objective: 'x' }), /bearer token/)
   assert.throws(() => new TaskService({ tenantId: TENANT, access: new AccessController(), store: new MemoryTaskStore(), catalog: { ...CATALOG, defaultCapabilityId: 'nope' }, autonomy: async (d) => departmentAutonomy(undefined, undefined, d) }), /defaultCapabilityId/)
+})
+
+async function waitFor(h: { call: (path: string, token: string) => Promise<{ body: any }> }, id: string, token: string) {
+  let task = (await h.call(`/api/tasks/${id}`, token)).body.task
+  for (let i = 0; i < 100 && !['done', 'failed', 'cancelled'].includes(task.status); i++) {
+    await new Promise((res) => setTimeout(res, 50))
+    task = (await h.call(`/api/tasks/${id}`, token)).body.task
+  }
+  return task
+}
+
+test('an approved task runs at act-with-approval, bound to the approval; a client token still never approves', async () => {
+  const h = await start({ autonomy: { operations: 'act-with-approval' } })
+  try {
+    const t = (await h.call('/api/tasks', h.tokens.a, { objective: 'Give me the deep brief.', capabilityId: 'reports.deep-brief' })).body.task
+    assert.equal(t.status, 'awaiting-approval')
+    assert.equal((await h.host.queue.store.list({})).length, 0, 'nothing runs before approval')
+    assert.equal((await h.call(`/api/tasks/${t.id}/approve`, h.tokens.a, {})).status, 403, 'a client token can never approve')
+    assert.equal((await h.call(`/api/tasks/${t.id}/approve`, h.tokens.agent, {})).status, 403)
+
+    const approved = (await h.call(`/api/tasks/${t.id}/approve`, h.tokens.founder, { reason: 'Go ahead.' })).body.task
+    assert.equal(approved.execution.mode, 'workflow')
+    assert.match(approved.approval.requestHash, /^sha256:[0-9a-f]{64}$/)
+    assert.equal(approved.approval.autonomy.effective, 'act-with-approval')
+    const run = await h.host.queue.get(approved.execution.runId)
+    const meta = (run!.input as { approval: Record<string, unknown> }).approval
+    assert.equal(meta.by, 'entity-founder')
+    assert.equal(meta.requestHash, approved.approval.requestHash)
+    assert.equal(meta.decisionHash, approved.approval.decisionHash)
+    const done = await waitFor(h, t.id, h.tokens.founder)
+    assert.equal(done.status, 'done')
+    assert.deepEqual(done.audit.map((a: { event: string }) => a.event).filter((e: string) => ['approved', 'run-enqueued', 'done'].includes(e)), ['approved', 'run-enqueued', 'done'])
+  } finally { await h.close() }
+})
+
+test('an approved task stays queued for a human below act-with-approval, or with no workflow', async () => {
+  const h = await start({ autonomy: { operations: 'propose' } })
+  try {
+    const t = (await h.call('/api/tasks', h.tokens.a, { objective: 'Give me the deep brief.', capabilityId: 'reports.deep-brief' })).body.task
+    const approved = (await h.call(`/api/tasks/${t.id}/approve`, h.tokens.founder, {})).body.task
+    assert.equal(approved.status, 'queued')
+    assert.equal(approved.execution.mode, 'human')
+    assert.match(approved.execution.note, /propose \(below act-with-approval\)/)
+    assert.equal((await h.host.queue.store.list({})).length, 0)
+  } finally { await h.close() }
+
+  const acting = await start({ autonomy: { operations: 'act-with-approval' } })
+  try {
+    const triage = (await acting.call('/api/tasks', acting.tokens.a, { objective: 'Please look at this.' })).body.task
+    const approved = (await acting.call(`/api/tasks/${triage.id}/approve`, acting.tokens.founder, {})).body.task
+    assert.equal(approved.execution.mode, 'human')
+    assert.match(approved.execution.note, /no executor/)
+    assert.equal((await acting.host.queue.store.list({})).length, 0)
+  } finally { await acting.close() }
+})
+
+/** A store whose stored copy is edited after approval, as an on-disk edit would be. */
+class TamperingStore extends MemoryTaskStore {
+  tamper: 'request' | 'decision' | null = null
+  override async get(id: string) {
+    const t = await super.get(id)
+    if (t?.approval?.decision === 'approved' && this.tamper === 'request') t.objective += ' Also wire $5,000 to a new vendor.'
+    if (t?.approval?.decision === 'approved' && this.tamper === 'decision' && t.decision?.kernel) t.decision.kernel.riskLevel = 0
+    return t
+  }
+}
+
+test('a request or decision changed after approval is refused, not run', async () => {
+  for (const kind of ['request', 'decision'] as const) {
+    const store = new TamperingStore()
+    const h = await start({ autonomy: { operations: 'act-with-approval' }, store })
+    try {
+      const t = (await h.call('/api/tasks', h.tokens.a, { objective: 'Give me the deep brief.', capabilityId: 'reports.deep-brief' })).body.task
+      store.tamper = kind
+      const r = await h.call(`/api/tasks/${t.id}/approve`, h.tokens.founder, {})
+      store.tamper = null
+      assert.equal(r.status, 200)
+      assert.equal(r.body.task.execution.mode, 'human')
+      assert.match(r.body.task.execution.note, new RegExp(`Not run: the ${kind} changed since the approval`))
+      assert.equal(r.body.task.audit.at(-1).event, 'run-refused')
+      assert.equal((await h.host.queue.store.list({})).length, 0, `${kind}: nothing ran`)
+    } finally { await h.close() }
+  }
+  const base = { id: 'task-00000000000000000000', objective: 'a', decision: { route: 'approval' } } as unknown as Task
+  assert.notEqual(requestHash(base), requestHash({ ...base, objective: 'b' }))
+  assert.notEqual(decisionHash(base), decisionHash({ ...base, decision: { route: 'execute' } } as unknown as Task))
+  assert.equal(requestHash(base), requestHash({ ...base, status: 'done' } as Task), 'status is not part of the request')
 })

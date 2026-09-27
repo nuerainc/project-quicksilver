@@ -27,7 +27,7 @@ Two rules hold on every path:
 | 6. Record | The task is stored as `received` | |
 | 7. Boundaries | AMP patent material, and writes to a frozen project (see below) | `refused`; the kernel never sees it |
 | 8. Kernel | A `ProposedAction` goes through the normal `authorize()`: capability graph, policies, risk, the WAES gate and separation of duties | `reject` → `refused`; `request-approval` → `awaiting-approval`; `execute-autonomously` → `queued` |
-| 9. Execution | Only when the department's effective autonomy (Operate's `departmentAutonomy`) is `act-within-limits` **and** the kernel said `execute-autonomously` | See below |
+| 9. Execution | When the department's effective autonomy (Operate's `departmentAutonomy`) is `act-within-limits` **and** the kernel said `execute-autonomously`; or after a human approves, when that autonomy is `act-with-approval` or higher | See below |
 
 Execution never uses a new executor:
 
@@ -43,13 +43,44 @@ Execution never uses a new executor:
   (`intent/onboard/<tasks.shadowIntentId>/shadow.json`, default `tasks`), with
   Aura's prediction recorded before any verdict. It then counts toward Aura's
   learning and the hand-over evidence like any other shadow recommendation.
-  Nothing runs.
+  Nothing runs, unless a human later approves a task that needs approval
+  (see below).
 
 A task the kernel sends to a human stays `awaiting-approval` until a human
 with `task:approve` decides:
 
-- **Approve:** the task becomes `queued` for a human to carry out.
+- **Approve:** the task becomes `queued`. At that moment the intake re-reads
+  the department's effective autonomy (the same `departmentAutonomy` as at
+  submit). The task runs on its own only if all of these hold:
+  - the effective autonomy is `act-with-approval` or `act-within-limits`
+  - the kernel's decision was `request-approval` (a `reject` is never approvable)
+  - the capability names a host workflow
+  - a run queue is available (the running host; the CLI has none)
+
+  It is then enqueued on the durable run queue exactly as the autonomous path
+  does, and followed to `running`, `done` or `failed`. Otherwise it is queued
+  for a human, and the task's execution note says why (for example, the
+  department is at `propose`, or no executor is configured).
 - **Deny:** the task becomes `refused`.
+
+An approval is **bound to the exact request it approved**. The approval
+record holds:
+
+- who approved and when
+- the justification, when one was given
+- `soleOperatorOverride`
+- the autonomy re-read at approval
+- `requestHash`: sha256 of the stored request (id, source, submitter, time,
+  objective, capability, department, inputs, idempotency key)
+- `decisionHash`: sha256 of the kernel decision record
+
+Before the run is enqueued, the intake re-reads the stored task and
+recomputes both hashes. If either changed since the approval, the task does
+not run. Its execution note says what changed, and the audit trail records
+`run-refused`. The run's input carries the approval as metadata: who, when,
+the sole-operator justification if one was used, and both hashes. The audit
+trail records `approved` (with the hashes), then `run-enqueued`, then the
+run's outcome.
 
 The submitter never counts as an approver. The one exception is the
 existing sole-operator override: with `QUICKSILVER_SOLE_OPERATOR_ID` set to
