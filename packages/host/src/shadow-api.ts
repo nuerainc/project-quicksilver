@@ -133,7 +133,9 @@ export class MemoryShadowStore implements ShadowStore {
 }
 
 // One write at a time per intent, so concurrent verdicts cannot lose each other.
+// Exported so the task intake (tasks.ts) logs recommendations under the same lock.
 const locks = new Map<string, Promise<unknown>>()
+export function withShadowLock<T>(key: string, fn: () => Promise<T>): Promise<T> { return withLock(key, fn) }
 function withLock<T>(key: string, fn: () => Promise<T>): Promise<T> {
   const prev = locks.get(key) ?? Promise.resolve()
   const next = prev.then(fn, fn)

@@ -22,3 +22,4 @@ that every operating mode depends on.
 - [Operate (M6): autonomy, reinvestment and bounded experiments](operate.md)
 - [Kernel depth (M7): policy lineage, supersession, scope nesting and the capability graph](kernel-depth.md)
 - [What-if engine (M7): Monte Carlo cash, experiment odds, stress scenarios and shadow-log counterfactuals](what-if.md)
+- [Governed task interface (M7): one intake path for API, MCP, webhook and CLI tasks](tasks.md)

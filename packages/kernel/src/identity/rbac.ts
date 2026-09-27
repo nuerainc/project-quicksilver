@@ -37,6 +37,11 @@ export const PERMISSIONS = [
   'tenant:admin',
   'intent:provide',
   'intent:rules',
+  // Governed task interface (M7 part 4): submit a task, read your own, read all, approve or deny one.
+  'task:submit',
+  'task:read-own',
+  'task:read',
+  'task:approve',
 ] as const
 
 export type Permission = (typeof PERMISSIONS)[number]
@@ -55,6 +60,7 @@ export const AUTHORITY_PERMISSIONS: readonly Permission[] = Object.freeze([
   'tenant:admin',
   'intent:provide',
   'intent:rules',
+  'task:approve',
 ])
 
 /** Permissions that require the actor to be someone other than the proposer/requester. */
@@ -127,12 +133,13 @@ export const BUILT_IN_ROLES: readonly RoleDefinition[] = Object.freeze([
   role('viewer', 'Read workflows, runs, and decisions.', ['workflow:read', 'run:read', 'decision:read']),
   role('operator', 'Start and cancel runs of published workflows.', ['workflow:read', 'run:read', 'run:enqueue', 'run:cancel', 'decision:read']),
   role('developer', 'Author workflows and run them; cannot publish or approve.', ['workflow:read', 'workflow:write', 'run:read', 'run:enqueue', 'run:cancel', 'decision:read', 'decision:propose', 'secret:use']),
-  role('supervisor', 'Human authority for approvals, execution, rollback, redrive, and governed memory/routing changes.', ['workflow:read', 'workflow:publish', 'run:read', 'run:cancel', 'run:redrive', 'decision:read', 'decision:approve', 'decision:execute', 'decision:rollback', 'memory:approve', 'routing:approve', 'audit:read']),
-  role('auditor', 'Read-only access including the audit trail.', ['workflow:read', 'run:read', 'decision:read', 'audit:read']),
+  role('supervisor', 'Human authority for approvals, execution, rollback, redrive, and governed memory/routing changes.', ['workflow:read', 'workflow:publish', 'run:read', 'run:cancel', 'run:redrive', 'decision:read', 'decision:approve', 'decision:execute', 'decision:rollback', 'memory:approve', 'routing:approve', 'audit:read', 'task:submit', 'task:read', 'task:approve']),
+  role('auditor', 'Read-only access including the audit trail.', ['workflow:read', 'run:read', 'decision:read', 'audit:read', 'task:read']),
   role('tenant-admin', 'Manage roles, principals, and secrets for one tenant.', ['workflow:read', 'run:read', 'decision:read', 'audit:read', 'secret:read', 'secret:write', 'secret:use', 'tenant:admin']),
-  role('trigger', 'Service identity for webhooks and schedules: may only enqueue runs.', ['run:enqueue']),
-  role('intent-provider', 'Aura intent provider: states goals, weights, horizons, autonomy and customer commitments. The only source of intent.', ['decision:read', 'audit:read', 'intent:provide']),
+  role('trigger', 'Service identity for webhooks and schedules: may only enqueue runs and submit tasks (both still governed).', ['run:enqueue', 'task:submit']),
+  role('intent-provider', 'Aura intent provider (the founder): states goals, weights, horizons, autonomy and customer commitments. The only source of intent. Submits, reads and decides tasks.', ['decision:read', 'audit:read', 'intent:provide', 'task:submit', 'task:read', 'task:approve']),
   role('intent-admin', 'Sets how several intent providers decide (the decision rule). No input into intent itself.', ['decision:read', 'audit:read', 'intent:rules']),
+  role('task-client', 'An outside tool that hands tasks to Quicksilver (API, MCP, scripts): submit a task and read its own. Grants nothing else.', ['task:submit', 'task:read-own']),
   role('agent-worker', 'Nuera Quicksilver Agent identity: read context and propose, never authorize.', ['workflow:read', 'run:read', 'decision:read', 'decision:propose', 'secret:use']),
 ])
 

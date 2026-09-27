@@ -19,9 +19,12 @@
     "onboard": "tsx src/onboard-cli.ts",
     "genesis": "tsx src/genesis-cli.ts",
     "operate": "tsx src/operate-cli.ts",
-    "whatif": "tsx src/whatif-cli.ts"
+    "whatif": "tsx src/whatif-cli.ts",
+    "tasks": "tsx src/tasks-cli.ts",
+    "mcp:tasks": "node --experimental-strip-types --no-warnings src/mcp-tasks.ts"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.1",
     "@quicksilver/agent": "*",
     "@quicksilver/aura": "*",
     "@quicksilver/kernel": "*",

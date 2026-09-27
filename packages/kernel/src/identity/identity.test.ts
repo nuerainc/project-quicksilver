@@ -209,3 +209,16 @@ test('Queue ACL: without an access controller, named actors still work (local de
   const malformed = await queue.enqueue({ graph, input: 2, tenantId: 'acme', principal: { id: '', kind: 'human', tenantId: 'acme', roles: [] } })
   assert.equal(!malformed.accepted && malformed.code, 'invalid-request')
 })
+
+test('RBAC: task clients may only submit tasks and read their own; the founder decides tasks; agents never do', () => {
+  const access = new AccessController()
+  const client: Principal = { id: 'client:desk-app', kind: 'service', tenantId: 'acme', roles: ['task-client'] }
+  const founder: Principal = { id: 'entity-founder', kind: 'human', tenantId: 'acme', roles: ['intent-provider'] }
+  const clientGrants = [...access.effectivePermissions(client).keys()].sort()
+  assert.deepEqual(clientGrants, ['task:read-own', 'task:submit'])
+  for (const p of ['task:submit', 'task:read', 'task:approve'] as const) assert.equal(access.authorize(founder, p, acme).allowed, true, p)
+  assert.equal(access.authorize(hook, 'task:submit', acme).allowed, true, 'webhook triggers submit tasks through the same intake')
+  assert.equal(access.authorize(hook, 'task:approve', acme).allowed, false)
+  assert.equal(AUTHORITY_PERMISSIONS.includes('task:approve'), true)
+  assert.equal(access.authorize({ ...agent, roles: ['intent-provider'] }, 'task:approve', acme).allowed, false, 'agents never approve tasks')
+})

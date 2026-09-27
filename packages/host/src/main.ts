@@ -17,6 +17,10 @@
  *   NEXT_PUBLIC_SANITY_PROJECT_ID + SANITY_AUTH_TOKEN enable durable evaluation records.
  *   QUICKSILVER_SHADOW_STORE=sanity keeps shadow recommendations and Aura's verdict
  *     learner in Sanity (shadowRecommendation, auraVerdictLearner) instead of files.
+ *   The task interface (M7 part 4) is always on: /api/tasks, task clients from
+ *     `npm run tasks -- client add`, the catalog in deploy/tasks/catalog.json.
+ *     QUICKSILVER_COMPANY_ID names the intent ledger whose autonomy grants apply;
+ *     QUICKSILVER_SOLE_OPERATOR_ID enables the sole-operator approval override.
  */
 import { randomUUID } from 'node:crypto'
 import { existsSync, readFileSync } from 'node:fs'
@@ -37,6 +41,7 @@ import { FileShadowStore, MemoryShadowStore, type ShadowApiDeps, type ShadowStor
 import { SanityShadowStore } from './shadow-store-sanity.ts'
 import { FileGenesisStore, MemoryGenesisStore, type GenesisApiDeps } from './genesis-api.ts'
 import { SecretsVault, generateMasterKey } from './vault.ts'
+import { taskSetup } from './tasks-setup.ts'
 
 /** Where the command was run from (npm sets INIT_CWD; workspace scripts run inside packages/host). */
 const baseDir = process.env.INIT_CWD ?? process.cwd()
@@ -304,6 +309,8 @@ async function main(): Promise<void> {
   const { store, close, ready } = await buildStore(config, log)
   const intent = await buildIntent(config, log)
   const shadow = await buildShadow(config, log, intent)
+  const tasks = taskSetup(config, { baseDir })
+  for (const note of tasks.notes) log.warn(note)
   const host = new QuicksilverHost(config, {
     principals,
     store,
@@ -314,6 +321,15 @@ async function main(): Promise<void> {
     shadow,
     decisions: await buildDecisions(config, shadow),
     genesis: await buildGenesis(config, log),
+    tasks: {
+      store: tasks.store,
+      clients: tasks.clients,
+      catalog: tasks.catalog,
+      boundaries: tasks.boundaries,
+      autonomy: tasks.autonomy,
+      shadow: { store: shadow.store, intentId: config.tasks.shadowIntentId },
+      soleOperatorId: tasks.soleOperatorId,
+    },
     ...(close ? { onStop: close } : {}),
     ...(ready ? { ready } : {}),
   })

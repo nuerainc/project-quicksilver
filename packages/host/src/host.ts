@@ -12,9 +12,9 @@ import {
   type WorkflowRunStatus,
   type WorkflowRunStore,
 } from '@quicksilver/kernel/runtime'
-import { CronScheduler, WebhookTrigger } from '@quicksilver/kernel/triggers'
+import { CronScheduler, WebhookTrigger, type VerifiedWebhookDelivery, type WebhookSinkOutcome } from '@quicksilver/kernel/triggers'
 
-import { checkWorkflow, type HostConfig } from './config.ts'
+import { checkWorkflow, type HostConfig, type WebhookTaskConfig } from './config.ts'
 import { createHandlerFactory, type AgentRunner, type EvaluationSink } from './handlers.ts'
 import { Logger, redactValue } from './log.ts'
 import { createHostMetrics, type HostMetrics } from './metrics.ts'
@@ -23,6 +23,9 @@ import { handleIntentRoute, type IntentApiDeps } from './intent-api.ts'
 import { handleShadowRoute, type ShadowApiDeps } from './shadow-api.ts'
 import { handleGenesisRoute, type GenesisApiDeps } from './genesis-api.ts'
 import { handleDecisionRoute, type DecisionApiDeps } from './decisions-api.ts'
+import { handleTaskRoute } from './tasks-api.ts'
+import { TaskError, TaskService, type TaskRunBackend, type TaskServiceDeps } from './tasks.ts'
+import type { TaskClientRegistry } from './task-clients.ts'
 
 /**
  * The single-tenant Quicksilver host: one process that runs the governed
@@ -58,6 +61,11 @@ export interface HostDependencies {
   genesis?: GenesisApiDeps
   /** Aura decision journal: decisions the provider logs, plus judged shadow verdicts. Routes return 404 when absent. */
   decisions?: DecisionApiDeps
+  /**
+   * The governed task interface (M7 part 4). The host adds its tenant, access
+   * controller, the run queue and the configured rate limit. Routes return 404 when absent.
+   */
+  tasks?: Omit<TaskServiceDeps, 'tenantId' | 'access' | 'runs' | 'rateLimit' | 'now'> & { clients?: TaskClientRegistry }
 }
 
 const CONSOLE_HEADERS = {
@@ -72,6 +80,7 @@ function consolePage(): string {
 
 const RUN_STATUSES: readonly WorkflowRunStatus[] = ['queued', 'running', 'completed', 'blocked', 'cancelled', 'dead-lettered']
 const HOST_PRINCIPAL_ID = 'svc:quicksilver-host'
+const TASK_PRINCIPAL_ID = 'svc:quicksilver-tasks'
 
 export class QuicksilverHost {
   readonly config: HostConfig
@@ -83,6 +92,8 @@ export class QuicksilverHost {
   readonly scheduler: CronScheduler
   readonly vault?: SecretsVault
   webhooks?: WebhookTrigger
+  /** The one governed task intake (M7 part 4), when configured. */
+  readonly tasks?: TaskService
   private readonly identity: StaticTokenIdentityProvider
   private readonly deps: HostDependencies
   private readonly hostPrincipal: Principal
@@ -102,7 +113,10 @@ export class QuicksilverHost {
     this.identity = new StaticTokenIdentityProvider(principals)
 
     this.access = new AccessController({
-      customRoles: [{ id: 'host-runtime', tenantId: config.tenantId, description: 'The host process: resolve secrets for triggers.', permissions: ['secret:use'] }],
+      customRoles: [
+        { id: 'host-runtime', tenantId: config.tenantId, description: 'The host process: resolve secrets for triggers.', permissions: ['secret:use'] },
+        { id: 'task-runtime', tenantId: config.tenantId, description: 'The task intake: enqueue, read and cancel the runs of tasks the kernel allowed.', permissions: ['run:enqueue', 'run:read', 'run:cancel'] },
+      ],
       audit: (decision) => this.onAccessDecision(decision),
       ...(deps.now ? { now: deps.now } : {}),
     })
@@ -153,6 +167,30 @@ export class QuicksilverHost {
       })
     }
 
+    if (deps.tasks) {
+      const taskPrincipal: Principal = { id: TASK_PRINCIPAL_ID, kind: 'service', tenantId: config.tenantId, roles: ['task-runtime'] }
+      const runs: TaskRunBackend = {
+        enqueue: async ({ workflow, input, idempotencyKey }) => {
+          const graph = config.workflows[workflow]
+          if (!graph) return { ok: false, reason: `workflow "${workflow}" is not configured on this host` }
+          const issues = checkWorkflow(graph, config.execution)
+          if (issues.length) return { ok: false, reason: issues.join(' ') }
+          const r = await this.queue.enqueue({ graph, input, tenantId: config.tenantId, trigger: { kind: 'event', source: `task:${idempotencyKey.slice(5)}` }, principal: taskPrincipal, idempotencyKey, maxAttempts: 1 })
+          return r.accepted ? { ok: true, runId: r.run.runId } : { ok: false, reason: `${r.code}: ${r.reasons.join(' ')}` }
+        },
+        get: async (runId) => {
+          const run = await this.queue.get(runId)
+          return run && run.tenantId === config.tenantId ? { status: run.status, ...(run.result ? { result: run.result.outputs ?? null } : {}), ...(run.lastError ? { lastError: run.lastError } : {}) } : undefined
+        },
+        cancel: async (runId, reason) => {
+          const run = await this.queue.cancel(runId, taskPrincipal, reason)
+          return run ? { status: run.status } : undefined
+        },
+      }
+      const { clients: _clients, ...taskDeps } = deps.tasks
+      this.tasks = new TaskService({ ...taskDeps, tenantId: config.tenantId, access: this.access, runs, rateLimit: config.tasks.rateLimit, ...(deps.now ? { now: deps.now } : {}) })
+    }
+
     if (config.vault) {
       const masterKey = (deps.env ?? process.env)[config.vault.keyEnv]
       if (!masterKey) throw new Error(`The vault is configured but ${config.vault.keyEnv} is not set.`)
@@ -177,10 +215,11 @@ export class QuicksilverHost {
     const services = new Map(this.config.services.map((s) => [s.id, { id: s.id, kind: 'service' as const, tenantId: this.config.tenantId, roles: s.roles }]))
     const endpoints = []
     for (const wh of this.config.webhooks) {
+      if (wh.task && !this.tasks) throw new Error(`Webhook "${wh.id}" routes to the task intake, but the task interface is not configured.`)
       endpoints.push({
         id: wh.id,
         tenantId: this.config.tenantId,
-        graph: this.config.workflows[wh.workflow]!,
+        ...(wh.task ? { deliver: (d: VerifiedWebhookDelivery) => this.webhookTask(wh.task!, d) } : { graph: this.config.workflows[wh.workflow!]! }),
         secrets: await this.resolveSecret(wh.secret),
         principal: services.get(wh.principal)!,
         ...(wh.priority !== undefined ? { priority: wh.priority } : {}),
@@ -260,7 +299,33 @@ export class QuicksilverHost {
     return values
   }
 
+  /** A verified task-webhook delivery: into the one intake, as the endpoint's service principal. */
+  private async webhookTask(cfg: WebhookTaskConfig, d: VerifiedWebhookDelivery): Promise<WebhookSinkOutcome> {
+    const payload = (d.payload && typeof d.payload === 'object' && !Array.isArray(d.payload) ? d.payload : {}) as Record<string, unknown>
+    const objective = payload[cfg.objectiveField ?? 'objective']
+    const inputs = payload.inputs
+    try {
+      const { task, deduplicated } = await this.tasks!.submit({
+        source: 'webhook',
+        principal: d.principal,
+        objective,
+        ...(cfg.capabilityId ? { capabilityId: cfg.capabilityId } : {}),
+        ...(cfg.department ? { department: cfg.department } : {}),
+        ...(inputs !== undefined ? { inputs } : {}),
+        idempotencyKey: d.idempotencyKey,
+      })
+      return { status: deduplicated ? 200 : 202, body: { accepted: true, taskId: task.id, status: task.status, deduplicated } }
+    } catch (error) {
+      if (error instanceof TaskError) return { status: error.status, body: { accepted: false, error: error.message, code: error.code } }
+      throw error
+    }
+  }
+
   private onRunFinished(run: WorkflowRunRecord): void {
+    if (this.tasks && run.trigger.kind === 'event' && run.trigger.source?.startsWith('task:')) {
+      const taskId = run.trigger.source.slice(5)
+      void this.tasks.deps.store.get(taskId).then((t) => (t ? this.tasks!.refresh(t) : undefined)).catch((error) => this.log.warn('task status update failed', { taskId, error: (error as Error).message }))
+    }
     this.metrics.runsFinished.inc({ status: run.status, workflow: run.workflowId })
     this.metrics.runDuration.observe({ workflow: run.workflowId }, Math.max(0, (run.updatedAt - run.createdAt) / 1000))
     const fields = { runId: run.runId, workflowId: run.workflowId, status: run.status, attempt: run.attempt, trigger: run.trigger, requestedBy: run.requestedBy, ...(run.lastError ? { error: run.lastError } : {}) }
@@ -312,7 +377,7 @@ export class QuicksilverHost {
     }
     if (method === 'GET' && path === '/metrics') {
       if (!this.config.http.metricsPublic) {
-        const denied = this.require(req, 'audit:read')
+        const denied = await this.require(req, 'audit:read')
         if (denied) return denied
       }
       return { status: 200, body: await this.metrics.registry.render(), contentType: 'text/plain; version=0.0.4; charset=utf-8' }
@@ -332,12 +397,23 @@ export class QuicksilverHost {
     }
 
     if (parts[0] !== 'api') return { status: 404, body: { error: 'Not found.' } }
-    const principal = this.authenticate(req)
+    const principal = await this.authenticate(req)
     if (!principal) return { status: 401, body: { error: 'A valid bearer token is required.' } }
     const tenant = { tenantId: this.config.tenantId }
 
     // GET /api/whoami
     if (method === 'GET' && path === '/api/whoami') return { status: 200, body: { id: principal.id, kind: principal.kind, tenantId: principal.tenantId, roles: principal.roles } }
+
+    // The governed task interface (M7 part 4): the one intake for API and MCP callers.
+    if (parts[1] === 'tasks' && this.tasks) {
+      const channel = (headerValue(req, 'x-quicksilver-task-source') ?? '').trim().toLowerCase()
+      const handled = await handleTaskRoute({
+        method, parts, query: url.searchParams, principal,
+        source: channel === 'mcp' ? 'mcp' : 'api',
+        readBody: () => readJson(req, 16_384),
+      }, this.tasks)
+      if (handled) return handled
+    }
 
     // Aura intents and the intent ledger
     if ((parts[1] === 'intents' || parts[1] === 'intent-ledger') && this.deps.intent) {
@@ -514,8 +590,10 @@ export class QuicksilverHost {
     }
   }
 
-  private authenticate(req: IncomingMessage): Principal | undefined {
-    return this.identity.authenticateHeader(headerValue(req, 'authorization'))
+  /** Host principals first; then task clients (each holds only the task-client role). */
+  private async authenticate(req: IncomingMessage): Promise<Principal | undefined> {
+    const header = headerValue(req, 'authorization')
+    return this.identity.authenticateHeader(header) ?? (await this.deps.tasks?.clients?.authenticateHeader(header))
   }
 
   private authorize(principal: Principal, permission: Parameters<AccessController['authorize']>[1]): { status: number; body: unknown } | undefined {
@@ -523,8 +601,8 @@ export class QuicksilverHost {
     return decision.allowed ? undefined : { status: 403, body: { error: decision.reasons.join(' ') } }
   }
 
-  private require(req: IncomingMessage, permission: Parameters<AccessController['authorize']>[1]) {
-    const principal = this.authenticate(req)
+  private async require(req: IncomingMessage, permission: Parameters<AccessController['authorize']>[1]) {
+    const principal = await this.authenticate(req)
     if (!principal) return { status: 401, body: { error: 'A valid bearer token is required.' } }
     return this.authorize(principal, permission)
   }
@@ -555,8 +633,8 @@ function headerValue(req: IncomingMessage, name: string): string | null {
 
 function routeLabel(method: string, path: string): string {
   if (path.startsWith('/webhooks/')) return `${method} /webhooks/:id`
-  const normalized = path.replace(/^\/api\/runs\/[^/]+/, '/api/runs/:id').replace(/^\/api\/secrets\/[^/]+/, '/api/secrets/:name').replace(/^\/api\/intents\/[^/]+/, '/api/intents/:id').replace(/^\/api\/intent-ledger\/[^/]+/, '/api/intent-ledger/:company').replace(/^\/api\/genesis\/experiments\/[^/]+/, '/api/genesis/experiments/:id')
-  const known = ['/healthz', '/readyz', '/metrics', '/api/whoami', '/api/runs', '/api/runs/:id', '/api/runs/:id/cancel', '/api/runs/:id/redrive', '/api/dead-letters', '/api/stats', '/api/schedules', '/api/webhooks', '/api/workflows', '/api/secrets', '/api/secrets/:name', '/api/admin/reload-secrets', '/api/intents', '/api/intents/:id', '/api/intents/:id/answers', '/api/intent-ledger/:company', '/api/decisions', '/api/genesis', '/api/genesis/experiments', '/api/genesis/money', '/api/genesis/reviews', '/api/genesis/experiments/:id/start', '/api/genesis/experiments/:id/measurements', '/api/genesis/experiments/:id/evaluate', '/api/genesis/experiments/:id/decide']
+  const normalized = path.replace(/^\/api\/tasks\/(?!capabilities$)[^/]+/, '/api/tasks/:id').replace(/^\/api\/runs\/[^/]+/, '/api/runs/:id').replace(/^\/api\/secrets\/[^/]+/, '/api/secrets/:name').replace(/^\/api\/intents\/[^/]+/, '/api/intents/:id').replace(/^\/api\/intent-ledger\/[^/]+/, '/api/intent-ledger/:company').replace(/^\/api\/genesis\/experiments\/[^/]+/, '/api/genesis/experiments/:id')
+  const known = ['/healthz', '/readyz', '/metrics', '/api/whoami', '/api/runs', '/api/runs/:id', '/api/runs/:id/cancel', '/api/runs/:id/redrive', '/api/dead-letters', '/api/stats', '/api/schedules', '/api/webhooks', '/api/workflows', '/api/secrets', '/api/secrets/:name', '/api/admin/reload-secrets', '/api/intents', '/api/intents/:id', '/api/intents/:id/answers', '/api/intent-ledger/:company', '/api/decisions', '/api/genesis', '/api/genesis/experiments', '/api/genesis/money', '/api/genesis/reviews', '/api/genesis/experiments/:id/start', '/api/genesis/experiments/:id/measurements', '/api/genesis/experiments/:id/evaluate', '/api/genesis/experiments/:id/decide', '/api/tasks', '/api/tasks/capabilities', '/api/tasks/:id', '/api/tasks/:id/cancel', '/api/tasks/:id/approve', '/api/tasks/:id/deny']
   return known.includes(normalized) ? `${method} ${normalized}` : `${method} other`
 }
 

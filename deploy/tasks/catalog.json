@@ -1,0 +1,58 @@
+{
+  "defaultCapabilityId": "task.triage",
+  "requestConfidence": 0.6,
+  "capabilities": [
+    {
+      "id": "task.triage",
+      "name": "Triage a request",
+      "description": "A free-text request for a person to read and decide what to do. Used when a task names no capability; it always goes to a human.",
+      "department": "operations",
+      "baseRiskLevel": 4,
+      "reversible": true,
+      "operationalImpact": 1,
+      "uncertainty": 3
+    },
+    {
+      "id": "reports.brief",
+      "name": "Answer from the company model",
+      "description": "Answer a question from the company model and records Quicksilver already holds. Read-only.",
+      "department": "operations",
+      "baseRiskLevel": 0,
+      "reversible": true,
+      "operationalImpact": 0,
+      "uncertainty": 1,
+      "workflow": "daily-brief"
+    },
+    {
+      "id": "finance.summary",
+      "name": "Summarize the books",
+      "description": "Summarize the money ledger for a period: revenue, spend, refunds and reserve. Read-only; moves no money.",
+      "department": "finance",
+      "baseRiskLevel": 1,
+      "reversible": true,
+      "operationalImpact": 0,
+      "uncertainty": 1
+    },
+    {
+      "id": "sales.outreach-draft",
+      "name": "Draft outreach",
+      "description": "Draft an outreach message for a person to review. Nothing is sent.",
+      "department": "sales",
+      "baseRiskLevel": 2,
+      "reversible": true,
+      "operationalImpact": 2,
+      "uncertainty": 2
+    },
+    {
+      "id": "forkling.read",
+      "name": "Read Forkling records",
+      "description": "Read Forkling's deployed records and results. Forkling is frozen: read-only, and no task may change it.",
+      "department": "research",
+      "baseRiskLevel": 0,
+      "reversible": true,
+      "operationalImpact": 0,
+      "uncertainty": 1
+    }
+  ],
+  "policies": []
+}

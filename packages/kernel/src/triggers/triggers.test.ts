@@ -299,3 +299,28 @@ test('Webhook: setSecrets rotates secrets in place and list() never exposes them
   assert.deepEqual(listed, [{ id: 'erp-orders', tenantId: 'acme', workflowId: 'wf-intake', enabled: true, secretCount: 1 }])
   assert.ok(!JSON.stringify(listed).includes(next))
 })
+
+test('Webhook: a deliver sink gets only verified deliveries, with the same idempotency key, and no run is enqueued', async () => {
+  const store = new InMemoryWorkflowRunStore()
+  const now = { t: iso('2026-09-27T12:00:00Z') }
+  const queue = new WorkflowRunQueue({ store, access: new AccessController(), now: () => now.t })
+  const seen: Array<{ payload: unknown; idempotencyKey: string; principalId?: string }> = []
+  const trigger = new WebhookTrigger({
+    queue,
+    now: () => now.t,
+    endpoints: [{
+      id: 'task-form', tenantId: 'acme', secrets: [secret], principal: hookPrincipal,
+      deliver: async (d) => { seen.push({ payload: d.payload, idempotencyKey: d.idempotencyKey, ...(d.principal ? { principalId: d.principal.id } : {}) }); return { status: 202, body: { accepted: true, taskId: 'task-1' } } },
+    }],
+  })
+  const body = '{"objective":"Brief me"}'
+  const ok = await trigger.receive('task-form', signedHeaders(body, now.t, { delivery: 'evt_9' }), body)
+  assert.equal(ok.status, 202)
+  assert.deepEqual(seen, [{ payload: { objective: 'Brief me' }, idempotencyKey: 'webhook:task-form:evt_9', principalId: 'svc:erp-webhook' }])
+  const forged = await trigger.receive('task-form', signedHeaders(body, now.t, { delivery: 'evt_10', secret: generateWebhookSecret() }), body)
+  assert.equal(forged.status, 401)
+  assert.equal(seen.length, 1, 'an unverified delivery never reaches the sink')
+  assert.equal((await store.list()).length, 0)
+  assert.equal(trigger.list()[0]!.workflowId, 'task-intake')
+  assert.throws(() => new WebhookTrigger({ queue, endpoints: [{ id: 'nothing', tenantId: 'acme', secrets: [secret] }] }), /workflow graph or a deliver sink/)
+})

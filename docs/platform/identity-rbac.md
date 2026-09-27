@@ -14,7 +14,7 @@ model, and so do the web app's supervisor decision routes.
   `memory:approve`, `routing:approve`, `secret:*`, `audit:read`,
   `tenant:admin`, `intent:provide`, `intent:rules`.
 - **Roles:** built in are `viewer`, `operator`, `developer`, `supervisor`,
-  `auditor`, `tenant-admin`, `trigger` (enqueue only), `agent-worker`,
+  `auditor`, `tenant-admin`, `trigger` (enqueue runs and submit tasks), `task-client`, `agent-worker`,
   `intent-provider` and `intent-admin`.
   - `intent-provider` (`intent:provide`) states Aura intent: goals, weights,
     horizons, autonomy and customer commitments.
@@ -22,6 +22,11 @@ model, and so do the web app's supervisor decision routes.
     has no input into intent.
   - Both are authority permissions, so agents can never hold them. See the
     [Aura intent ledger](../../packages/aura/README.md#intent-ledger).
+  - `task-client` (`task:submit`, `task:read-own`) is an outside tool that
+    hands tasks to Quicksilver. `task:read` and `task:approve` belong to
+    `intent-provider` (the founder) and `supervisor`, and `trigger` can
+    also submit tasks. `task:approve` is an authority permission. See the
+    [task interface](tasks.md).
   Tenants can define **custom roles**. A custom role is scoped to one tenant
   and cannot redefine a built-in role.
 

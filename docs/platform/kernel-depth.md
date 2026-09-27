@@ -5,7 +5,7 @@ changing who decides. The kernel still authorizes every action
 deterministically, fails closed, and never asks a model. Every new field is
 optional. A company model without them behaves exactly as it did before.
 
-**Status:** parts 1 to 3 are built (2026-09-27):
+**Status:** all four parts are built (2026-09-27):
 
 - policy versioning, supersession and scope nesting (`packages/kernel/src/authority.ts`)
 - the capability graph (`packages/kernel/src/capability-graph.ts`)
@@ -13,8 +13,13 @@ optional. A company model without them behaves exactly as it did before.
   Monte Carlo cash, experiment outcome odds, stress scenarios and
   counterfactuals on shadow logs. Every result is an estimate, never a
   decision. See [What-if engine](what-if.md).
-
-The governed task interface comes next.
+- the governed task interface (`packages/host/src/tasks.ts`, `npm run tasks`,
+  `npm run mcp:tasks`): one intake path for tasks from the HTTP API, the MCP
+  server, signed webhooks and the CLI. Each task passes the boundaries (AMP
+  patent material, frozen projects) and then the normal `authorize()`. The
+  channel grants nothing, the task text is untrusted data, and a human
+  approves. A task runs only when the kernel allows it without approval and
+  its department acts within limits. See [Task interface](tasks.md).
 
 ## Part 1: policies
 

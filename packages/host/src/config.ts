@@ -36,13 +36,39 @@ export interface ScheduleConfig {
 
 export interface WebhookConfig {
   id: string
-  workflow: string
+  /** The workflow a delivery enqueues. Omit it for a task webhook. */
+  workflow?: string
+  /**
+   * Route deliveries into the one governed task intake (M7 part 4) instead of
+   * enqueueing a workflow. The capability and department are fixed here: the
+   * payload is untrusted data and cannot choose them.
+   */
+  task?: WebhookTaskConfig
   /** Secret references: `vault:<name>` or `env:<NAME>`. */
   secret: string
   principal: string
   priority?: number
   enabled?: boolean
   maxBodyBytes?: number
+}
+
+export interface WebhookTaskConfig {
+  capabilityId?: string
+  department?: string
+  /** Payload field that holds the objective text (default "objective"). */
+  objectiveField?: string
+}
+
+/** The governed task interface (M7 part 4). All optional. */
+export interface TasksConfig {
+  /** Per-client token bucket: `burst` tasks at once, `perMinute` sustained. */
+  rateLimit: { burst: number; perMinute: number }
+  /** Capability catalog file (default deploy/tasks/catalog.json from the repo root). */
+  catalog?: string
+  /** Extra boundaries merged over the defaults (can add, never remove). */
+  boundaries?: string
+  /** Shadow log (intent id under intent/onboard/) where recommendation-only tasks are logged. */
+  shadowIntentId: string
 }
 
 export interface ServicePrincipalConfig {
@@ -62,6 +88,7 @@ export interface HostConfig {
   services: ServicePrincipalConfig[]
   schedules: ScheduleConfig[]
   webhooks: WebhookConfig[]
+  tasks: TasksConfig
   log: { level: 'debug' | 'info' | 'warn' | 'error' }
 }
 
@@ -111,6 +138,8 @@ export async function loadHostConfig(path: string, defaults: { tenantId?: string
   const config = parseHostConfig(raw)
   if (config.store.kind === 'file' && !isAbsolute(config.store.path)) config.store.path = resolve(base, config.store.path)
   if (config.vault && !isAbsolute(config.vault.path)) config.vault.path = resolve(base, config.vault.path)
+  if (config.tasks.catalog && !isAbsolute(config.tasks.catalog)) config.tasks.catalog = resolve(base, config.tasks.catalog)
+  if (config.tasks.boundaries && !isAbsolute(config.tasks.boundaries)) config.tasks.boundaries = resolve(base, config.tasks.boundaries)
   return config
 }
 
@@ -218,16 +247,38 @@ export function parseHostConfig(input: unknown): HostConfig {
     if (webhooks.some((x) => x.id === wh.id)) p.push(`${where} is defined twice.`)
     if (typeof wh.secret !== 'string' || !SECRET_REF.test(wh.secret)) p.push(`${where}: secret must be a reference ("vault:<name>" or "env:<NAME>"), never the secret itself.`)
     if (typeof wh.secret === 'string' && wh.secret.startsWith('vault:') && !vault) p.push(`${where}: uses a vault secret but no vault is configured.`)
-    if (!(wh.workflow in workflows) && !(raw.workflows ?? {})[wh.workflow]) p.push(`${where}: workflow "${wh.workflow}" is not defined.`)
+    if (wh.task !== undefined) {
+      const t = wh.task as WebhookTaskConfig
+      if (!t || typeof t !== 'object') p.push(`${where}: task must be an object.`)
+      else {
+        if (wh.workflow !== undefined) p.push(`${where}: a task webhook names no workflow; the task intake decides what runs.`)
+        if (t.capabilityId !== undefined && (typeof t.capabilityId !== 'string' || !/^[a-zA-Z][a-zA-Z0-9._:-]{0,127}$/.test(t.capabilityId))) p.push(`${where}: task.capabilityId is invalid.`)
+        if (t.department !== undefined && (typeof t.department !== 'string' || !/^[a-z][a-z0-9-]{0,39}$/.test(t.department))) p.push(`${where}: task.department is invalid.`)
+        if (t.objectiveField !== undefined && (typeof t.objectiveField !== 'string' || !/^[a-zA-Z][a-zA-Z0-9_]{0,63}$/.test(t.objectiveField))) p.push(`${where}: task.objectiveField must be a field name.`)
+      }
+    } else if (typeof wh.workflow !== 'string' || (!(wh.workflow in workflows) && !(raw.workflows ?? {})[wh.workflow])) p.push(`${where}: workflow "${wh.workflow}" is not defined.`)
     triggerService(wh.principal, where)
     webhooks.push({ ...wh })
+  }
+
+  const rateLimit = { burst: raw.tasks?.rateLimit?.burst ?? 10, perMinute: raw.tasks?.rateLimit?.perMinute ?? 30 }
+  if (!Number.isInteger(rateLimit.burst) || rateLimit.burst < 1 || rateLimit.burst > 1_000) p.push('tasks.rateLimit.burst must be 1–1000.')
+  if (typeof rateLimit.perMinute !== 'number' || !(rateLimit.perMinute > 0) || rateLimit.perMinute > 6_000) p.push('tasks.rateLimit.perMinute must be above 0 and at most 6000.')
+  const shadowIntentId = raw.tasks?.shadowIntentId ?? 'tasks'
+  if (typeof shadowIntentId !== 'string' || !/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$/.test(shadowIntentId)) p.push('tasks.shadowIntentId must be an intent id.')
+  for (const k of ['catalog', 'boundaries'] as const) if (raw.tasks?.[k] !== undefined && (typeof raw.tasks[k] !== 'string' || !raw.tasks[k])) p.push(`tasks.${k} must be a file path.`)
+  const tasks: TasksConfig = {
+    rateLimit,
+    shadowIntentId,
+    ...(typeof raw.tasks?.catalog === 'string' ? { catalog: raw.tasks.catalog } : {}),
+    ...(typeof raw.tasks?.boundaries === 'string' ? { boundaries: raw.tasks.boundaries } : {}),
   }
 
   const level = raw.log?.level ?? 'info'
   if (!['debug', 'info', 'warn', 'error'].includes(level)) p.push('log.level must be debug, info, warn or error.')
 
   if (p.length) throw new ConfigError(p)
-  return { tenantId, http, store, ...(vault ? { vault } : {}), worker, queue, execution, workflows, services, schedules, webhooks, log: { level } }
+  return { tenantId, http, store, ...(vault ? { vault } : {}), worker, queue, execution, workflows, services, schedules, webhooks, tasks, log: { level } }
 }
 
 /** The M2 execution policy for a stored workflow graph. Also applied to API-submitted runs. */

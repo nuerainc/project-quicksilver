@@ -19,13 +19,35 @@ import type { WorkflowRunQueue } from '../runtime/queue.ts'
  * delivery (the delivery id, or the signature, is the idempotency key).
  * Runs are enqueued as the endpoint's service principal, which should hold
  * only the `trigger` role.
+ *
+ * An endpoint may instead name a `deliver` sink (M7 part 4: the host routes
+ * such deliveries into its one governed task intake). The same checks run
+ * first; the sink receives only a verified payload and its idempotency key,
+ * and never the secret. The signature is the authentication, nothing more.
  */
+
+/** A verified delivery handed to an endpoint's `deliver` sink. */
+export interface VerifiedWebhookDelivery {
+  endpointId: string
+  tenantId: string
+  payload: unknown
+  deliveryId: string
+  /** `webhook:<endpoint>:<delivery>`: the same key a workflow run would use. */
+  idempotencyKey: string
+  principal?: Principal
+}
 
 export interface WebhookEndpoint {
   /** Public, unguessable-not-required id used in the URL path. */
   id: string
   tenantId: string
-  graph: WorkflowGraph
+  /** The workflow a delivery enqueues. Required unless `deliver` is set. */
+  graph?: WorkflowGraph
+  /**
+   * Instead of enqueueing a workflow run, hand the verified delivery to this
+   * sink (e.g. the host's task intake). It runs after every check below.
+   */
+  deliver?: (delivery: VerifiedWebhookDelivery) => Promise<WebhookOutcome | WebhookSinkOutcome>
   /** Current secret plus any secrets still valid during rotation. Each ≥ 32 characters. */
   secrets: readonly string[]
   principal?: Principal
@@ -73,6 +95,12 @@ export interface WebhookTriggerOptions {
   now?: () => number
 }
 
+/** What a `deliver` sink returns: any status, a JSON body. */
+export interface WebhookSinkOutcome {
+  status: number
+  body: Record<string, unknown>
+}
+
 export type WebhookOutcome =
   | { status: 202; body: { accepted: true; runId: string; deduplicated: false } }
   | { status: 200; body: { accepted: true; runId: string; deduplicated: true } }
@@ -108,6 +136,7 @@ export class WebhookTrigger {
   addEndpoint(endpoint: WebhookEndpoint): void {
     if (!endpoint || typeof endpoint.id !== 'string' || !/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$/.test(endpoint.id)) throw new Error('Webhook endpoint id is invalid.')
     if (this.endpoints.has(endpoint.id)) throw new Error(`Webhook endpoint "${endpoint.id}" already exists.`)
+    if (!endpoint.graph && typeof endpoint.deliver !== 'function') throw new Error(`Webhook endpoint "${endpoint.id}" needs a workflow graph or a deliver sink.`)
     if (!Array.isArray(endpoint.secrets) || endpoint.secrets.length === 0 || endpoint.secrets.some((s) => typeof s !== 'string' || s.length < MIN_WEBHOOK_SECRET_LENGTH)) {
       throw new Error(`Webhook endpoint "${endpoint.id}" needs at least one secret of ${MIN_WEBHOOK_SECRET_LENGTH}+ characters.`)
     }
@@ -129,11 +158,11 @@ export class WebhookTrigger {
 
   /** Endpoint metadata without secrets. */
   list(): Array<{ id: string; tenantId: string; workflowId: string; enabled: boolean; secretCount: number }> {
-    return [...this.endpoints.values()].map((e) => ({ id: e.id, tenantId: e.tenantId, workflowId: e.graph.id, enabled: e.enabled !== false, secretCount: e.secrets.length }))
+    return [...this.endpoints.values()].map((e) => ({ id: e.id, tenantId: e.tenantId, workflowId: e.graph?.id ?? (e.deliver ? 'task-intake' : 'none'), enabled: e.enabled !== false, secretCount: e.secrets.length }))
   }
 
   /** Framework-neutral core: verify and enqueue one delivery. */
-  async receive(endpointId: string, headers: { get(name: string): string | null }, rawBody: string): Promise<WebhookOutcome> {
+  async receive(endpointId: string, headers: { get(name: string): string | null }, rawBody: string): Promise<WebhookOutcome | WebhookSinkOutcome> {
     const endpoint = this.endpoints.get(endpointId)
     // Unknown and disabled endpoints look the same to callers.
     if (!endpoint || endpoint.enabled === false) return fail(404, 'Unknown webhook endpoint.')
@@ -177,10 +206,25 @@ export class WebhookTrigger {
       // With an explicit delivery id, a replay resolves to the existing run below.
     }
 
+    if (endpoint.deliver) {
+      try {
+        return await endpoint.deliver({
+          endpointId: endpoint.id,
+          tenantId: endpoint.tenantId,
+          payload,
+          deliveryId,
+          idempotencyKey,
+          ...(endpoint.principal ? { principal: endpoint.principal } : {}),
+        })
+      } catch {
+        return fail(503, 'Could not record the delivery; retry later.')
+      }
+    }
+
     let result
     try {
       result = await this.queue.enqueue({
-        graph: endpoint.graph,
+        graph: endpoint.graph!,
         // Deterministic input so a retried delivery deduplicates to the same run.
         input: { event: payload, deliveryId },
         tenantId: endpoint.tenantId,
@@ -226,6 +270,6 @@ function fail(status: Exclude<WebhookOutcome['status'], 200 | 202>, error: strin
   return { status, body: { accepted: false, error } }
 }
 
-function json(outcome: WebhookOutcome): Response {
+function json(outcome: WebhookOutcome | WebhookSinkOutcome): Response {
   return new Response(JSON.stringify(outcome.body), { status: outcome.status, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } })
 }
