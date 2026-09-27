@@ -15,6 +15,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en">
       <body className="min-h-screen bg-quicksilver-bg text-quicksilver-signal antialiased">
+        {(process.env.NEXT_PUBLIC_QUICKSILVER_DEMO_MODE ?? '').trim().toLowerCase() === 'on' && (
+          <div role="note" className="border-b border-quicksilver-border bg-quicksilver-panel px-4 py-2 text-center font-mono text-[11px] uppercase tracking-widest text-quicksilver-accent">
+            Public demo · synthetic company data only · resets regularly
+          </div>
+        )}
         {children}
       </body>
     </html>

@@ -1,7 +1,8 @@
 import { createHash, timingSafeEqual } from 'node:crypto'
 import type { SanityClient } from '@sanity/client'
 import { AccessController, PERMISSIONS, type Permission, type PrincipalKind } from '@quicksilver/kernel'
-import { StaticTokenIdentityProvider, principalsFromJson } from '@quicksilver/kernel/identity/tokens'
+import { StaticTokenIdentityProvider, digestToken, principalsFromJson } from '@quicksilver/kernel/identity/tokens'
+import { DEMO_PRINCIPALS, demoModeOn, demoModeProblems } from './demo-mode.ts'
 
 export interface PolicyRevision {
   id: string
@@ -78,8 +79,42 @@ const accessController = new AccessController({
 // log a "denied" line for each one the principal lacks.
 const quietAccessController = new AccessController()
 
-/** Per-person principals (cached per source string), or null when unset. Throws when misconfigured. */
+let demoRegistry: { tenantId: string; provider: StaticTokenIdentityProvider } | undefined
+
+/**
+ * The two public demo principals (lib/demo-mode.ts) for the tenant. Only
+ * reached after `demoModeProblems` found nothing wrong.
+ */
+function demoProvider(env: CredentialEnv): StaticTokenIdentityProvider {
+  const tenantId = tenantOf(env)
+  if (demoRegistry?.tenantId !== tenantId) {
+    demoRegistry = {
+      tenantId,
+      provider: new StaticTokenIdentityProvider(DEMO_PRINCIPALS.map((p) => ({
+        id: p.id,
+        kind: 'human' as const,
+        tenantId,
+        roles: [...p.roles],
+        displayName: `${p.displayName} (${p.title})`,
+        tokenDigest: digestToken(p.token),
+      }))),
+    }
+  }
+  return demoRegistry.provider
+}
+
+/**
+ * Per-person principals (cached per source string), or null when unset.
+ * Throws when misconfigured. In demo mode, the public demo principals instead,
+ * and only when the demo guard passes (it throws otherwise, so every route
+ * answers 503: demo mode fails closed).
+ */
 function principalProvider(env: CredentialEnv = process.env): StaticTokenIdentityProvider | null {
+  if (demoModeOn(env)) {
+    const problems = demoModeProblems(env)
+    if (problems.length) throw new Error(problems.join(' '))
+    return demoProvider(env)
+  }
   const source = env.QUICKSILVER_PRINCIPALS
   if (!source?.trim()) return null
   if (principalRegistry?.source !== source) {

@@ -15,7 +15,8 @@
     "seed:processes": "tsx seed/processes.ts",
     "reset:history": "tsx scripts/reset-history.ts",
     "e2e:live": "tsx scripts/e2e-live.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "demo:reset": "tsx scripts/demo-reset.ts"
   },
   "dependencies": {
     "@sanity/client": "^6.22.5",
