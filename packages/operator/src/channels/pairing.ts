@@ -27,6 +27,8 @@ export interface PairingState {
   /** `${channel}:${senderId}` → person id */
   identities: Record<string, string>
   codes: Array<{ code: string; personId: string; expiresAt: string }>
+  /** Where to reach each person on each channel (last reply address seen): personId → channel → replyTo. */
+  addresses?: Record<string, Record<string, string>>
 }
 
 const ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789' // no 0/O, 1/I
@@ -99,11 +101,30 @@ export class PairingRegistry {
     return { paired: s.people.find((p) => p.id === hit.personId)! }
   }
 
+  /** Remember where a paired person can be reached on a channel (for scheduled deliveries). */
+  async recordAddress(personId: string, channel: string, replyTo: string): Promise<void> {
+    const s = await this.load()
+    s.addresses ??= {}
+    const mine = (s.addresses[personId] ??= {})
+    if (mine[channel] === replyTo) return
+    mine[channel] = replyTo
+    await this.save()
+  }
+
+  /** Where to reach a person: on a given channel, or on the first one they used. */
+  async address(personId: string, channel?: string): Promise<{ channel: string; replyTo: string } | undefined> {
+    const mine = (await this.load()).addresses?.[personId] ?? {}
+    const ch = channel ?? Object.keys(mine)[0]
+    return ch && mine[ch] ? { channel: ch, replyTo: mine[ch]! } : undefined
+  }
+
   async unpair(channel: string, senderId: string): Promise<boolean> {
     const s = await this.load()
     const key = `${channel}:${senderId}`
     if (!(key in s.identities)) return false
+    const personId = s.identities[key]!
     delete s.identities[key]
+    if (s.addresses?.[personId]) delete s.addresses[personId][channel]
     await this.save()
     return true
   }

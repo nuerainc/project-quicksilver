@@ -30,15 +30,15 @@ import { modelForRole } from '@quicksilver/agent/models'
 
 import { aiSdkDriver } from './ai-driver.ts'
 import { FileAuditSink } from './audit.ts'
-import { DiscordAdapter, EmailAdapter, Gateway, historyAsContext, PairingRegistry, SlackAdapter, TelegramAdapter, TwilioSmsAdapter, type ChannelAdapter } from './channels/index.ts'
+import { adaptersFromEnv, Gateway, historyAsContext, PairingRegistry } from './channels/index.ts'
 import { FileCheckpointStore } from './checkpoints.ts'
-import { Gate } from './gate.ts'
-import { runOperator } from './loop.ts'
-import { loadProjectContext, MemoryBook, memoryTools, SessionArchive } from './memory.ts'
 import { LocalSandbox } from './sandbox/local.ts'
-import { SkillLibrary, skillTools } from './skills.ts'
-import { EXEC_TOOLS } from './tools/exec.ts'
-import { ensureWorkspace, FILE_TOOLS } from './tools/files.ts'
+import { runForPerson } from './setup.ts'
+import { AutomationStore, tickAutomations } from './automations.ts'
+import { automationRunner } from './automations-cli.ts'
+import { denyAll } from './gate.ts'
+import { SkillLibrary } from './skills.ts'
+import { ensureWorkspace } from './tools/files.ts'
 
 loadRepoEnv()
 const env = process.env
@@ -75,19 +75,8 @@ if (cmd === 'unpair') {
   process.exit(0)
 }
 
-const adapters: ChannelAdapter[] = []
+const { adapters, sms, email } = adaptersFromEnv(env)
 const publicUrl = env.QUICKSILVER_GATEWAY_PUBLIC_URL?.replace(/\/+$/, '')
-if (env.TELEGRAM_BOT_TOKEN) adapters.push(new TelegramAdapter({ token: env.TELEGRAM_BOT_TOKEN }))
-if (env.SLACK_APP_TOKEN && env.SLACK_BOT_TOKEN) adapters.push(new SlackAdapter({ appToken: env.SLACK_APP_TOKEN, botToken: env.SLACK_BOT_TOKEN }))
-if (env.DISCORD_BOT_TOKEN) adapters.push(new DiscordAdapter({ token: env.DISCORD_BOT_TOKEN }))
-const sms = env.TWILIO_ACCOUNT_SID && env.TWILIO_AUTH_TOKEN && env.TWILIO_FROM && publicUrl
-  ? new TwilioSmsAdapter({ accountSid: env.TWILIO_ACCOUNT_SID, authToken: env.TWILIO_AUTH_TOKEN, from: env.TWILIO_FROM, webhookUrl: `${publicUrl}/inbound/sms` })
-  : undefined
-if (sms) adapters.push(sms)
-const email = env.QUICKSILVER_EMAIL_FROM && env.QUICKSILVER_EMAIL_API_KEY && env.QUICKSILVER_EMAIL_INBOUND_SECRET
-  ? new EmailAdapter({ from: env.QUICKSILVER_EMAIL_FROM, apiKey: env.QUICKSILVER_EMAIL_API_KEY, inboundSecret: env.QUICKSILVER_EMAIL_INBOUND_SECRET })
-  : undefined
-if (email) adapters.push(email)
 if (!adapters.length) { console.error('No channel is configured. See the list at the top of packages/operator/src/gateway-cli.ts.'); process.exit(1) }
 
 const sandbox = new LocalSandbox({ workspace })
@@ -96,37 +85,27 @@ const audit = new FileAuditSink(join(workspace, '.qs-audit', 'gateway.jsonl'))
 const skills = new SkillLibrary(env.QUICKSILVER_SKILLS_DIR || join(homedir(), '.quicksilver', 'skills'), workspace)
 const model = aiSdkDriver(modelForRole('executor'))
 
+const envr = { workspace, sandbox, checkpoints, audit, skills, model }
+
 const gateway = new Gateway({
   adapters,
   pairing,
   dir,
   log: (l) => console.log(l),
   turn: async ({ person, message, history, approver }) => {
-    // One memory per person, whatever the channel.
-    const mdir = join(workspace, '.qs-memory', person.id.replace(/[^a-zA-Z0-9_-]/g, '_'))
-    const book = new MemoryBook(join(mdir, 'memory.json'))
-    const archive = new SessionArchive(mdir)
-    const used: string[] = []
-    const project = await loadProjectContext(workspace)
-    try {
-      const result = await runOperator({
-        gate: new Gate([...FILE_TOOLS, ...EXEC_TOOLS, ...memoryTools(book, archive), ...skillTools(skills, used)], { mode: 'guarded', workspace, audit }),
-        sandbox, checkpoints, audit, workspace, model, approver,
-      }, {
-        goal: message.text,
-        instructions: [
-          `You are talking with ${person.name} on ${message.kind}. Reply in plain text suited to a chat: short, no tables. Your finish summary is sent to them as the reply.`,
-          await book.snapshot(), await skills.listing(), historyAsContext(history), project.text,
-        ].filter(Boolean).join('\n\n'),
-        maxSteps: 30,
-      })
-      await archive.save(message.text, result, result.messages)
-      await skills.recordOutcome(used, result.status)
-      const tag = result.status === 'failed' ? '\n\n(I could not verify this worked.)' : result.status === 'stopped' ? '\n\n(I ran out of steps before finishing.)' : ''
-      return { reply: `${result.summary}${tag}`, status: result.status }
-    } finally {
-      archive.close()
-    }
+    const result = await runForPerson(envr, {
+      goal: message.text,
+      personId: person.id,
+      mode: 'guarded',
+      approver,
+      preamble: [
+        `You are talking with ${person.name} on ${message.kind}. Reply in plain text suited to a chat: short, no tables. Your finish summary is sent to them as the reply.`,
+        historyAsContext(history),
+      ],
+      options: { maxSteps: 30 },
+    })
+    const tag = result.status === 'failed' ? '\n\n(I could not verify this worked.)' : result.status === 'stopped' ? '\n\n(I ran out of steps before finishing.)' : ''
+    return { reply: `${result.summary}${tag}`, status: result.status }
   },
 })
 
@@ -148,5 +127,18 @@ if (sms || email) {
 }
 
 await gateway.start()
-console.log(`Gateway running for ${workspace}. Ctrl+C to stop.`)
+
+// Scheduled automations run here too, with approvals asked in the person's chat.
+const automations = new AutomationStore(join(workspace, '.qs-automations', 'automations.json'))
+const runAutomation = automationRunner(envr, async (a) => (await gateway.approverFor(a.personId, a.deliver === 'log' ? undefined : a.deliver)) ?? denyAll)
+let ticking = false
+const tick = async () => {
+  if (ticking) return
+  ticking = true
+  try { await tickAutomations({ store: automations, execute: runAutomation, deliver: (a, text) => gateway.deliver(a.personId, text, a.deliver), log: (l) => console.log(l) }) } catch (e) { console.error(e) } finally { ticking = false }
+}
+setInterval(() => void tick(), 30_000)
+void tick()
+
+console.log(`Gateway running for ${workspace} (automations checked every 30 s). Ctrl+C to stop.`)
 process.on('SIGINT', async () => { await gateway.stop(); process.exit(0) })

@@ -12,3 +12,5 @@ export { EXEC_TOOLS, runCommandTool, runCodeTool, formatRun } from './tools/exec
 export * from './memory.ts'
 export * from './skills.ts'
 export * from './channels/index.ts'
+export * from './setup.ts'
+export * from './automations.ts'

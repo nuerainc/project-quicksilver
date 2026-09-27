@@ -111,6 +111,8 @@ export class Gateway {
       return
     }
 
+    await this.o.pairing.recordAddress(person.id, m.channel, m.replyTo)
+
     const a = APPROVAL_REPLY.exec(m.text)
     if (a) {
       const pending = this.approvals.get(a[2]!.toUpperCase())
@@ -144,7 +146,8 @@ export class Gateway {
         const history = await this.history(person.id)
         let result: TurnResult
         try {
-          result = await this.o.turn({ person, message: m, history, approver: (r) => this.ask(person, m!, r) })
+          const target = { channel: m.channel, replyTo: m.replyTo }
+          result = await this.o.turn({ person, message: m, history, approver: (r) => this.ask(person, target, r) })
         } catch (e) {
           result = { reply: `Something went wrong: ${(e as Error).message}`, status: 'error' }
         }
@@ -158,8 +161,26 @@ export class Gateway {
     }
   }
 
-  /** Ask in the chat the run came from; resolves on a reply or the timeout. */
-  private ask(person: Person, m: InboundMessage, request: ApprovalRequest): Promise<ApprovalAnswer> {
+  /** Send a message to a paired person where they were last seen (scheduled deliveries). */
+  async deliver(personId: string, text: string, channel?: string): Promise<boolean> {
+    const to = await this.o.pairing.address(personId, channel)
+    const adapter = to && this.adapters.get(to.channel)
+    if (!to || !adapter) return false
+    await adapter.send(to.replyTo, text)
+    return true
+  }
+
+  /** An approver that asks a person in their chat (for scheduled runs); undefined if they cannot be reached. */
+  async approverFor(personId: string, channel?: string): Promise<Approver | undefined> {
+    const to = await this.o.pairing.address(personId, channel)
+    const people = (await this.o.pairing.list()).people
+    const person = people.find((p) => p.id === personId)
+    if (!to || !person || !this.adapters.has(to.channel)) return undefined
+    return (r) => this.ask(person, to, r)
+  }
+
+  /** Ask in a chat; resolves on a reply or the timeout. */
+  private ask(person: Person, to: { channel: string; replyTo: string }, request: ApprovalRequest): Promise<ApprovalAnswer> {
     return new Promise((resolve) => {
       let code: string
       do { code = Array.from({ length: 4 }, () => 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'[randomInt(32)]).join('') } while (this.approvals.has(code))
@@ -168,7 +189,7 @@ export class Gateway {
         resolve({ approved: false, by: 'gateway:timeout', callHash: request.callHash, note: 'No answer in time.' })
       }, this.o.approvalTimeoutMs)
       this.approvals.set(code, { code, request, personId: person.id, resolve, timer })
-      void this.reply(m, `Approval needed: ${request.summary}\n${request.reasons.map((r) => `• ${r}`).join('\n')}\nReply "approve ${code}" or "deny ${code}".`)
+      void this.adapters.get(to.channel)?.send(to.replyTo, `Approval needed: ${request.summary}\n${request.reasons.map((r) => `• ${r}`).join('\n')}\nReply "approve ${code}" or "deny ${code}".`)
     })
   }
 
