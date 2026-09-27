@@ -20,6 +20,36 @@ export type {
 } from './capability-graph.ts'
 export { findCycles } from './graph-cycles.ts'
 export {
+  counterfactualAutonomy,
+  counterfactualKernel,
+  generateScenarios,
+  ledgerPeriods,
+  mulberry32,
+  SCENARIO_KINDS,
+  simulateCash,
+  simulateExperiment,
+} from './simulation/index.ts'
+export type {
+  AutonomyCounterfactual,
+  CashShock,
+  CashSimulation,
+  CashSimulationResult,
+  CashStep,
+  CounterfactualRow,
+  DepartmentCounterfactual,
+  ExperimentOutcome,
+  ExperimentSimulation,
+  ExperimentSimulationResult,
+  KernelAgreement,
+  KernelCounterfactual,
+  PeriodFlow,
+  Scenario,
+  ScenarioKind,
+  ScenarioSet,
+  SimulateCashOptions,
+  SimulateExperimentOptions,
+} from './simulation/index.ts'
+export {
   CAPABILITIES_QUERY,
   ENTITY_QUERY,
   POLICIES_QUERY,

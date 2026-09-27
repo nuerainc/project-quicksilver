@@ -37,6 +37,7 @@
     "./playbooks/economics": "./src/playbooks/economics.ts",
     "./playbooks/genesis": "./src/playbooks/genesis.ts",
     "./playbooks/operate": "./src/playbooks/operate.ts",
+    "./simulation": "./src/simulation/index.ts",
     "./waes": "./src/waes.ts"
   },
   "scripts": {

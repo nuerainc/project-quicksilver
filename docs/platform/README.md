@@ -21,3 +21,4 @@ that every operating mode depends on.
 - [Dedicated Sanity project setup](sanity-isolation.md)
 - [Operate (M6): autonomy, reinvestment and bounded experiments](operate.md)
 - [Kernel depth (M7): policy lineage, supersession, scope nesting and the capability graph](kernel-depth.md)
+- [What-if engine (M7): Monte Carlo cash, experiment odds, stress scenarios and shadow-log counterfactuals](what-if.md)

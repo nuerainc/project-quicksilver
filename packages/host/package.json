@@ -18,7 +18,8 @@
     "start": "tsx src/main.ts",
     "onboard": "tsx src/onboard-cli.ts",
     "genesis": "tsx src/genesis-cli.ts",
-    "operate": "tsx src/operate-cli.ts"
+    "operate": "tsx src/operate-cli.ts",
+    "whatif": "tsx src/whatif-cli.ts"
   },
   "dependencies": {
     "@quicksilver/agent": "*",

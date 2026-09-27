@@ -5,12 +5,16 @@ changing who decides. The kernel still authorizes every action
 deterministically, fails closed, and never asks a model. Every new field is
 optional. A company model without them behaves exactly as it did before.
 
-**Status:** parts 1 and 2 are built (2026-09-27):
+**Status:** parts 1 to 3 are built (2026-09-27):
 
 - policy versioning, supersession and scope nesting (`packages/kernel/src/authority.ts`)
 - the capability graph (`packages/kernel/src/capability-graph.ts`)
+- the what-if engine (`packages/kernel/src/simulation/`, `npm run whatif`):
+  Monte Carlo cash, experiment outcome odds, stress scenarios and
+  counterfactuals on shadow logs. Every result is an estimate, never a
+  decision. See [What-if engine](what-if.md).
 
-What-if simulation and the governed task interface come next.
+The governed task interface comes next.
 
 ## Part 1: policies
 
