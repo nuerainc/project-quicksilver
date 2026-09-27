@@ -47,7 +47,9 @@
     "mcp:tasks": "node --experimental-strip-types --no-warnings packages/host/src/mcp-tasks.ts",
     "aura:rank": "node --experimental-strip-types --no-warnings packages/aura/src/rank-cli.ts",
     "aura:choices:cv": "node --experimental-strip-types --no-warnings packages/aura/src/choices-cv.ts",
-    "aura:dims": "node --experimental-strip-types --no-warnings packages/aura/src/dims-cli.ts"
+    "aura:dims": "node --experimental-strip-types --no-warnings packages/aura/src/dims-cli.ts",
+    "operator": "node --experimental-strip-types --no-warnings packages/operator/src/cli.ts",
+    "operator:test": "node --experimental-strip-types --no-warnings --test packages/operator/src/operator.test.ts"
   },
   "engines": {
     "node": ">=20"
