@@ -58,20 +58,27 @@ import {
 import {
   applyUpstreamEscalation,
   evaluateAndAuthorize,
-  conditionFromSanity,
   nextAutomaticTransition,
+  CAPABILITIES_QUERY,
+  ENTITY_QUERY,
+  POLICIES_QUERY,
+  capabilityFromSanity,
+  entityFromSanity,
+  policyFromSanity,
+  policyScopesToFetch,
+  snapshotPolicyIds,
   type AuthorizeResult,
   type Facts,
   type CapabilityRef,
   type EntityRef,
-  type EntityType,
   type EvidenceRef,
-  type PolicyEffect,
   type PolicyRef,
   type ProposedAction,
-  type SanityGuardCondition,
   type RiskLevel,
   type EvaluationResult,
+  type SanityCapabilityDocument,
+  type SanityEntityDocument,
+  type SanityPolicyDocument,
 } from '@quicksilver/kernel'
 import {
   KERNEL_ACTOR,
@@ -97,8 +104,11 @@ function getSanityClient() {
 type Resolved = {
   actor: EntityRef | null
   capability: CapabilityRef | null
+  /** The whole capability graph (M7): conflicts and requirements need more than the one capability. */
+  capabilities: CapabilityRef[]
   policies: PolicyRef[]
-  policySnapshotVersion: string
+  /** Revisions of every fetched policy; the snapshot is taken over those the decision's rows name. */
+  policyRevisions: Array<{ id: string; revision: string }>
   evidence: EvidenceRef[]
 }
 
@@ -106,80 +116,37 @@ async function resolveAction(
   client: ReturnType<typeof getSanityClient>,
   action: ProposedAction,
 ): Promise<Resolved> {
-  // NOTE on the GROQ below: reference arrays are read with `arr[]._ref` (the raw
+  // NOTE on the GROQ: reference arrays are read with `arr[]._ref` (the raw
   // reference keys), NOT `arr[]->._ref` — dereferencing returns the target
-  // document, which has no `_ref`, so that yields `[null]`. Each projection is
-  // aliased to the key this function reads.
-  const [actorDoc, capabilityDoc, policyDocs, evidenceDocs] = await Promise.all([
-    client.fetch<{ _id: string; name: string; entityType: string; capabilityIds?: string[] | null } | null>(
-      `*[_type == "entity" && _id == $id][0]{ _id, name, entityType, "capabilityIds": capabilities[]._ref }`,
-      { id: action.actorId },
-    ),
-    client.fetch<{ _id: string; name: string; riskLevel?: number | null; authorizedEntityIds?: string[] | null; policyScopes?: string[] | null } | null>(
-      `*[_type == "capability" && _id == $id][0]{ _id, name, riskLevel, "authorizedEntityIds": authorizedEntities[]._ref, policyScopes }`,
-      { id: action.capabilityId },
-    ),
-    client.fetch<
-      Array<{
-        _id: string
-        _rev: string
-        name: string
-        scope: string
-        priority: number
-        effectiveDate?: string | null
-        expirationDate?: string | null
-        supersedesIds?: string[] | null
-        approvalRequirementIds?: string[] | null
-        appliesToEntityIds?: string[] | null
-        effect?: PolicyEffect | null
-        maxRiskLevel?: number | null
-        whenAll?: SanityGuardCondition[] | null
-      }>
-    >(
-      // Cited policies PLUS every policy in the capability's governing scopes and
-      // every policy naming the actor: the kernel decides what governs, not the planner.
-      `*[_type == "policy" && (_id in $ids || scope in coalesce(*[_type == "capability" && _id == $capabilityId][0].policyScopes, []) || $actorId in appliesTo[]._ref)]{ _id, _rev, name, scope, priority, "appliesToEntityIds": appliesTo[]._ref, effectiveDate, expirationDate, "supersedesIds": supersedes[]._ref, "approvalRequirementIds": approvalRequirements[]._ref, effect, maxRiskLevel, whenAll }`,
-      { ids: action.applicablePolicyIds, capabilityId: action.capabilityId, actorId: action.actorId },
-    ),
+  // document, which has no `_ref`, so that yields `[null]`. The queries live
+  // in @quicksilver/kernel (model-document.ts) and are all parameterized.
+  //
+  // All capabilities are fetched, not just the action's: conflicts may be
+  // declared only on the other capability, and the actor's other grants count
+  // for conflicts. Company models are small, so one query cannot under-fetch.
+  const [actorDoc, capabilityDocs, evidenceDocs] = await Promise.all([
+    client.fetch<SanityEntityDocument | null>(ENTITY_QUERY, { id: action.actorId }),
+    client.fetch<SanityCapabilityDocument[]>(CAPABILITIES_QUERY),
     client.fetch<Array<{ _id: string; title: string; confidence: number }>>(
       `*[_type == "evidence" && _id in $ids]{ _id, title, confidence }`,
       { ids: action.evidenceIds },
     ),
   ])
 
-  const actor: EntityRef | null = actorDoc
-    ? {
-        id: actorDoc._id,
-        name: actorDoc.name,
-        entityType: actorDoc.entityType as EntityType,
-        capabilityIds: actorDoc.capabilityIds ?? [],
-      }
-    : null
+  const capabilities = (capabilityDocs ?? []).map(capabilityFromSanity)
+  const capability = capabilities.find((c) => c.id === action.capabilityId) ?? null
 
-  const capability: CapabilityRef | null = capabilityDoc
-    ? {
-        id: capabilityDoc._id,
-        name: capabilityDoc.name,
-        baseRiskLevel: (capabilityDoc.riskLevel ?? 2) as RiskLevel,
-        authorizedEntityIds: capabilityDoc.authorizedEntityIds ?? [],
-        policyScopes: capabilityDoc.policyScopes ?? [],
-      }
-    : null
+  // Cited policies PLUS every policy in the capability's effective scopes (own
+  // and inherited) or an ancestor scope of one, every policy naming the actor,
+  // and their lineage siblings: the kernel decides what governs, not the planner.
+  const policyDocs = await client.fetch<SanityPolicyDocument[]>(POLICIES_QUERY, {
+    ids: action.applicablePolicyIds,
+    scopes: capability ? policyScopesToFetch(capability.id, capabilities) : [],
+    actorId: action.actorId,
+  })
 
-  const policies: PolicyRef[] = policyDocs.map((p) => ({
-    id: p._id,
-    name: p.name,
-    scope: p.scope,
-    priority: p.priority,
-    effectiveDate: p.effectiveDate ?? undefined,
-    expirationDate: p.expirationDate ?? undefined,
-    supersedesIds: p.supersedesIds ?? [],
-    approvalRequirementIds: p.approvalRequirementIds ?? [],
-    appliesToEntityIds: p.appliesToEntityIds ?? [],
-    effect: p.effect ?? null,
-    maxRiskLevel: typeof p.maxRiskLevel === 'number' ? (p.maxRiskLevel as RiskLevel) : null,
-    when: p.whenAll?.length ? { all: p.whenAll.map(conditionFromSanity) } : null,
-  }))
+  const actor: EntityRef | null = actorDoc ? entityFromSanity(actorDoc) : null
+  const policies: PolicyRef[] = policyDocs.map(policyFromSanity)
 
   const evidence: EvidenceRef[] = evidenceDocs.map((e) => ({
     id: e._id,
@@ -187,8 +154,8 @@ async function resolveAction(
     confidence: e.confidence,
   }))
 
-  const policyVersion = policySnapshotVersion(policyDocs.map((policy) => ({ id: policy._id, revision: policy._rev })))
-  return { actor, capability, policies, policySnapshotVersion: policyVersion, evidence }
+  const policyRevisions = policyDocs.map((policy) => ({ id: policy._id, revision: policy._rev }))
+  return { actor, capability, capabilities, policies, policyRevisions, evidence }
 }
 
 // ── Persistence: kernel result → `decision` document ───────────────────────
@@ -375,9 +342,12 @@ export async function POST(req: Request) {
           const perAction = evaluateAndAuthorize({
             action: kernelAction,
             actor: refs.actor,
-            capabilities: [refs.capability],
+            capabilities: refs.capabilities,
             policies: refs.policies,
             evidence: refs.evidence,
+            // Strict separation of duties at plan time: the sole-operator
+            // override needs a written justification, which only the approval
+            // step collects, so conflicting capabilities are refused here.
           }, {
             // Evaluate only the user-facing proposed action and source metadata;
             // private model reasoning traces are intentionally not collected.
@@ -434,7 +404,11 @@ export async function POST(req: Request) {
             evaluation: governed.evaluation,
             safetyDecision: governed.safetyDecision,
             review,
-            policySnapshotVersion: refs.policySnapshotVersion,
+            // Snapshot the revisions of the policies the decision's rows name, as
+            // the execute and approval routes recompute it from those rows.
+            policySnapshotVersion: policySnapshotVersion(
+              refs.policyRevisions.filter((p) => snapshotPolicyIds(governed.decision.policyChecks).includes(p.id)),
+            ),
             requestedBy: requester.requestedBy,
             now,
           })

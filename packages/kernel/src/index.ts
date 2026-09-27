@@ -19,6 +19,18 @@ export type {
   SeparationSettings,
 } from './capability-graph.ts'
 export { findCycles } from './graph-cycles.ts'
+export {
+  CAPABILITIES_QUERY,
+  ENTITY_QUERY,
+  POLICIES_QUERY,
+  capabilityFromSanity,
+  entityFromSanity,
+  policyFromSanity,
+  policyScopesToFetch,
+  scopesWithAncestors,
+  snapshotPolicyIds,
+} from './model-document.ts'
+export type { SanityCapabilityDocument, SanityEntityDocument, SanityPolicyDocument } from './model-document.ts'
 export type { GraphCycle } from './graph-cycles.ts'
 export { computeRisk, averageEvidenceConfidence } from './risk.ts'
 export { authorize } from './approval.ts'

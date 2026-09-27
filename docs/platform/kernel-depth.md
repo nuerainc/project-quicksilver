@@ -201,9 +201,20 @@ elsewhere in the graph don't block unrelated capabilities.
   - policy: `lineageId`, `version`
   - capability: `inherits`, `requires`, `conflictsWith`, `riskMultiplier`
 - Run `npm run schema:deploy` to publish them.
-- The web plan route (`apps/web/app/api/plan/route.ts`) doesn't read the new
-  fields yet, so live decisions keep their current behavior until it does.
-  Wiring the route means three changes:
-  - project the new fields
-  - fetch ancestor-scope policies
-  - pass the full capability list to `authorize()`
+- The web plan route (`apps/web/app/api/plan/route.ts`) passes all of this to
+  `authorize()`. Its queries and document mapping live in
+  `packages/kernel/src/model-document.ts` and are all parameterized:
+  - It fetches **all capabilities**. A conflict can be declared only on the
+    other capability, and every capability granted to the actor counts, so a
+    walk out from the action's capability could miss one. Company models are
+    small, so one query is simpler and can't under-fetch.
+  - It fetches the policies that are cited, that name the actor, or whose
+    scope is one of the capability's effective scopes or an ancestor of one.
+    It also fetches **lineage siblings**, so version resolution sees a newer
+    version even after it moved scope.
+  - The policy snapshot covers the policies the decision's audit rows name.
+    The execute and approval routes recompute it from those rows.
+  - Plan-time separation of duties is strict. The sole-operator override
+    needs a written justification, and only the approval step collects one.
+- The host's shadow verdict (`packages/host/src/shadow-api.ts`) builds its own
+  one-capability model rather than reading Sanity, so it's unchanged.
