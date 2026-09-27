@@ -13,6 +13,7 @@ import {
   type WorkflowRunStore,
 } from '@quicksilver/kernel/runtime'
 import { CronScheduler, WebhookTrigger, type VerifiedWebhookDelivery, type WebhookSinkOutcome } from '@quicksilver/kernel/triggers'
+import { TokenBucketLimiter } from '@quicksilver/kernel/rate-limit'
 
 import { checkWorkflow, type HostConfig, type WebhookTaskConfig } from './config.ts'
 import { createHandlerFactory, type AgentRunner, type EvaluationSink } from './handlers.ts'
@@ -26,6 +27,7 @@ import { handleDecisionRoute, type DecisionApiDeps } from './decisions-api.ts'
 import { handleTaskRoute } from './tasks-api.ts'
 import { TaskError, TaskService, type TaskRunBackend, type TaskServiceDeps } from './tasks.ts'
 import type { TaskClientRegistry } from './task-clients.ts'
+import { hostRouteLabel, matchHostRoute, type HostRoute, type HostRouteFeature } from './routes.ts'
 
 /**
  * The single-tenant Quicksilver host: one process that runs the governed
@@ -96,6 +98,10 @@ export class QuicksilverHost {
   readonly tasks?: TaskService
   private readonly identity: StaticTokenIdentityProvider
   private readonly deps: HostDependencies
+  /** Probes the route table's permission floor without logging each miss (the one denial is logged through `access`). */
+  private readonly gate: AccessController
+  /** Per-principal buckets for `write` and `model` routes, and per-endpoint buckets for webhooks (A-5). */
+  private readonly limiters: { write: TokenBucketLimiter; model: TokenBucketLimiter; webhook: Map<string, TokenBucketLimiter> }
   private readonly hostPrincipal: Principal
   private server?: Server
   private started = false
@@ -112,14 +118,22 @@ export class QuicksilverHost {
     if (foreign.length) throw new Error(`Principals ${foreign.map((p) => p.id).join(', ')} belong to another tenant; this host serves "${config.tenantId}" only.`)
     this.identity = new StaticTokenIdentityProvider(principals)
 
+    const customRoles = [
+      { id: 'host-runtime', tenantId: config.tenantId, description: 'The host process: resolve secrets for triggers.', permissions: ['secret:use'] as const },
+      { id: 'task-runtime', tenantId: config.tenantId, description: 'The task intake: enqueue, read and cancel the runs of tasks the kernel allowed.', permissions: ['run:enqueue', 'run:read', 'run:cancel'] as const },
+    ]
     this.access = new AccessController({
-      customRoles: [
-        { id: 'host-runtime', tenantId: config.tenantId, description: 'The host process: resolve secrets for triggers.', permissions: ['secret:use'] },
-        { id: 'task-runtime', tenantId: config.tenantId, description: 'The task intake: enqueue, read and cancel the runs of tasks the kernel allowed.', permissions: ['run:enqueue', 'run:read', 'run:cancel'] },
-      ],
+      customRoles,
       audit: (decision) => this.onAccessDecision(decision),
       ...(deps.now ? { now: deps.now } : {}),
     })
+    this.gate = new AccessController({ customRoles, ...(deps.now ? { now: deps.now } : {}) })
+    const now = deps.now ?? Date.now
+    this.limiters = {
+      write: new TokenBucketLimiter(config.http.rateLimits.write, now),
+      model: new TokenBucketLimiter(config.http.rateLimits.model, now),
+      webhook: new Map(config.webhooks.map((wh) => [wh.id, new TokenBucketLimiter(wh.rateLimit ?? config.http.rateLimits.webhook, now)])),
+    }
     this.hostPrincipal = { id: HOST_PRINCIPAL_ID, kind: 'service', tenantId: config.tenantId, roles: ['host-runtime'] }
 
     const store = deps.store ?? new InMemoryWorkflowRunStore()
@@ -343,7 +357,7 @@ export class QuicksilverHost {
   private async handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
     const started = Date.now()
     const url = new URL(req.url ?? '/', 'http://host.local')
-    const route = routeLabel(req.method ?? 'GET', url.pathname)
+    const route = hostRouteLabel(req.method ?? 'GET', url.pathname)
     let status = 500
     try {
       const out = await this.dispatch(req, url)
@@ -385,6 +399,9 @@ export class QuicksilverHost {
 
     if (parts[0] === 'webhooks' && parts.length === 2) {
       if (method !== 'POST') return { status: 405, body: { accepted: false, error: 'Use POST.' } }
+      // Per-endpoint delivery limit (A-5), before the body is read or the signature checked.
+      const limited = this.rateLimited(this.limiters.webhook.get(parts[1]!), parts[1]!)
+      if (limited) return this.webhookResult(parts[1]!, limited)
       const raw = await readBody(req, Math.max(this.config.http.maxBodyBytes, 262_144))
       if (raw === undefined) return this.webhookResult(parts[1]!, { status: 413, body: { accepted: false, error: 'Body too large.' } })
       const outcome = await this.webhooks!.receive(parts[1]!, { get: (name) => headerValue(req, name) }, raw)
@@ -399,7 +416,23 @@ export class QuicksilverHost {
     if (parts[0] !== 'api') return { status: 404, body: { error: 'Not found.' } }
     const principal = await this.authenticate(req)
     if (!principal) return { status: 401, body: { error: 'A valid bearer token is required.' } }
-    const tenant = { tenantId: this.config.tenantId }
+
+    // The route table (routes.ts) decides which /api routes exist, the permission
+    // floor each needs, and its rate limit, before any handler runs (A-5, A-9).
+    const matched = matchHostRoute(method, path)
+    if (!matched.route) return matched.methodMismatch ? { status: 405, body: { error: 'Method not allowed.' } } : { status: 404, body: { error: 'Not found.' } }
+    if (this.hasFeature(matched.route.feature)) {
+      const denied = this.checkRouteAccess(principal, matched.route)
+      if (denied) return denied
+      const cls = matched.route.rateLimit
+      if (cls === 'write' || cls === 'model') {
+        const limited = this.rateLimited(this.limiters[cls], principal.id)
+        if (limited) {
+          this.log.warn('rate limited', { route: `${method} ${matched.route.path}`, principalId: principal.id, class: cls })
+          return limited
+        }
+      }
+    }
 
     // GET /api/whoami
     if (method === 'GET' && path === '/api/whoami') return { status: 200, body: { id: principal.id, kind: principal.kind, tenantId: principal.tenantId, roles: principal.roles } }
@@ -590,6 +623,35 @@ export class QuicksilverHost {
     }
   }
 
+  /** Whether the part of the host a route belongs to is configured (a route of an absent part is a 404). */
+  private hasFeature(feature: HostRouteFeature | undefined): boolean {
+    if (!feature) return true
+    if (feature === 'vault') return !!this.vault
+    if (feature === 'tasks') return !!this.tasks
+    return !!this.deps[feature]
+  }
+
+  /** The route table's permission floor: at least one of `anyOf`, in this tenant. Logs one denial. */
+  private checkRouteAccess(principal: Principal, route: HostRoute): { status: number; body: unknown } | undefined {
+    if (route.access.kind !== 'permission') return undefined
+    const tenant = { tenantId: this.config.tenantId }
+    if (route.access.anyOf.some((permission) => this.gate.authorize(principal, permission, tenant).allowed)) return undefined
+    const decision = this.access.authorize(principal, route.access.anyOf[0]!, tenant)
+    const needs = route.access.anyOf.length > 1 ? `one of ${route.access.anyOf.join(', ')}` : route.access.anyOf[0]
+    return { status: 403, body: { error: `${decision.reasons.join(' ')} This route needs ${needs}.`, code: 'forbidden' } }
+  }
+
+  /** A 429 with Retry-After when the bucket for `key` is empty. */
+  private rateLimited(limiter: TokenBucketLimiter | undefined, key: string): { status: number; body: unknown; headers: Record<string, string> } | undefined {
+    const r = limiter?.take(key)
+    if (!r || r.ok) return undefined
+    return {
+      status: 429,
+      body: { error: `Too many requests; retry in ${r.retryAfterSeconds} s.`, code: 'rate-limited', retryAfterSeconds: r.retryAfterSeconds },
+      headers: { 'retry-after': String(r.retryAfterSeconds) },
+    }
+  }
+
   /** Host principals first; then task clients (each holds only the task-client role). */
   private async authenticate(req: IncomingMessage): Promise<Principal | undefined> {
     const header = headerValue(req, 'authorization')
@@ -629,13 +691,6 @@ function headerValue(req: IncomingMessage, name: string): string | null {
   const value = req.headers[name.toLowerCase()]
   if (value === undefined) return null
   return Array.isArray(value) ? value.join(', ') : value
-}
-
-function routeLabel(method: string, path: string): string {
-  if (path.startsWith('/webhooks/')) return `${method} /webhooks/:id`
-  const normalized = path.replace(/^\/api\/tasks\/(?!capabilities$)[^/]+/, '/api/tasks/:id').replace(/^\/api\/runs\/[^/]+/, '/api/runs/:id').replace(/^\/api\/secrets\/[^/]+/, '/api/secrets/:name').replace(/^\/api\/intents\/[^/]+/, '/api/intents/:id').replace(/^\/api\/intent-ledger\/[^/]+/, '/api/intent-ledger/:company').replace(/^\/api\/genesis\/experiments\/[^/]+/, '/api/genesis/experiments/:id')
-  const known = ['/healthz', '/readyz', '/metrics', '/api/whoami', '/api/runs', '/api/runs/:id', '/api/runs/:id/cancel', '/api/runs/:id/redrive', '/api/dead-letters', '/api/stats', '/api/schedules', '/api/webhooks', '/api/workflows', '/api/secrets', '/api/secrets/:name', '/api/admin/reload-secrets', '/api/intents', '/api/intents/:id', '/api/intents/:id/answers', '/api/intent-ledger/:company', '/api/decisions', '/api/genesis', '/api/genesis/experiments', '/api/genesis/money', '/api/genesis/reviews', '/api/genesis/experiments/:id/start', '/api/genesis/experiments/:id/measurements', '/api/genesis/experiments/:id/evaluate', '/api/genesis/experiments/:id/decide', '/api/tasks', '/api/tasks/capabilities', '/api/tasks/:id', '/api/tasks/:id/cancel', '/api/tasks/:id/approve', '/api/tasks/:id/deny']
-  return known.includes(normalized) ? `${method} ${normalized}` : `${method} other`
 }
 
 async function readBody(req: IncomingMessage, limit: number): Promise<string | undefined> {

@@ -74,6 +74,10 @@ const accessController = new AccessController({
   },
 })
 
+// A silent controller for probing permissions: probing several would otherwise
+// log a "denied" line for each one the principal lacks.
+const quietAccessController = new AccessController()
+
 /** Per-person principals (cached per source string), or null when unset. Throws when misconfigured. */
 function principalProvider(env: CredentialEnv = process.env): StaticTokenIdentityProvider | null {
   const source = env.QUICKSILVER_PRINCIPALS
@@ -86,30 +90,6 @@ function principalProvider(env: CredentialEnv = process.env): StaticTokenIdentit
 
 function tenantOf(env: CredentialEnv): string {
   return env.QUICKSILVER_TENANT_ID?.trim() || 'default'
-}
-
-export type RequesterResult = { ok: true; requestedBy: string } | { ok: false; reason: string; status: 401 | 503 }
-
-/**
- * Identify who is submitting an objective, for separation of duties.
- *
- * With per-person principals configured, a bearer token identifies the
- * requester; an invalid token is refused rather than silently downgraded.
- * Without a token the request is recorded as coming from the console.
- */
-export function identifyRequester(request: Request): RequesterResult {
-  const header = request.headers.get('authorization')
-  if (!header) return { ok: true, requestedBy: 'console:anonymous' }
-  let provider: StaticTokenIdentityProvider | null
-  try {
-    provider = principalProvider()
-  } catch {
-    return { ok: false, status: 503, reason: 'Principals are misconfigured.' }
-  }
-  if (!provider) return { ok: true, requestedBy: 'console:anonymous' }
-  const principal = provider.authenticateHeader(header)
-  if (!principal) return { ok: false, status: 401, reason: 'The supplied credential is not valid.' }
-  return { ok: true, requestedBy: principal.id }
 }
 
 /** The configured sole operator for single-human organizations, or null. */
@@ -221,28 +201,70 @@ export function checkDecisionRouteCaller(route: DecisionRoute, authorization: st
   } catch {
     return { ok: false, status: 503, reason: 'Principals are misconfigured.' }
   }
+  const caller = checkRouteCaller(permissions, authorization, env)
+  return caller.ok ? { ok: true, principalId: caller.principalId } : caller
+}
+
+export type RouteCallerResult =
+  | { ok: true; principalId: string; kind: PrincipalKind }
+  | { ok: false; reason: string; status: 401 | 403 | 503 }
+
+/**
+ * The shared credential check for the web app's API routes (threat model A-3):
+ * a valid principal holding at least one of `permissions` in
+ * `QUICKSILVER_TENANT_ID`. Pure: Authorization header value and environment
+ * in, a verdict out.
+ *
+ * - With `QUICKSILVER_PRINCIPALS` set, the bearer token must match a
+ *   per-person principal (401 otherwise) that holds one of the permissions
+ *   (403 otherwise).
+ * - Without it, the interim shared `NQC_SUPERVISOR_TOKEN` is the only
+ *   accepted credential, and it holds `SHARED_SUPERVISOR_PERMISSIONS`.
+ * - With neither configured, 503: nothing is anonymous any more.
+ */
+export function checkRouteCaller(permissions: readonly Permission[], authorization: string | null, env: CredentialEnv): RouteCallerResult {
+  if (permissions.length === 0) return { ok: false, status: 403, reason: 'This route names no permission.' }
+  let provider: StaticTokenIdentityProvider | null
+  try {
+    provider = principalProvider(env)
+  } catch {
+    return { ok: false, status: 503, reason: 'Principals are misconfigured.' }
+  }
   if (!provider) {
     const shared = checkSharedSupervisorToken(authorization, env)
-    return shared.ok ? { ok: true, principalId: shared.supervisorId } : shared
+    if (!shared.ok) return shared
+    if (!permissions.some((permission) => SHARED_SUPERVISOR_PERMISSIONS.includes(permission))) {
+      return { ok: false, status: 403, reason: 'The shared supervisor token is not permitted to perform this action.' }
+    }
+    return { ok: true, principalId: shared.supervisorId, kind: 'human' }
   }
   const principal = provider.authenticateHeader(authorization)
   if (!principal) return { ok: false, status: 401, reason: 'A valid credential is required.' }
   const tenantId = tenantOf(env)
-  const allowed = permissions.some((permission) => accessController.authorize(principal, permission, { tenantId, kind: 'decision' }).allowed)
-  if (!allowed) return { ok: false, status: 403, reason: 'This credential is not permitted to perform this action.' }
-  return { ok: true, principalId: principal.id }
+  const allowed = permissions.some((permission) => quietAccessController.authorize(principal, permission, { tenantId, kind: 'decision' }).allowed)
+  if (!allowed) {
+    // Log one denial (the first permission) rather than one per permission probed.
+    accessController.authorize(principal, permissions[0]!, { tenantId, kind: 'decision' })
+    return { ok: false, status: 403, reason: 'This credential is not permitted to perform this action.' }
+  }
+  return { ok: true, principalId: principal.id, kind: principal.kind }
 }
 
 /**
- * What the shared `NQC_SUPERVISOR_TOKEN` can do on the decision routes: the
- * credential checks above accept it for approve, execute, rollback, observe
- * and resume (the last two need `decision:read`).
+ * What the interim shared `NQC_SUPERVISOR_TOKEN` can do in the web app: the
+ * decision routes (approve, execute, rollback, observe, resume), and, as the
+ * one founder it stands for, planning (`decision:propose`), asking
+ * (`decision:read`) and the workflow builder's validate and simulate
+ * (`workflow:read`). Live workflow runs (`run:enqueue`) need a per-person
+ * principal. Retire the shared token with SSO (threat model B-1).
  */
 export const SHARED_SUPERVISOR_PERMISSIONS: readonly Permission[] = Object.freeze<Permission[]>([
   'decision:read',
+  'decision:propose',
   'decision:approve',
   'decision:execute',
   'decision:rollback',
+  'workflow:read',
 ])
 
 /** Who a credential belongs to, as `GET /api/whoami` reports it. Never carries a token or digest. */
@@ -261,9 +283,6 @@ export type WhoamiResult =
   | { ok: true; status: 200; body: WhoamiBody }
   | { ok: false; status: 401 | 503; body: { error: string } }
 
-// A silent controller for listing permissions: probing every permission
-// would otherwise log a "denied" line for each one the principal lacks.
-const quietAccessController = new AccessController()
 
 /**
  * The pure core of `GET /api/whoami`: validate the Authorization header with

@@ -17,12 +17,12 @@
  */
 
 import { NextResponse } from 'next/server'
-import { getDedicatedSanityProjectId } from '@/lib/sanity-config'
-import { createClient } from '@sanity/client'
+import { getSanityClient } from '@/lib/sanity-client'
 import { randomUUID } from 'node:crypto'
-import { DecisionActionBody } from '@/lib/decision-action-body'
+import { DecisionActionBody, separationRefusal } from '@/lib/decision-action-body'
 import { authorizeTransition, checkSeparationOfDuties } from '@quicksilver/kernel'
 import { currentPolicySnapshotVersion, decisionActionFingerprint, soleOperatorId, verifySupervisorCredential } from '@/lib/nqc-approval'
+import { takeWebRateLimit } from '@/lib/route-guard'
 import {
   commitTransition,
   factsFromDecision,
@@ -36,16 +36,6 @@ import {
 
 export const runtime = 'nodejs'
 
-function getSanityClient() {
-  return createClient({
-    projectId: getDedicatedSanityProjectId(),
-    dataset: process.env.NEXT_PUBLIC_SANITY_DATASET ?? 'production',
-    apiVersion: process.env.NEXT_PUBLIC_SANITY_API_VERSION ?? '2024-10-01',
-    useCdn: false,
-    token: process.env.SANITY_AUTH_TOKEN,
-  })
-}
-
 const ActionBody = DecisionActionBody
 
 export async function POST(
@@ -56,6 +46,13 @@ export async function POST(
   if (!id) {
     return NextResponse.json({ error: 'Missing decision id' }, { status: 400 })
   }
+
+  // The supervisor credential before the body is read (A-3), then the
+  // per-principal write limit (A-5).
+  const supervisor = verifySupervisorCredential(req)
+  if (!supervisor.ok) return NextResponse.json({ error: supervisor.reason }, { status: supervisor.status })
+  const limited = takeWebRateLimit('write', supervisor.supervisorId)
+  if (limited) return NextResponse.json(limited.body, { status: limited.status, headers: limited.headers })
 
   let body: unknown
   try {
@@ -69,15 +66,12 @@ export async function POST(
   }
   const { action, comment } = parsed.data
 
-  const supervisor = verifySupervisorCredential(req)
-  if (!supervisor.ok) return NextResponse.json({ error: supervisor.reason }, { status: supervisor.status })
-
   if (!process.env.NEXT_PUBLIC_SANITY_PROJECT_ID) {
     return NextResponse.json({ error: 'Sanity not configured' }, { status: 500 })
   }
 
   try {
-    const client = getSanityClient()
+    const client = getSanityClient('write')
 
     // Fetch existing decision to confirm it exists.
     const existing = await client.fetch<{
@@ -140,7 +134,9 @@ export async function POST(
         })
       : null
     if (separation && !separation.allowed) {
-      return NextResponse.json({ error: 'Separation of duties', reasons: separation.reasons }, { status: 403 })
+      // Tell the console when the sole-operator override is open to this
+      // approver, so it can ask for the written justification (A-3).
+      return NextResponse.json(separationRefusal(separation, supervisor.supervisorId, soleOperatorId()), { status: 403 })
     }
     if (action === 'approve' && existing.safetyDecision === 'BLOCK') {
       return NextResponse.json({ error: 'The NQC Kernel blocked this decision; it cannot be approved.' }, { status: 409 })

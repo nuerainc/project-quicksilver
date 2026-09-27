@@ -33,7 +33,7 @@ npm run host                             # start; Ctrl+C to stop
 ```
 
 - The host reads the repo's `.env` (model keys, `SANITY_CONTEXT_*`,
-  `NEXT_PUBLIC_SANITY_PROJECT_ID`, `SANITY_AUTH_TOKEN`), so each step
+  `NEXT_PUBLIC_SANITY_PROJECT_ID`, `SANITY_WRITE_TOKEN`), so each step
   evaluation is stored in Sanity like the web app's.
 - Without a `tenantId` in the config, the host uses `QUICKSILVER_TENANT_ID`
   (default `default`), the same tenant as the web app.
@@ -63,7 +63,44 @@ docker compose -f deploy/docker-compose.yml up -d --build
 | `DATABASE_URL` | Postgres URL when `store.kind` is `postgres` (name set by `store.urlEnv`) |
 | `QUICKSILVER_LOG_LEVEL` | Overrides `log.level` |
 | Model provider keys and `SANITY_CONTEXT_MCP_URL` / `SANITY_CONTEXT_TOKEN` | Enable the read-only query agent. Without them, agent steps fail closed |
-| `NEXT_PUBLIC_SANITY_PROJECT_ID` and `SANITY_AUTH_TOKEN` | Store each step evaluation as an `evaluationRecord` document. The legacy challenge project is refused |
+| `NEXT_PUBLIC_SANITY_PROJECT_ID` and `SANITY_WRITE_TOKEN` | Store each step evaluation as an `evaluationRecord` document (and the Sanity shadow, Genesis and task stores when chosen). The legacy challenge project is refused. See [Sanity tokens](#sanity-tokens-read-and-write) |
+| `SANITY_READ_TOKEN` | Read-only Sanity paths (none in the host today; the web app's decision log uses it) |
+
+### Sanity tokens: read and write
+
+Every Sanity client in the repository is created in one helper per app or
+package (`apps/web/lib/sanity-client.ts`, `packages/host/src/sanity-client.ts`,
+`apps/studio/lib/sanity-client.ts`), and each asks for either read or write
+access (threat model A-7):
+
+| Access | Variable | Sanity role | Used by |
+|---|---|---|---|
+| read | `SANITY_READ_TOKEN` | Viewer | The web decision log page; `npm run smoke`; the dataset export in `npm run reset:history` |
+| write | `SANITY_WRITE_TOKEN` | Editor | `/api/plan`, the decision routes, evaluation records (web and host), the host's Sanity stores, `npm run seed`, `seed:processes`, `reset:history`, `e2e:live` |
+
+Until both are set, each falls back to the old combined `SANITY_AUTH_TOKEN`
+and prints a warning once per process naming the missing variable (never the
+token). A read path never borrows the write token, and a write path never
+borrows the read token. `SANITY_DATASET_PUBLIC=on` lets read paths use no
+token at all, only if the founder has made the dataset public (it is private
+today; leave this unset). Schema deploys keep their own `SANITY_DEPLOY_TOKEN`
+or a `sanity login` session. `npm test` checks that no other file creates a
+Sanity client or reads these variables (`sanity-tokens.test.ts`).
+
+**Founder action:** in [sanity.io/manage](https://sanity.io/manage), project
+→ API → Tokens, create a **Viewer** token and set it as `SANITY_READ_TOKEN`,
+and an **Editor** token and set it as `SANITY_WRITE_TOKEN`, in the root `.env`
+and in every hosting environment (Vercel, Render). Once both are set
+everywhere and the app runs without the fallback warning, delete the old
+combined token in sanity.io/manage and remove `SANITY_AUTH_TOKEN`.
+
+**Founder decision (not changed from code):** anyone with an Editor token, or
+with an Editor role in Studio, can write an `approvalRecord`, `approvedBy`, a
+policy or a capability directly, bypassing every route; Studio's read-only
+schemas are a user-interface setting, not access control. Review who holds
+Editor (or higher) on the project in sanity.io/manage → Members and reduce it
+to the people and processes that must write. Signing approval records with a
+host-held key (threat model B-6) is the code fix that follows.
 
 `SIGTERM` stops intake, stops the scheduler and waits for in-flight runs
 (up to 60 s, then aborts them). A second signal aborts immediately.
@@ -99,13 +136,62 @@ Every `/api` route needs `Authorization: Bearer <token>` and is authorized by
 the kernel's RBAC. Denials are logged and, for run actions, written to the
 run's event history.
 
+The route table in `packages/host/src/routes.ts` is the list below in code:
+`dispatch()` matches it first, so an `/api` path it does not list is a 404
+before any handler runs, and each route's permission (at least one of those
+listed) is checked centrally before its handler, which keeps its own finer
+checks (humans only, the submitter, separation of duties). `host-routes.test.ts`
+walks the table and asserts 401 without a token and 403 for a principal
+without the permission on every route, except the reviewed public routes:
+`/healthz` and `/readyz` (probes, no data), `/` and `/console` (a static page
+with no data that must load before sign-in), and `POST /webhooks/:id`
+(authenticated by its HMAC signature). `GET /api/whoami` needs any valid
+principal and grants nothing.
+
+### Rate limits
+
+Per-principal token buckets (threat model A-5), set under `http.rateLimits`
+in the host config; the table marks which class each route is in:
+
+| Class | Default | Routes |
+|---|---|---|
+| `write` | burst 60, then 120 a minute | Every route that changes state: task cancel/approve/deny, intent answers and dismissals, the intent ledger, shadow recommendations, verdicts and outcomes, the decision journal, every Genesis write, run cancel, secrets, reload |
+| `model` | burst 10, then 20 a minute | Routes that call a model or enqueue a run that does: `POST /api/intents`, `POST /api/shadow/:id/generate`, `POST /api/runs`, `POST /api/runs/:id/redrive` |
+| `webhook` | burst 60, then 120 a minute, **per endpoint** | `POST /webhooks/:id`, counted before the signature is checked; override one endpoint with `webhooks[].rateLimit` |
+| tasks | burst 10, then 30 a minute (`tasks.rateLimit`) | `POST /api/tasks`, per client |
+
+```json
+"http": { "rateLimits": { "write": { "burst": 60, "perMinute": 120 }, "model": { "burst": 10, "perMinute": 20 }, "webhook": { "burst": 60, "perMinute": 120 } } }
+```
+
+A refused request gets `429` with `Retry-After` (whole seconds) and
+`{ error, code: "rate-limited", retryAfterSeconds }`. A caller refused with
+401 or 403 spends nothing. Buckets are in memory: they reset when the host
+restarts, and one host per tenant is the supported shape. Because the webhook
+bucket is counted before verification, a flood of forged deliveries can use
+up an endpoint's budget and delay real ones (senders retry on 429); limit
+per source address at the proxy (Caddy) as well when an endpoint is public.
+All buckets share one implementation with the web app (`TokenBucketLimiter`
+in `@quicksilver/kernel/rate-limit`).
+
+**The web app's limits** use the same buckets, per principal:
+`QUICKSILVER_WEB_RATE_LIMIT_MODEL` (default `5/10`: burst 5, then 10 a
+minute) for `/api/plan`, `/api/query` and `/api/workflows/run`, and
+`QUICKSILVER_WEB_RATE_LIMIT_WRITE` (default `30/60`) for the decision routes.
+On Vercel the web app runs as many serverless instances, each with its own
+in-memory buckets that reset on a cold start, so these limits are **per
+instance, not global**: they stop one caller from bursting through one
+instance, not a determined caller spread across instances. No datastore was
+added for a shared count; if one is ever needed, put the limit at the edge
+(Vercel's firewall rate limiting) rather than in the app.
+
 | Route | Permission | Notes |
 |---|---|---|
 | `GET /healthz` | none | Liveness |
 | `GET /readyz` | none | Store reachable and host started |
 | `GET /metrics` | `audit:read` | Public only with `http.metricsPublic: true` on a private network |
 | `POST /webhooks/:id` | HMAC signature | Same contract as [triggers](triggers.md) |
-| `GET /api/whoami` | any principal | |
+| `GET /api/whoami` | any principal | Grants nothing |
 | `GET /api/runs?status=&workflow=&limit=` | `run:read` | Summaries, newest first |
 | `POST /api/runs` | `run:enqueue` | `{ workflow, input, idempotencyKey?, priority? }`. Only configured workflows; arbitrary graphs are refused |
 | `GET /api/runs/:id` | `run:read` | Result and event history |

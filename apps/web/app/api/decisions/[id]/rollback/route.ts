@@ -13,11 +13,11 @@
  */
 
 import { NextResponse } from 'next/server'
-import { getDedicatedSanityProjectId } from '@/lib/sanity-config'
-import { createClient } from '@sanity/client'
+import { getSanityClient } from '@/lib/sanity-client'
 import { z } from 'zod'
 import { authorizeTransition, nextAutomaticTransition } from '@quicksilver/kernel'
 import { verifySupervisorCredential } from '@/lib/nqc-approval'
+import { takeWebRateLimit } from '@/lib/route-guard'
 import {
   KERNEL_ACTOR,
   commitTransition,
@@ -31,16 +31,6 @@ import {
   uiOperator,
 } from '@/lib/process-engine'
 
-function getSanityClient() {
-  return createClient({
-    projectId: getDedicatedSanityProjectId(),
-    dataset: process.env.NEXT_PUBLIC_SANITY_DATASET ?? 'production',
-    apiVersion: process.env.NEXT_PUBLIC_SANITY_API_VERSION ?? '2024-10-01',
-    useCdn: false,
-    token: process.env.SANITY_AUTH_TOKEN,
-  })
-}
-
 const Body = z.object({
   summary: z.string().optional(),
 })
@@ -52,6 +42,13 @@ export async function POST(
   ctx: { params: Promise<{ id: string }> },
 ) {
   const { id } = await ctx.params
+  // The supervisor credential before the body is read (A-3), then the
+  // per-principal write limit (A-5).
+  const supervisor = verifySupervisorCredential(req, 'decision:rollback')
+  if (!supervisor.ok) return NextResponse.json({ error: supervisor.reason }, { status: supervisor.status })
+  const limited = takeWebRateLimit('write', supervisor.supervisorId)
+  if (limited) return NextResponse.json(limited.body, { status: limited.status, headers: limited.headers })
+
   let body: { summary?: string } = {}
   try {
     body = await req.json()
@@ -63,15 +60,13 @@ export async function POST(
     return NextResponse.json({ error: 'Validation failed', issues: parsed.error.issues }, { status: 400 })
   }
   const { summary } = parsed.data
-  const supervisor = verifySupervisorCredential(req, 'decision:rollback')
-  if (!supervisor.ok) return NextResponse.json({ error: supervisor.reason }, { status: supervisor.status })
 
   if (!process.env.NEXT_PUBLIC_SANITY_PROJECT_ID) {
     return NextResponse.json({ error: 'Sanity not configured' }, { status: 500 })
   }
 
   try {
-    const client = getSanityClient()
+    const client = getSanityClient('write')
     const original = await client.fetch<{
       _id: string
       _rev: string

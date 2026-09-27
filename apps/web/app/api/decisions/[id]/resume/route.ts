@@ -14,8 +14,7 @@
  */
 
 import { NextResponse } from 'next/server'
-import { getDedicatedSanityProjectId } from '@/lib/sanity-config'
-import { createClient } from '@sanity/client'
+import { getSanityClient } from '@/lib/sanity-client'
 import { nextAutomaticTransition } from '@quicksilver/kernel'
 import {
   KERNEL_ACTOR,
@@ -27,16 +26,7 @@ import {
   processView,
 } from '@/lib/process-engine'
 import { authorizeDecisionRoute } from '@/lib/nqc-approval'
-
-function getSanityClient() {
-  return createClient({
-    projectId: getDedicatedSanityProjectId(),
-    dataset: process.env.NEXT_PUBLIC_SANITY_DATASET ?? 'production',
-    apiVersion: process.env.NEXT_PUBLIC_SANITY_API_VERSION ?? '2024-10-01',
-    useCdn: false,
-    token: process.env.SANITY_AUTH_TOKEN,
-  })
-}
+import { takeWebRateLimit } from '@/lib/route-guard'
 
 export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params
@@ -44,12 +34,14 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   // A valid principal with decision:read or decision:propose, before any read or write.
   const caller = authorizeDecisionRoute(req, 'resume')
   if (!caller.ok) return NextResponse.json({ error: caller.reason }, { status: caller.status })
+  const limited = takeWebRateLimit('write', caller.principalId)
+  if (limited) return NextResponse.json(limited.body, { status: limited.status, headers: limited.headers })
   if (!process.env.NEXT_PUBLIC_SANITY_PROJECT_ID) {
     return NextResponse.json({ error: 'Sanity not configured' }, { status: 500 })
   }
 
   try {
-    const client = getSanityClient()
+    const client = getSanityClient('write')
     const lifecycle = await loadDecisionLifecycle(client)
     if (lifecycle.kind === 'invalid') return NextResponse.json(invalidDefinitionBody(lifecycle), { status: 409 })
     if (lifecycle.kind !== 'ready') {

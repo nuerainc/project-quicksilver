@@ -58,7 +58,7 @@ async function hostConfig(): Promise<HostConfig> {
 async function shadowStore(config: HostConfig): Promise<ShadowStore> {
   if ((process.env.QUICKSILVER_SHADOW_STORE ?? '').trim() === 'sanity') {
     const client = await createSanityStoreClient()
-    if (!client) fail('QUICKSILVER_SHADOW_STORE=sanity needs NEXT_PUBLIC_SANITY_PROJECT_ID and SANITY_AUTH_TOKEN.')
+    if (!client) fail('QUICKSILVER_SHADOW_STORE=sanity needs NEXT_PUBLIC_SANITY_PROJECT_ID and SANITY_WRITE_TOKEN (or the legacy SANITY_AUTH_TOKEN).')
     return new SanityShadowStore(client)
   }
   return config.store.kind === 'file' ? new FileShadowStore(join(dirname(config.store.path), 'intent', 'onboard')) : new MemoryShadowStore()

@@ -534,14 +534,14 @@ export interface GenesisStores {
 
 /**
  * QUICKSILVER_GENESIS_STORE=sanity keeps Genesis records in Sanity (needs
- * NEXT_PUBLIC_SANITY_PROJECT_ID and SANITY_AUTH_TOKEN; the legacy challenge
+ * NEXT_PUBLIC_SANITY_PROJECT_ID and SANITY_WRITE_TOKEN (legacy: SANITY_AUTH_TOKEN); the legacy challenge
  * project is refused). Anything else keeps the files under `dir`.
  */
 export async function genesisStoresFromEnv(options: { dir: string; budgetUsd: number; env?: NodeJS.ProcessEnv; client?: SanityStoreClient }): Promise<GenesisStores> {
   const env = options.env ?? process.env
   if ((env.QUICKSILVER_GENESIS_STORE ?? 'file').trim() === 'sanity') {
     const client = options.client ?? (await createSanityStoreClient(env))
-    if (!client) throw new Error('QUICKSILVER_GENESIS_STORE=sanity needs NEXT_PUBLIC_SANITY_PROJECT_ID and SANITY_AUTH_TOKEN.')
+    if (!client) throw new Error('QUICKSILVER_GENESIS_STORE=sanity needs NEXT_PUBLIC_SANITY_PROJECT_ID and SANITY_WRITE_TOKEN (or the legacy SANITY_AUTH_TOKEN).')
     return { kind: 'sanity', ledger: new SanityMoneyLedgerStore(client), experiments: new SanityExperimentStore(client), reviews: new SanityContentReviewStore(client) }
   }
   return { kind: 'file', ledger: new FileMoneyLedgerStore(options.dir, { budgetUsd: options.budgetUsd }), experiments: new FileExperimentStore(options.dir), reviews: new FileContentReviewStore(options.dir) }

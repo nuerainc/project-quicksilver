@@ -281,6 +281,20 @@ test('the legacy challenge project is refused by every Sanity store and by the e
   await assert.rejects(genesisStoresFromEnv({ dir: tmpdir(), budgetUsd: 500, env: { QUICKSILVER_GENESIS_STORE: 'sanity', NEXT_PUBLIC_SANITY_PROJECT_ID: 'd280bqjc', SANITY_AUTH_TOKEN: 'test-token' } }), LegacySanityProjectError)
 })
 
+test('Sanity tokens (A-7): host stores and the evaluation sink write with SANITY_WRITE_TOKEN; a read asks for SANITY_READ_TOKEN', () => {
+  const project = { NEXT_PUBLIC_SANITY_PROJECT_ID: 'abc123' }
+  const both = { ...project, SANITY_READ_TOKEN: 'viewer-test-token', SANITY_WRITE_TOKEN: 'editor-test-token', SANITY_AUTH_TOKEN: 'combined-test-token' }
+  assert.equal(sanityConfigFromEnv(both)?.token, 'editor-test-token', 'the default is a write')
+  assert.equal(sanityConfigFromEnv(both, 'write')?.token, 'editor-test-token')
+  assert.equal(sanityConfigFromEnv(both, 'read')?.token, 'viewer-test-token')
+  assert.equal(sanityConfigFromEnv({ ...project, SANITY_READ_TOKEN: 'viewer-test-token' }, 'write'), undefined, 'a write never borrows the read token')
+  assert.equal(sanityConfigFromEnv({ ...project, SANITY_WRITE_TOKEN: 'editor-test-token' }, 'read'), undefined, 'a read never borrows the write token')
+  assert.equal(sanityConfigFromEnv({ ...project, SANITY_AUTH_TOKEN: 'combined-test-token' }, 'write')?.token, 'combined-test-token', 'the legacy combined token still works (with a warning)')
+  assert.equal(sanityConfigFromEnv({ SANITY_WRITE_TOKEN: 'editor-test-token' }), undefined, 'no project, no Sanity')
+  assert.throws(() => sanityConfigFromEnv({ NEXT_PUBLIC_SANITY_PROJECT_ID: 'd280bqjc', SANITY_WRITE_TOKEN: 'editor-test-token' }), LegacySanityProjectError)
+  assert.throws(() => sanityConfigFromEnv({ NEXT_PUBLIC_SANITY_PROJECT_ID: 'd280bqjc', SANITY_READ_TOKEN: 'viewer-test-token' }, 'read'), LegacySanityProjectError)
+})
+
 test('Genesis stores: files by default, Sanity when asked (and only when configured)', async () => {
   assert.equal((await genesisStoresFromEnv({ dir: tmpdir(), budgetUsd: 500, env: {} })).kind, 'file')
   await assert.rejects(genesisStoresFromEnv({ dir: tmpdir(), budgetUsd: 500, env: { QUICKSILVER_GENESIS_STORE: 'sanity' } }), /needs NEXT_PUBLIC_SANITY_PROJECT_ID/)

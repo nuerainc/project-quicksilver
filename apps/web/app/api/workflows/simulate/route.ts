@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { guardWebRoute } from '@/lib/route-guard'
 import { z } from 'zod'
 import { executeWorkflowGraph, type WorkflowGraph } from '@quicksilver/kernel'
 
@@ -9,6 +10,10 @@ const MAX_REQUEST_BYTES = 256 * 1024
 
 /** Safe preview only: no models, tools, approvals, or external effects are invoked. */
 export async function POST(request: Request) {
+  // A principal with workflow:read (A-3). No model and no write, so no rate limit.
+  const caller = guardWebRoute(request, 'workflows/simulate')
+  if (!caller.ok) return NextResponse.json(caller.body, { status: caller.status, headers: caller.headers })
+
   const contentLength = Number(request.headers.get('content-length') ?? 0)
   if (contentLength > MAX_REQUEST_BYTES) return NextResponse.json({ error: 'Request body exceeds the 256 KiB limit.' }, { status: 413 })
 

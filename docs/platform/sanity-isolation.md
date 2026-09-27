@@ -11,8 +11,11 @@ project.
 
 After the dataset and token are configured:
 
-1. Set `NEXT_PUBLIC_SANITY_PROJECT_ID`, `NEXT_PUBLIC_SANITY_DATASET`, and
-   `SANITY_AUTH_TOKEN` in the repo-root `.env` for the app and seed scripts.
+1. Set `NEXT_PUBLIC_SANITY_PROJECT_ID`, `NEXT_PUBLIC_SANITY_DATASET`,
+   `SANITY_READ_TOKEN` (a Viewer token) and `SANITY_WRITE_TOKEN` (an Editor
+   token) in the repo-root `.env` for the app and seed scripts. The old
+   combined `SANITY_AUTH_TOKEN` still works as a fallback, with a warning,
+   until both are set (see [hosted runtime](hosted-runtime.md#sanity-tokens-read-and-write)).
 2. Set `SANITY_STUDIO_PROJECT_ID` and `SANITY_STUDIO_DATASET` in the Studio's
    environment (`apps/studio/.env` for local CLI use).
 3. Create Context MCP endpoints scoped to the new project's dataset and update
@@ -20,7 +23,7 @@ After the dataset and token are configured:
    variables in the root `.env`.
 4. Deploy the Studio schema with a credential that has Sanity's
    `deployStudio` and `deploySchema` grants. The app's content token
-   (`SANITY_AUTH_TOKEN`, Editor) should not get those grants. Either:
+   (`SANITY_WRITE_TOKEN`, Editor) should not get those grants. Either:
    - create a **Deploy Studio** token for `f87t11g1`, put it in the root
      `.env` as `SANITY_DEPLOY_TOKEN`, and run `npm run schema:deploy`; or
    - run `npx sanity login` and then `npm run schema:deploy -- --login`,

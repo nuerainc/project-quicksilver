@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { guardWebRoute } from '@/lib/route-guard'
 import { z } from 'zod'
 import { validateWorkflowGraph, type WorkflowGraph } from '@quicksilver/kernel'
 
@@ -10,6 +11,10 @@ const MAX_REQUEST_BYTES = 256 * 1024
 
 /** Stateless validation endpoint used by workflow authoring clients. */
 export async function POST(request: Request) {
+  // A principal with workflow:read (A-3). No model and no write, so no rate limit.
+  const caller = guardWebRoute(request, 'workflows/validate')
+  if (!caller.ok) return NextResponse.json(caller.body, { status: caller.status, headers: caller.headers })
+
   const contentLength = Number(request.headers.get('content-length') ?? 0)
   if (contentLength > MAX_REQUEST_BYTES) {
     return NextResponse.json({ error: 'Request body exceeds the 256 KiB limit.' }, { status: 413 })

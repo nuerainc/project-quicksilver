@@ -44,10 +44,10 @@
  */
 
 import { NextResponse } from 'next/server'
-import { getDedicatedSanityProjectId } from '@/lib/sanity-config'
-import { createClient } from '@sanity/client'
+import { getSanityClient } from '@/lib/sanity-client'
 import { z } from 'zod'
-import { identifyRequester, policySnapshotVersion } from '@/lib/nqc-approval'
+import { policySnapshotVersion } from '@/lib/nqc-approval'
+import { guardWebRoute } from '@/lib/route-guard'
 import {
   executeGovernedAgent,
   isLlmConfigured,
@@ -87,17 +87,6 @@ import {
   processView,
   transitionFields,
 } from '@/lib/process-engine'
-
-function getSanityClient() {
-  return createClient({
-    projectId: getDedicatedSanityProjectId(),
-    dataset: process.env.NEXT_PUBLIC_SANITY_DATASET ?? 'production',
-    apiVersion: process.env.NEXT_PUBLIC_SANITY_API_VERSION ?? '2024-10-01',
-    useCdn: false,
-    // Server-side read + write; needs an Editor-scoped token to persist decisions.
-    token: process.env.SANITY_AUTH_TOKEN,
-  })
-}
 
 // ── Resolution: planner IDs → kernel refs ──────────────────────────────────
 
@@ -267,6 +256,12 @@ const BodySchema = z.object({
 })
 
 export async function POST(req: Request) {
+  // A principal with decision:propose, before the body is read (A-3); it is the
+  // requester recorded on every decision, never anything in the body. Then the
+  // per-principal model-route limit (A-5).
+  const requester = guardWebRoute(req, 'plan')
+  if (!requester.ok) return NextResponse.json(requester.body, { status: requester.status, headers: requester.headers })
+
   let body: unknown
   try {
     body = await req.json()
@@ -279,9 +274,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Validation failed', issues: parsed.error.issues }, { status: 400 })
   }
   const { objective } = parsed.data
-
-  const requester = identifyRequester(req)
-  if (!requester.ok) return NextResponse.json({ error: requester.reason }, { status: requester.status })
 
   if (!isLlmConfigured()) {
     return NextResponse.json(
@@ -300,7 +292,7 @@ export async function POST(req: Request) {
   }
 
   try {
-    const client = getSanityClient()
+    const client = getSanityClient('write')
     // The planner runs on the standard agent contract, so its output is evaluated
     // by the Quicksilver Engine before any candidate action reaches the kernel.
     const plannerRun = await executeGovernedAgent(plannerQuicksilverAgent, {
@@ -409,7 +401,7 @@ export async function POST(req: Request) {
             policySnapshotVersion: policySnapshotVersion(
               refs.policyRevisions.filter((p) => snapshotPolicyIds(governed.decision.policyChecks).includes(p.id)),
             ),
-            requestedBy: requester.requestedBy,
+            requestedBy: requester.principalId,
             now,
           })
         }

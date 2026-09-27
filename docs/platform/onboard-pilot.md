@@ -138,7 +138,7 @@ store (in memory when the run store is not a file store).
 Set `QUICKSILVER_SHADOW_STORE=sanity` to keep them in Sanity instead. The
 host uses the same project settings as evaluation records
 (`NEXT_PUBLIC_SANITY_PROJECT_ID`, `NEXT_PUBLIC_SANITY_DATASET`,
-`SANITY_AUTH_TOKEN`) and refuses the legacy challenge project.
+`SANITY_WRITE_TOKEN`, legacy fallback `SANITY_AUTH_TOKEN`) and refuses the legacy challenge project.
 
 Set `QUICKSILVER_COMPANY_ID` to the company id of your intent ledger (the one
 created with `npm run onboard -- company`) to give the shadow-stage agent your

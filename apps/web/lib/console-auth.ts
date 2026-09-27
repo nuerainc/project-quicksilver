@@ -4,8 +4,10 @@
  * The person pastes their supervisor or principal token once. It is kept only
  * in `sessionStorage` for this tab (the browser clears it when the tab
  * closes), never in `localStorage` or a cookie, and it is sent only as
- * `Authorization: Bearer` to this app's own `/api/decisions/*` routes and
- * `/api/whoami`. Every storage access is wrapped: storage can be missing or
+ * `Authorization: Bearer` to this app's own API routes, each named in
+ * `mayCarryConsoleToken`: the decision routes, `/api/whoami`, `/api/plan`,
+ * `/api/query` and `/api/workflows/{validate,simulate,run}` (every one of
+ * them requires a principal since threat model A-3). Every storage access is wrapped: storage can be missing or
  * throw (private windows, blocked site data), and the console must still work.
  */
 
@@ -55,9 +57,19 @@ export function clearConsoleToken(storage: () => TokenStorage | undefined = brow
   }
 }
 
-/** The only paths the console token is ever sent to: this app's own decision routes and whoami. */
+/** Same-origin paths (exact, no query) other than the decision routes that the console token may be sent to. */
+const TOKEN_PATHS: ReadonlySet<string> = new Set([
+  '/api/whoami',
+  '/api/plan',
+  '/api/query',
+  '/api/workflows/validate',
+  '/api/workflows/simulate',
+  '/api/workflows/run',
+])
+
+/** The only paths the console token is ever sent to: this app's own API routes, listed exactly. */
 export function mayCarryConsoleToken(url: string): boolean {
-  return /^\/api\/decisions\/[^/?#]+\/(action|execute|observe|resume|rollback)$/.test(url) || url === '/api/whoami'
+  return /^\/api\/decisions\/[^/?#]+\/(action|execute|observe|resume|rollback)$/.test(url) || TOKEN_PATHS.has(url)
 }
 
 /** The shape `GET /api/whoami` returns on 200 (mirrors `WhoamiBody` in nqc-approval.ts; no secrets). */
@@ -71,19 +83,27 @@ export interface ConsoleWhoami {
 }
 
 export type ConsoleDecisionRoute = 'action' | 'execute' | 'observe' | 'resume' | 'rollback'
+/** Every console call that can be refused for auth: the decision routes plus plan, query and the workflow builder. */
+export type ConsoleRoute = ConsoleDecisionRoute | 'plan' | 'query' | 'workflows/validate' | 'workflows/simulate' | 'workflows/run'
 
-/** The permission each decision route checks (observe and resume also accept `decision:propose`). */
-export const CONSOLE_ROUTE_PERMISSION: Readonly<Record<ConsoleDecisionRoute, string>> = Object.freeze({
+/** The permission each route checks (observe and resume also accept `decision:propose`). Mirrors route-guard.ts. */
+export const CONSOLE_ROUTE_PERMISSION: Readonly<Record<ConsoleRoute, string>> = Object.freeze({
   action: 'decision:approve',
   execute: 'decision:execute',
   observe: 'decision:read',
   resume: 'decision:read',
   rollback: 'decision:rollback',
+  plan: 'decision:propose',
+  query: 'decision:read',
+  'workflows/validate': 'workflow:read',
+  'workflows/simulate': 'workflow:read',
+  'workflows/run': 'run:enqueue',
 })
 
-/** The message the console shows for an auth refusal, or null for any other status. */
-export function authFailureMessage(status: number, route: ConsoleDecisionRoute, serverMessage?: string): string | null {
+/** The message the console shows for an auth refusal or a rate limit, or null for any other status. */
+export function authFailureMessage(status: number, route: ConsoleRoute, serverMessage?: string, retryAfterSeconds?: number): string | null {
   if (status === 401) return 'Sign in to do this'
+  if (status === 429) return `Too many requests; try again in ${retryAfterSeconds && retryAfterSeconds > 0 ? `${retryAfterSeconds} s` : 'a moment'}`
   if (status === 403) {
     const base = `Your account can't do this (needs ${CONSOLE_ROUTE_PERMISSION[route]})`
     return serverMessage ? `${base}. Server: ${serverMessage}` : base
@@ -95,4 +115,24 @@ export function authFailureMessage(status: number, route: ConsoleDecisionRoute, 
 export function consoleHeaders(url: string, token: string | null, base: Record<string, string> = {}): Record<string, string> {
   if (!token || !mayCarryConsoleToken(url)) return { ...base }
   return { ...base, authorization: `Bearer ${token}` }
+}
+
+/** What the console needs to ask the sole operator for a written justification. */
+export interface SoleOperatorPrompt {
+  reasons: string[]
+  minJustificationLength: number
+}
+
+/**
+ * When an approval came back 403 for separation of duties and the server says
+ * the sole-operator override is open to this approver, what to ask for;
+ * otherwise null (another human has to approve, or it was another refusal).
+ */
+export function soleOperatorPrompt(status: number, body: unknown): SoleOperatorPrompt | null {
+  if (status !== 403 || !body || typeof body !== 'object') return null
+  const b = body as { error?: unknown; reasons?: unknown; soleOperatorOverride?: { available?: unknown; minJustificationLength?: unknown } }
+  if (b.error !== 'Separation of duties' || b.soleOperatorOverride?.available !== true) return null
+  const min = typeof b.soleOperatorOverride.minJustificationLength === 'number' ? b.soleOperatorOverride.minJustificationLength : 20
+  const reasons = Array.isArray(b.reasons) ? b.reasons.filter((r): r is string => typeof r === 'string') : []
+  return { reasons, minJustificationLength: min }
 }

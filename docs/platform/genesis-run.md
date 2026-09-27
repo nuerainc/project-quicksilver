@@ -113,7 +113,7 @@ so existing data still loads. Every write is atomic.
 
 Set `QUICKSILVER_GENESIS_STORE=sanity` to keep them in Sanity instead. The
 command needs `NEXT_PUBLIC_SANITY_PROJECT_ID`, `NEXT_PUBLIC_SANITY_DATASET`
-and `SANITY_AUTH_TOKEN` in its environment, and refuses the legacy challenge
+and `SANITY_WRITE_TOKEN` (legacy fallback: `SANITY_AUTH_TOKEN`) in its environment, and refuses the legacy challenge
 project. The run's start is then the first experiment's start.
 
 | Document type | One per | Id | Rules |

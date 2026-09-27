@@ -16,7 +16,8 @@
  *   npm run e2e:live                 # run both scenarios, keep the decisions it creates
  *   npm run e2e:live -- --cleanup    # ...then delete everything it created
  *
- * Needs: SANITY_AUTH_TOKEN (write) in the root .env; QUICKSILVER_SUPERVISOR_TOKEN,
+ * Needs: SANITY_WRITE_TOKEN (an Editor token; the legacy SANITY_AUTH_TOKEN also
+ * works) in the root .env; QUICKSILVER_SUPERVISOR_TOKEN,
  * a human supervisor's bearer token for the deployment (a per-person principal
  * with decision:read, decision:approve, decision:execute and decision:rollback,
  * or the interim shared NQC_SUPERVISOR_TOKEN); and on the deployment
@@ -26,8 +27,10 @@
  * Base URL: QUICKSILVER_E2E_BASE_URL, default https://quicksilver-seven.vercel.app
  *
  * Credentials: the supervisor token is sent as `Authorization: Bearer` to the
- * /api/decisions/* routes only. /api/plan is called without it, so the plan's
- * requester is not the approver (separation of duties).
+ * /api/decisions/* routes. /api/plan requires a principal with decision:propose
+ * since A-3: it gets QUICKSILVER_E2E_REQUESTER_TOKEN (a different person, so the
+ * plan's requester is not the approver) or, when that is unset, the supervisor
+ * token, in which case approving the plan needs the sole-operator override.
  *
  * Fault injection cannot run where NODE_ENV=production (A-10): the web app
  * refuses to start with QUICKSILVER_ALLOW_FAULT_INJECTION=on in production and
@@ -44,7 +47,8 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { createClient, type SanityDocument } from '@sanity/client'
+import type { SanityDocument } from '@sanity/client'
+import { requireStudioSanityClient } from '../lib/sanity-client.ts'
 import { processFromSanity, type SanityProcessDocument } from '../../../packages/kernel/src/process-document.ts'
 import { validateProcessDefinition } from '../../../packages/kernel/src/process.ts'
 
@@ -73,28 +77,16 @@ const CLEANUP = process.argv.includes('--cleanup')
 const LIFECYCLE_ID = 'workflow-decision-lifecycle'
 const OBJECTIVE = '[E2E] Schedule preventive maintenance and a diagnostic check on CNC Machine 3 in the next maintenance window.'
 
-const projectId = process.env.NEXT_PUBLIC_SANITY_PROJECT_ID
-if (!projectId || projectId === 'd280bqjc') {
-  console.error('Set NEXT_PUBLIC_SANITY_PROJECT_ID to the dedicated Nuera Quicksilver Sanity project; legacy challenge writes are blocked.')
-  process.exit(1)
-}
-const token = process.env.SANITY_AUTH_TOKEN
-if (!token) {
-  console.error('SANITY_AUTH_TOKEN (write scope) is required in the root .env.')
-  process.exit(1)
-}
+// Reads, backs up and restores documents: SANITY_WRITE_TOKEN (A-7); the legacy project is refused.
+const { client: sanity } = requireStudioSanityClient('write')
 const supervisorToken = process.env.QUICKSILVER_SUPERVISOR_TOKEN?.trim()
 if (!supervisorToken) {
   console.error('QUICKSILVER_SUPERVISOR_TOKEN is not set. The decision routes (approve, execute, observe, resume, rollback) require a human supervisor\'s bearer token since 30b085e; set it to a supervisor principal token for the deployment under test (or the interim NQC_SUPERVISOR_TOKEN) and run again.')
   process.exit(1)
 }
-const sanity = createClient({
-  projectId,
-  dataset: process.env.NEXT_PUBLIC_SANITY_DATASET || 'production',
-  apiVersion: '2024-10-01',
-  token,
-  useCdn: false,
-})
+// /api/plan needs a principal with decision:propose (A-3). A separate requester
+// keeps separation of duties intact; without one the supervisor plans too.
+const requesterToken = process.env.QUICKSILVER_E2E_REQUESTER_TOKEN?.trim() || supervisorToken
 
 // ── Tiny assertion + reporting harness ────────────────────────────────────
 
@@ -116,13 +108,20 @@ async function post(path: string, body: unknown = {}, timeoutMs = 60_000): Promi
   const ctrl = new AbortController()
   const t = setTimeout(() => ctrl.abort(), timeoutMs)
   try {
-    // The supervisor token goes to the decision routes only (see the header).
+    // The supervisor token goes to the decision routes; /api/plan gets the requester's (see the header).
     const headers: Record<string, string> = { 'content-type': 'application/json' }
     if (path.startsWith('/api/decisions/')) headers.authorization = `Bearer ${supervisorToken}`
+    else if (path === '/api/plan') headers.authorization = `Bearer ${requesterToken}`
+    // One person planning and approving: send the sole-operator justification
+    // (the deployment must name them in QUICKSILVER_SOLE_OPERATOR_ID).
+    const b = body as { action?: string; comment?: string }
+    const payload = requesterToken === supervisorToken && path.endsWith('/action') && b?.action === 'approve' && !b.comment
+      ? { ...b, comment: 'E2E run: the sole operator approves a test decision they requested.' }
+      : body
     const res = await fetch(`${BASE}${path}`, {
       method: 'POST',
       headers,
-      body: JSON.stringify(body),
+      body: JSON.stringify(payload),
       signal: ctrl.signal,
     })
     const json = await res.json().catch(() => null)

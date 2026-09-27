@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import type { WorkflowEdge, WorkflowGraph, WorkflowNode, WorkflowNodeKind } from '@quicksilver/kernel'
+import { authFailureMessage, consoleHeaders, readConsoleToken, type ConsoleRoute } from '@/lib/console-auth'
 
 type ValidationResponse = { valid: boolean; errors: string[]; topologicalOrder: string[] }
 type SimulationResponse = { mode: 'simulation'; externalEffectsEnabled: false; status: 'completed' | 'blocked' | 'failed'; steps: Array<{ nodeId: string; status: 'completed' | 'skipped' | 'blocked' | 'failed'; safetyDecision?: string; detail?: string }>; error?: string }
@@ -19,15 +20,27 @@ const initialEdges: WorkflowEdge[] = [
 const nodeTitles: Record<WorkflowNodeKind, string> = { trigger: 'Trigger', agent: 'Agent', tool: 'Tool', condition: 'Condition', output: 'Output' }
 const DRAFT_STORAGE_KEY = 'nuera-quicksilver/workflow-draft/v1'
 
-async function validateGraph(graph: unknown): Promise<ValidationResponse> {
-  const response = await fetch('/api/workflows/validate', {
+/**
+ * POST to a workflow route with the token signed in on the home page (this
+ * tab's sessionStorage). Every workflow route requires a principal (A-3):
+ * validate and simulate need workflow:read, a live run needs run:enqueue.
+ */
+async function postWorkflow(route: Extract<ConsoleRoute, `workflows/${string}`>, body: unknown, fallback: string): Promise<unknown> {
+  const token = readConsoleToken()
+  if (!token) throw new Error(`${authFailureMessage(401, route)} (use the token box on the home page).`)
+  const url = `/api/${route}`
+  const response = await fetch(url, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ graph }),
+    headers: consoleHeaders(url, token, { 'content-type': 'application/json' }),
+    body: JSON.stringify(body),
   })
-  const result = await response.json()
-  if (!response.ok) throw new Error(result.error ?? 'Could not validate the workflow.')
-  return result as ValidationResponse
+  const result = await response.json().catch(() => ({}))
+  if (!response.ok) throw new Error(authFailureMessage(response.status, route, result.error, result.retryAfterSeconds) ?? result.error ?? fallback)
+  return result
+}
+
+async function validateGraph(graph: unknown): Promise<ValidationResponse> {
+  return (await postWorkflow('workflows/validate', { graph }, 'Could not validate the workflow.')) as ValidationResponse
 }
 
 function isWorkflowGraph(value: unknown): value is WorkflowGraph {
@@ -245,13 +258,7 @@ export default function WorkflowBuilderPage() {
     setSimulation(null)
     setError(null)
     try {
-      const response = await fetch('/api/workflows/simulate', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ graph }),
-      })
-      const result = await response.json()
-      if (!response.ok) throw new Error(result.error ?? 'Could not preview this workflow.')
+      const result = await postWorkflow('workflows/simulate', { graph }, 'Could not preview this workflow.')
       setSimulation({ graphKey: JSON.stringify(graph), result: result as SimulationResponse })
     } catch (cause) {
       setError((cause as Error).message)
@@ -263,16 +270,7 @@ export default function WorkflowBuilderPage() {
     setLiveRun(null)
     setError(null)
     try {
-      const response = await fetch('/api/workflows/run', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          graph,
-          input: liveInput,
-        }),
-      })
-      const result = await response.json()
-      if (!response.ok) throw new Error(result.error ?? 'Could not run this workflow.')
+      const result = await postWorkflow('workflows/run', { graph, input: liveInput }, 'Could not run this workflow.')
       setLiveRun({ graphKey: JSON.stringify(graph), result: result as LiveRunResponse })
     } catch (cause) {
       setError((cause as Error).message)

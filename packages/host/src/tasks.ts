@@ -34,6 +34,7 @@
  * The store is append-only: a task's identity and request never change, its
  * audit trail only grows, and every state change appends an audit entry.
  */
+import { TokenBucketLimiter, type RateLimitConfig } from '@quicksilver/kernel/rate-limit'
 import { createHash, randomBytes } from 'node:crypto'
 import { readdir } from 'node:fs/promises'
 import { join } from 'node:path'
@@ -275,37 +276,11 @@ export function describeCapabilities(catalog: TaskCatalog) {
 
 // ── Rate limit ────────────────────────────────────────────────────────────
 
-export interface RateLimitConfig {
-  /** Tasks a client may submit at once. */
-  burst: number
-  /** Sustained tasks per minute. */
-  perMinute: number
-}
+// The token bucket is shared with the rest of the host and the web app
+// (threat model A-5): it lives, pure, in the kernel.
+export { TokenBucketLimiter, type RateLimitConfig } from '@quicksilver/kernel/rate-limit'
 
 export const DEFAULT_TASK_RATE_LIMIT: RateLimitConfig = Object.freeze({ burst: 10, perMinute: 30 })
-
-/** A simple token bucket per key (principal id). */
-export class TokenBucketLimiter {
-  private readonly buckets = new Map<string, { tokens: number; at: number }>()
-  private readonly config: RateLimitConfig
-  private readonly now: () => number
-  constructor(config: RateLimitConfig, now: () => number = Date.now) {
-    if (!(config.burst >= 1) || !(config.perMinute > 0)) throw new Error('Rate limit: burst must be at least 1 and perMinute above 0.')
-    this.config = config
-    this.now = now
-  }
-  take(key: string): { ok: true } | { ok: false; retryAfterSeconds: number } {
-    const now = this.now()
-    const rate = this.config.perMinute / 60_000
-    const b = this.buckets.get(key) ?? { tokens: this.config.burst, at: now }
-    b.tokens = Math.min(this.config.burst, b.tokens + (now - b.at) * rate)
-    b.at = now
-    if (this.buckets.size > 10_000 && !this.buckets.has(key)) this.buckets.delete(this.buckets.keys().next().value!)
-    this.buckets.set(key, b)
-    if (b.tokens >= 1) { b.tokens -= 1; return { ok: true } }
-    return { ok: false, retryAfterSeconds: Math.max(1, Math.ceil((1 - b.tokens) / rate / 1000)) }
-  }
-}
 
 // ── Stores ────────────────────────────────────────────────────────────────
 

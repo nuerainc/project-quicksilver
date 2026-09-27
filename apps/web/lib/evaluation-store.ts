@@ -1,7 +1,6 @@
 import { randomUUID } from 'node:crypto'
-import { createClient } from '@sanity/client'
 import { buildEvaluationRecord, type EvaluationRecordInput } from '@quicksilver/kernel'
-import { getDedicatedSanityProjectId } from '@/lib/sanity-config'
+import { getSanityClient } from '@/lib/sanity-client'
 
 export interface PersistResult {
   persisted: boolean
@@ -25,13 +24,8 @@ export async function persistEvaluations(records: Pending[]): Promise<PersistRes
     buildEvaluationRecord({ ...r, id: `evaluation-${r.source}-${Date.now().toString(36)}-${randomUUID().slice(0, 8)}`, now }),
   )
   try {
-    const client = createClient({
-      projectId: getDedicatedSanityProjectId(),
-      dataset: process.env.NEXT_PUBLIC_SANITY_DATASET ?? 'production',
-      apiVersion: process.env.NEXT_PUBLIC_SANITY_API_VERSION ?? '2024-10-01',
-      useCdn: false,
-      token: process.env.SANITY_AUTH_TOKEN,
-    })
+    // Evaluation records are writes: SANITY_WRITE_TOKEN (A-7).
+    const client = getSanityClient('write')
     const tx = client.transaction()
     for (const doc of docs) tx.create(doc)
     await tx.commit()

@@ -16,9 +16,10 @@ import {
   mayCarryConsoleToken,
   readConsoleToken,
   saveConsoleToken,
+  soleOperatorPrompt,
   type TokenStorage,
 } from './console-auth.ts'
-import { DecisionActionBody } from './decision-action-body.ts'
+import { DecisionActionBody, separationRefusal } from './decision-action-body.ts'
 
 const token = (name: string) => `${name}-${'y'.repeat(40)}`
 const TOKENS = {
@@ -95,7 +96,7 @@ test('whoami: the shared supervisor token names NQC_SUPERVISOR_ID and never echo
   assert.equal(ok.body.principalId, 'entity-sole')
   assert.equal(ok.body.kind, 'human')
   assert.equal(ok.body.credential, 'shared-supervisor')
-  assert.deepEqual(ok.body.permissions, ['decision:read', 'decision:approve', 'decision:execute', 'decision:rollback'])
+  assert.deepEqual(ok.body.permissions, ['decision:read', 'decision:propose', 'decision:approve', 'decision:execute', 'decision:rollback', 'workflow:read'])
   assertNoSecrets(ok.body, [shared])
 
   const wrong = checkWhoami(bearer('x'.repeat(48)), sharedEnv)
@@ -141,12 +142,12 @@ test('console token: saved, read and cleared under one sessionStorage key; stora
   assert.equal(readConsoleToken(), null)
 })
 
-test('console token: sent only as a bearer header to this app\'s decision routes and whoami', () => {
-  for (const url of ['/api/decisions/decision-plan-abc-1/action', '/api/decisions/d/execute', '/api/decisions/d/observe', '/api/decisions/d/resume', '/api/decisions/d/rollback', '/api/whoami']) {
+test('console token: sent only as a bearer header to this app\'s own API routes (decisions, whoami, plan, query, workflows)', () => {
+  for (const url of ['/api/decisions/decision-plan-abc-1/action', '/api/decisions/d/execute', '/api/decisions/d/observe', '/api/decisions/d/resume', '/api/decisions/d/rollback', '/api/whoami', '/api/plan', '/api/query', '/api/workflows/validate', '/api/workflows/simulate', '/api/workflows/run']) {
     assert.equal(mayCarryConsoleToken(url), true, url)
     assert.deepEqual(consoleHeaders(url, 't0k', { 'content-type': 'application/json' }), { 'content-type': 'application/json', authorization: 'Bearer t0k' })
   }
-  for (const url of ['/api/plan', '/api/query', '/api/workflows/run', 'https://evil.example/api/decisions/d/action', '//evil.example/api/whoami', '/api/decisions/d/action?x=1', '/api/decisions/a/b/action', '/api/whoami/x']) {
+  for (const url of ['https://evil.example/api/plan', '//evil.example/api/plan', '/api/plan?x=1', '/api/plan/', '/api/query#x', '/api/workflows/other', '/api/workflows/run/x', 'https://evil.example/api/decisions/d/action', '//evil.example/api/whoami', '/api/decisions/d/action?x=1', '/api/decisions/a/b/action', '/api/whoami/x', '/api/other']) {
     assert.equal(mayCarryConsoleToken(url), false, url)
     assert.deepEqual(consoleHeaders(url, 't0k'), {}, url)
   }
@@ -160,7 +161,28 @@ test('console messages: 401 asks to sign in, 403 names the permission, anything 
   assert.equal(authFailureMessage(403, 'observe'), "Your account can't do this (needs decision:read)")
   assert.equal(authFailureMessage(403, 'resume'), "Your account can't do this (needs decision:read)")
   assert.equal(authFailureMessage(403, 'rollback', 'Separation of duties'), "Your account can't do this (needs decision:rollback). Server: Separation of duties")
+  assert.equal(authFailureMessage(401, 'plan'), 'Sign in to do this')
+  assert.equal(authFailureMessage(403, 'plan'), "Your account can't do this (needs decision:propose)")
+  assert.equal(authFailureMessage(403, 'workflows/run'), "Your account can't do this (needs run:enqueue)")
+  assert.equal(authFailureMessage(429, 'plan', undefined, 7), 'Too many requests; try again in 7 s')
+  assert.equal(authFailureMessage(429, 'action'), 'Too many requests; try again in a moment')
   for (const status of [200, 400, 404, 409, 500, 503]) assert.equal(authFailureMessage(status, 'execute'), null)
+})
+
+test('sole-operator prompt (A-3): the approve flow asks for a justification only when the server says the override is open', () => {
+  const conflict = { allowed: false, conflicts: ['The approver requested this decision.'], reasons: ['The approver requested this decision.', 'As the sole operator you may approve this, but only with a written justification of at least 20 characters.'], soleOperatorOverride: false }
+  const open = separationRefusal(conflict, 'entity-ana', 'entity-ana')
+  assert.deepEqual(open.soleOperatorOverride, { available: true, minJustificationLength: 20 })
+  assert.deepEqual(soleOperatorPrompt(403, open), { reasons: conflict.reasons, minJustificationLength: 20 })
+  // Someone else is the sole operator, or there is none: another human must approve.
+  assert.equal(separationRefusal(conflict, 'entity-ana', 'entity-bo').soleOperatorOverride.available, false)
+  assert.equal(separationRefusal(conflict, 'entity-ana', null).soleOperatorOverride.available, false)
+  assert.equal(soleOperatorPrompt(403, separationRefusal(conflict, 'entity-ana', null)), null)
+  // Any other refusal or status is not a prompt.
+  assert.equal(soleOperatorPrompt(401, open), null)
+  assert.equal(soleOperatorPrompt(403, { error: 'This credential is not permitted to perform this supervisor action.' }), null)
+  assert.equal(soleOperatorPrompt(403, null), null)
+  assert.equal(soleOperatorPrompt(403, 'Separation of duties'), null)
 })
 
 test('approve body: the approver can never come from the request body', () => {

@@ -2,13 +2,14 @@
  * Seed loader — pushes the seed dataset into Sanity via @sanity/client.
  *
  * Run with:
- *   SANITY_AUTH_TOKEN=... npm run seed
+ *   SANITY_WRITE_TOKEN=... npm run seed   (an Editor token; the legacy SANITY_AUTH_TOKEN also works)
  *
  * Token needs write scope on the project (Manage → API → Tokens).
  * Uses deterministic `_id` values so re-running overwrites cleanly.
  */
 
-import { createClient, type SanityClient } from '@sanity/client'
+import type { SanityClient } from '@sanity/client'
+import { requireStudioSanityClient } from '../lib/sanity-client.ts'
 import { seedOrder, seed } from './index'
 import { conditionToSanity, processToSanityFields } from '../../../packages/kernel/src/process-document.ts'
 import type {
@@ -275,25 +276,8 @@ async function pushSeed(client: SanityClient) {
   }
 }
 async function main() {
-  const projectId = process.env.NEXT_PUBLIC_SANITY_PROJECT_ID
-  const dataset = process.env.NEXT_PUBLIC_SANITY_DATASET || 'production'
-  const token = process.env.SANITY_AUTH_TOKEN
-  if (!projectId || projectId === 'd280bqjc') {
-    console.error('Set NEXT_PUBLIC_SANITY_PROJECT_ID to the dedicated Nuera Quicksilver Sanity project; legacy challenge writes are blocked.')
-    process.exit(1)
-  }
-  if (!token) {
-    console.error('SANITY_AUTH_TOKEN is required. Generate one in Manage → API → Tokens with write scope, then re-run.')
-    process.exit(1)
-  }
-
-  const client = createClient({
-    projectId,
-    dataset,
-    apiVersion: '2024-10-01',
-    token,
-    useCdn: false,
-  })
+  // Seeding writes: SANITY_WRITE_TOKEN (A-7); the legacy project is refused.
+  const { client, config: { projectId, dataset } } = requireStudioSanityClient('write')
 
   console.log(`Pushing seed to ${projectId}/${dataset}...`)
   await pushSeed(client)

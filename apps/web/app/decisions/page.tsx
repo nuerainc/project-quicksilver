@@ -21,22 +21,9 @@
  * log is, by definition, always changing.
  */
 
-import { getDedicatedSanityProjectId } from '@/lib/sanity-config'
-import { createClient } from '@sanity/client'
+import { getSanityClient } from '@/lib/sanity-client'
 
 export const dynamic = 'force-dynamic'
-
-function getSanityClient() {
-  return createClient({
-    projectId: getDedicatedSanityProjectId(),
-    dataset: process.env.NEXT_PUBLIC_SANITY_DATASET ?? 'production',
-    apiVersion: process.env.NEXT_PUBLIC_SANITY_API_VERSION ?? '2024-10-01',
-    useCdn: false,
-    // Read-only here, but the project's existing token is already scoped for
-    // this dataset and every other route in the app reuses it the same way.
-    token: process.env.SANITY_AUTH_TOKEN,
-  })
-}
 
 type PolicyCheckRow = {
   result: 'applies' | 'superseded' | 'conflicts' | 'inapplicable' | null
@@ -142,7 +129,7 @@ async function loadDecisions(): Promise<{ decisions: DecisionRow[] | null; error
     return { decisions: null, error: 'Sanity project ID not configured.' }
   }
   try {
-    const client = getSanityClient()
+    const client = getSanityClient('read')
     const decisions = await client.fetch<DecisionRow[]>(DECISIONS_QUERY)
     return { decisions, error: null }
   } catch (err) {

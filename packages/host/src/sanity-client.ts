@@ -1,12 +1,23 @@
 /**
- * The Sanity client the host's durable stores write through.
+ * The one place the host creates Sanity clients (threat model A-7).
  *
  * Stores depend on the small SanityStoreClient interface, not on
  * @sanity/client, so tests use in-memory fakes and never reach the network.
  * Every path to a client goes through assertAllowedSanityProject: the legacy
  * challenge project stays refused, here and in the stores themselves.
+ *
+ * Tokens: every Sanity path the host has today writes (the evaluation sink,
+ * the shadow, Genesis and task stores), so each uses `SANITY_WRITE_TOKEN`
+ * (an Editor token). A read-only path must ask for `'read'`, which uses
+ * `SANITY_READ_TOKEN` (a Viewer token). Either falls back to the legacy
+ * combined `SANITY_AUTH_TOKEN` with a one-time warning (see
+ * @quicksilver/kernel/sanity-tokens).
  */
 import { createHash } from 'node:crypto'
+
+import { createOnceWarner, resolveSanityToken, type SanityAccess } from '@quicksilver/kernel/sanity-tokens'
+
+const warnOnce = createOnceWarner((message) => console.warn(`[quicksilver-host] ${message}`))
 
 export const LEGACY_CHALLENGE_PROJECT_ID = 'd280bqjc'
 
@@ -26,25 +37,40 @@ export interface SanityEnvConfig {
   projectId: string
   dataset: string
   apiVersion: string
-  token: string
+  /** Absent only for a read of a public dataset (`SANITY_DATASET_PUBLIC=on`). */
+  token?: string
 }
 
 /**
- * Project, dataset and write token from the environment (the same variables
- * the evaluation sink uses). Returns undefined when Sanity is not configured;
- * throws for the legacy project. Never logs or returns anything but the config.
+ * Project, dataset and the token for `access` from the environment. Returns
+ * undefined when Sanity is not configured (no project, or no usable token);
+ * throws for the legacy project. Never logs or returns anything but the
+ * config; a fallback to the combined token is warned about once.
  */
-export function sanityConfigFromEnv(env: NodeJS.ProcessEnv = process.env): SanityEnvConfig | undefined {
+export function sanityConfigFromEnv(env: NodeJS.ProcessEnv = process.env, access: SanityAccess = 'write'): SanityEnvConfig | undefined {
   const projectId = env.NEXT_PUBLIC_SANITY_PROJECT_ID?.trim()
   assertAllowedSanityProject(projectId)
-  const token = env.SANITY_AUTH_TOKEN
-  if (!projectId || !token) return undefined
+  if (!projectId) return undefined
+  const choice = resolveSanityToken(access, env)
+  if (choice.source === 'none') return undefined
+  warnOnce(choice)
   return {
     projectId,
     dataset: env.NEXT_PUBLIC_SANITY_DATASET ?? 'production',
     apiVersion: env.NEXT_PUBLIC_SANITY_API_VERSION ?? '2024-10-01',
-    token,
+    ...(choice.token ? { token: choice.token } : {}),
   }
+}
+
+/**
+ * A raw @sanity/client for `access`, or undefined when Sanity is not
+ * configured. The only place in the host that calls `createClient`.
+ */
+export async function createSanityClient(access: SanityAccess, env: NodeJS.ProcessEnv = process.env, options: { perspective?: 'raw' | 'published' } = {}) {
+  const config = sanityConfigFromEnv(env, access)
+  if (!config) return undefined
+  const { createClient } = await import('@sanity/client')
+  return { config, client: createClient({ ...config, useCdn: false, ...(options.perspective ? { perspective: options.perspective } : {}) }) }
 }
 
 export type SanityDoc = { _id: string; _type: string; _rev?: string } & Record<string, unknown>
@@ -81,12 +107,11 @@ export function isSanityConflict(error: unknown): boolean {
   return e?.statusCode === 409 || e?.response?.statusCode === 409
 }
 
-/** Build a store client from the environment (undefined when Sanity is not configured). */
+/** Build a store client from the environment (undefined when Sanity is not configured). Stores write: `SANITY_WRITE_TOKEN`. */
 export async function createSanityStoreClient(env: NodeJS.ProcessEnv = process.env): Promise<SanityStoreClient | undefined> {
-  const config = sanityConfigFromEnv(env)
-  if (!config) return undefined
-  const { createClient } = await import('@sanity/client')
-  const client = createClient({ ...config, useCdn: false, perspective: 'raw' })
+  const created = await createSanityClient('write', env, { perspective: 'raw' })
+  if (!created) return undefined
+  const { config, client } = created
   return {
     projectId: config.projectId,
     fetch: <T>(query: string, params: Record<string, unknown>) => client.fetch<T>(query, params),

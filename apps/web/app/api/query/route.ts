@@ -9,9 +9,14 @@ import { NextResponse } from 'next/server'
 import { queryCompany } from '@quicksilver/agent'
 import { evaluateNqcRequest } from '@quicksilver/kernel'
 import { persistEvaluations } from '@/lib/evaluation-store'
-import { identifyRequester } from '@/lib/nqc-approval'
+import { guardWebRoute } from '@/lib/route-guard'
 
 export async function POST(req: Request) {
+  // A principal with decision:read before anything else (A-3), then the
+  // per-principal model-route limit (A-5).
+  const requester = guardWebRoute(req, 'query')
+  if (!requester.ok) return NextResponse.json(requester.body, { status: requester.status, headers: requester.headers })
+
   let body: unknown
   try {
     body = await req.json()
@@ -23,9 +28,6 @@ export async function POST(req: Request) {
   if (!question || typeof question !== 'string') {
     return NextResponse.json({ error: 'Missing required field: question' }, { status: 400 })
   }
-
-  const requester = identifyRequester(req)
-  if (!requester.ok) return NextResponse.json({ error: requester.reason }, { status: requester.status })
 
   try {
     const result = await queryCompany(question)
@@ -50,7 +52,7 @@ export async function POST(req: Request) {
         taskType: 'reasoning',
         modelId: result.modelId,
         subject: question,
-        requestedBy: requester.requestedBy,
+        requestedBy: requester.principalId,
         evaluation: governance,
       },
     ])

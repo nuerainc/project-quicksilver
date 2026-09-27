@@ -25,7 +25,7 @@ import { existsSync, mkdirSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { spawnSync } from 'node:child_process'
-import { createClient } from '@sanity/client'
+import { requireStudioSanityClient, studioSanityConfig } from '../lib/sanity-client.ts'
 import { workflows } from '../seed/workflows'
 import { validateProcessDefinition } from '../../../packages/kernel/src/process.ts'
 
@@ -66,8 +66,8 @@ function fail(msg: string): never {
   console.error(`\n✗ ${msg}\nNothing was deleted.`)
   process.exit(1)
 }
-function run(cmd: string, cmdArgs: string[], cwd: string): number {
-  const r = spawnSync(cmd, cmdArgs, { cwd, env: process.env, stdio: 'inherit', shell: true })
+function run(cmd: string, cmdArgs: string[], cwd: string, env: NodeJS.ProcessEnv = process.env): number {
+  const r = spawnSync(cmd, cmdArgs, { cwd, env, stdio: 'inherit', shell: true })
   return r.status ?? 1
 }
 
@@ -77,14 +77,17 @@ async function main() {
 
   // 1. Preflight
   step(1, 'Preflight')
-  const token = process.env.SANITY_AUTH_TOKEN
-  if (!token) fail('SANITY_AUTH_TOKEN is required (write scope) in the root .env.')
+  // Deletes documents: SANITY_WRITE_TOKEN (A-7). The dataset export (a read) uses SANITY_READ_TOKEN.
+  const writeConfig = studioSanityConfig('write')
+  if (!writeConfig.ok) fail(writeConfig.error)
+  const readConfig = studioSanityConfig('read')
+  if (!readConfig.ok) fail(readConfig.error)
   for (const w of workflows) {
     const v = validateProcessDefinition({ id: w._id, name: w.name, version: w.version, initialState: w.initialState, states: w.states, transitions: w.transitions })
     if (!v.valid) fail(`${w.name} v${w.version} is invalid: ${v.errors.join(' ')}`)
     console.log(`✓ ${w.name} v${w.version} is valid`)
   }
-  const client = createClient({ projectId, dataset, apiVersion: '2024-10-01', token, useCdn: false, perspective: 'raw' })
+  const { client } = requireStudioSanityClient('write', { perspective: 'raw' })
 
   // 2. Backup
   step(2, 'Backup')
@@ -96,7 +99,9 @@ async function main() {
     const stamp = new Date().toISOString().replace(/[:.]/g, '-')
     const file = join('backups', `quicksilver-${dataset}-${stamp}.tar.gz`)
     console.log(`Exporting ${dataset} → apps/studio/${file.replace(/\\/g, '/')}`)
-    const code = run('npx', ['sanity', 'dataset', 'export', dataset, `"${file}"`], studioDir)
+    // The Sanity CLI reads SANITY_AUTH_TOKEN: hand it the read token for the export.
+    const exportEnv = { ...process.env, ...(readConfig.config.token ? { SANITY_AUTH_TOKEN: readConfig.config.token } : {}) }
+    const code = run('npx', ['sanity', 'dataset', 'export', dataset, `"${file}"`], studioDir, exportEnv)
     if (code !== 0) fail(`Backup failed (exit ${code}). If the Sanity CLI isn't logged in, run "npx sanity login" in apps/studio, or re-run with --skip-backup at your own risk.`)
     console.log('✓ Backup written')
   }

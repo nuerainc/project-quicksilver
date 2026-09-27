@@ -15,7 +15,7 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { createClient } from '@sanity/client'
+import { requireStudioSanityClient } from '../lib/sanity-client.ts'
 import { workflows } from './workflows'
 import { processToSanityFields } from '../../../packages/kernel/src/process-document.ts'
 import { validateProcessDefinition } from '../../../packages/kernel/src/process.ts'
@@ -46,23 +46,8 @@ for (const envPath of findEnvFiles(__dirname)) {
 }
 
 async function main() {
-  const projectId = process.env.NEXT_PUBLIC_SANITY_PROJECT_ID
-  if (!projectId || projectId === 'd280bqjc') {
-    console.error('Set NEXT_PUBLIC_SANITY_PROJECT_ID to the dedicated Nuera Quicksilver Sanity project; legacy challenge writes are blocked.')
-    process.exit(1)
-  }
-  const token = process.env.SANITY_AUTH_TOKEN
-  if (!token) {
-    console.error('SANITY_AUTH_TOKEN is required (write scope). Set it in the root .env.')
-    process.exit(1)
-  }
-  const client = createClient({
-    projectId,
-    dataset: process.env.NEXT_PUBLIC_SANITY_DATASET || 'production',
-    apiVersion: '2024-10-01',
-    token,
-    useCdn: false,
-  })
+  // Writes process definitions: SANITY_WRITE_TOKEN (A-7); the legacy project is refused.
+  const { client } = requireStudioSanityClient('write')
 
   const tx = client.transaction()
   for (const w of workflows) {

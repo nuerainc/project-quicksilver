@@ -8,7 +8,7 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { createClient } from '@sanity/client'
+import { requireStudioSanityClient } from '../lib/sanity-client.ts'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
@@ -37,16 +37,8 @@ for (const envPath of findEnvFiles(__dirname)) {
 }
 
 async function main() {
-  const projectId = process.env.NEXT_PUBLIC_SANITY_PROJECT_ID
-  const dataset = process.env.NEXT_PUBLIC_SANITY_DATASET ?? 'production'
-  const token = process.env.SANITY_AUTH_TOKEN
-
-  if (!projectId || !token) {
-    console.error('NEXT_PUBLIC_SANITY_PROJECT_ID and SANITY_AUTH_TOKEN required.')
-    process.exit(1)
-  }
-
-  const client = createClient({ projectId, dataset, apiVersion: '2024-10-01', token, useCdn: false })
+  // Read-only counts: SANITY_READ_TOKEN (A-7); the legacy project is refused.
+  const { client, config: { projectId, dataset } } = requireStudioSanityClient('read')
 
   console.log(`\nDataset: ${projectId}/${dataset}\n`)
 

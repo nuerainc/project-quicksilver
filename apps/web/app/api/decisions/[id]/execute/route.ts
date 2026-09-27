@@ -30,9 +30,9 @@
  */
 
 import { NextResponse } from 'next/server'
-import { getDedicatedSanityProjectId } from '@/lib/sanity-config'
-import { createClient } from '@sanity/client'
+import { getSanityClient } from '@/lib/sanity-client'
 import { authorizeDecisionRoute, currentPolicySnapshotVersion, decisionActionFingerprint } from '@/lib/nqc-approval'
+import { takeWebRateLimit } from '@/lib/route-guard'
 import { z } from 'zod'
 import { authorizeTransition } from '@quicksilver/kernel'
 import { developmentFlagEnabled } from '@quicksilver/kernel/production-flags'
@@ -49,16 +49,6 @@ import {
 } from '@/lib/process-engine'
 
 export const runtime = 'nodejs'
-
-function getSanityClient() {
-  return createClient({
-    projectId: getDedicatedSanityProjectId(),
-    dataset: process.env.NEXT_PUBLIC_SANITY_DATASET ?? 'production',
-    apiVersion: process.env.NEXT_PUBLIC_SANITY_API_VERSION ?? '2024-10-01',
-    useCdn: false,
-    token: process.env.SANITY_AUTH_TOKEN,
-  })
-}
 
 // Seeded RNG — same decision id always produces the same outcome.
 function seedFromId(id: string): number {
@@ -156,6 +146,8 @@ export async function POST(
   // may execute, and that principal is recorded as the executor.
   const executor = authorizeDecisionRoute(req, 'execute')
   if (!executor.ok) return NextResponse.json({ error: executor.reason }, { status: executor.status })
+  const limited = takeWebRateLimit('write', executor.principalId)
+  if (limited) return NextResponse.json(limited.body, { status: limited.status, headers: limited.headers })
 
   let body: unknown = {}
   try {
@@ -177,7 +169,7 @@ export async function POST(
   }
 
   try {
-    const client = getSanityClient()
+    const client = getSanityClient('write')
 
     const decision = await client.fetch<{
       _id: string

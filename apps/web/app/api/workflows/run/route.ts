@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { executeWorkflowGraph, validateWorkflowGraph, type NqcEvaluationResponse, type WorkflowGraph } from '@quicksilver/kernel'
 import { persistEvaluations } from '@/lib/evaluation-store'
-import { identifyRequester } from '@/lib/nqc-approval'
+import { guardWebRoute } from '@/lib/route-guard'
 import { isProductionEnv } from '@quicksilver/kernel/production-flags'
 import { executeGovernedAgent, isLlmConfigured, queryQuicksilverAgent, type GovernedNueraAgentResult, type QueryAgentOutput } from '@quicksilver/agent'
 
@@ -15,6 +15,11 @@ const MAX_QUERY_AGENT_STEPS = 3
 
 /** Live workflow path currently permits read-only query agents only. */
 export async function POST(request: Request) {
+  // A principal with run:enqueue before anything else (A-3), then the
+  // per-principal model-route limit (A-5).
+  const requester = guardWebRoute(request, 'workflows/run')
+  if (!requester.ok) return NextResponse.json(requester.body, { status: requester.status, headers: requester.headers })
+
   // Off unless switched on, and never in production (A-10).
   if (process.env.QUICKSILVER_WORKFLOW_LIVE_RUNS !== 'on' || isProductionEnv(process.env)) {
     return NextResponse.json({ error: 'Live workflow runs are disabled. Enable them only in a trusted development environment.' }, { status: 503 })
@@ -46,9 +51,6 @@ export async function POST(request: Request) {
   if (unsupportedAgents.length) return NextResponse.json({ error: 'Live runs currently support read-only query agent steps only.', nodes: unsupportedAgents.map((node) => node.id) }, { status: 422 })
   const highImpactAgents = agentNodes.filter((node) => node.config?.impact === 'high' || node.config?.impact === 'critical')
   if (highImpactAgents.length) return NextResponse.json({ error: 'Live read-only query steps cannot be marked high or critical impact.', nodes: highImpactAgents.map((node) => node.id) }, { status: 422 })
-
-  const requester = identifyRequester(request)
-  if (!requester.ok) return NextResponse.json({ error: requester.reason }, { status: requester.status })
 
   const agentResults = new Map<string, GovernedNueraAgentResult<QueryAgentOutput>>()
   const evaluations: Record<string, NqcEvaluationResponse> = {}
@@ -93,7 +95,7 @@ export async function POST(request: Request) {
       taskType: 'reasoning',
       modelId: agentResults.get(nodeId)?.modelId ?? null,
       subject: parsed.data.input,
-      requestedBy: requester.requestedBy,
+      requestedBy: requester.principalId,
       evaluation,
       runId,
       nodeId,

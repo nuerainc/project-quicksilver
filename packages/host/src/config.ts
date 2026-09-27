@@ -51,6 +51,8 @@ export interface WebhookConfig {
   priority?: number
   enabled?: boolean
   maxBodyBytes?: number
+  /** This endpoint's delivery limit (default `http.rateLimits.webhook`), counted before the signature check. */
+  rateLimit?: RateLimitSetting
 }
 
 export interface WebhookTaskConfig {
@@ -77,9 +79,34 @@ export interface ServicePrincipalConfig {
   roles: string[]
 }
 
+/** A token bucket: `burst` requests at once, `perMinute` sustained. */
+export interface RateLimitSetting {
+  burst: number
+  perMinute: number
+}
+
+/**
+ * Per-principal limits on the host's routes (threat model A-5). Which class a
+ * route belongs to is in the route table (routes.ts). In memory, per process.
+ */
+export interface HostRateLimits {
+  /** Routes that change state, per principal. */
+  write: RateLimitSetting
+  /** Routes that call a model provider or enqueue a run that does, per principal. */
+  model: RateLimitSetting
+  /** Webhook deliveries, per endpoint (override one with `webhooks[].rateLimit`). */
+  webhook: RateLimitSetting
+}
+
+export const DEFAULT_HOST_RATE_LIMITS: Readonly<HostRateLimits> = Object.freeze({
+  write: Object.freeze({ burst: 60, perMinute: 120 }),
+  model: Object.freeze({ burst: 10, perMinute: 20 }),
+  webhook: Object.freeze({ burst: 60, perMinute: 120 }),
+})
+
 export interface HostConfig {
   tenantId: string
-  http: { host: string; port: number; /** Serve /metrics without a token (use only on a private network). */ metricsPublic: boolean; maxBodyBytes: number }
+  http: { host: string; port: number; /** Serve /metrics without a token (use only on a private network). */ metricsPublic: boolean; maxBodyBytes: number; rateLimits: HostRateLimits }
   store: StoreConfig
   vault?: { path: string; keyEnv: string }
   worker: { id: string; concurrency: number; pollIntervalMs: number }
@@ -171,7 +198,13 @@ export function parseHostConfig(input: unknown): HostConfig {
     port: raw.http?.port ?? 8787,
     metricsPublic: raw.http?.metricsPublic === true,
     maxBodyBytes: raw.http?.maxBodyBytes ?? 262_144,
+    rateLimits: {
+      write: rateLimitSetting(raw.http?.rateLimits?.write, DEFAULT_HOST_RATE_LIMITS.write, 'http.rateLimits.write', p),
+      model: rateLimitSetting(raw.http?.rateLimits?.model, DEFAULT_HOST_RATE_LIMITS.model, 'http.rateLimits.model', p),
+      webhook: rateLimitSetting(raw.http?.rateLimits?.webhook, DEFAULT_HOST_RATE_LIMITS.webhook, 'http.rateLimits.webhook', p),
+    },
   }
+  for (const k of Object.keys(raw.http?.rateLimits ?? {})) if (!['write', 'model', 'webhook'].includes(k)) p.push(`http.rateLimits.${k} is not a known limit (write, model, webhook).`)
   if (!Number.isInteger(http.port) || http.port < 0 || http.port > 65_535) p.push('http.port must be 0–65535.')
   if (!Number.isInteger(http.maxBodyBytes) || http.maxBodyBytes < 1_024 || http.maxBodyBytes > 4 * 1_048_576) p.push('http.maxBodyBytes must be 1 KiB–4 MiB.')
 
@@ -272,7 +305,8 @@ export function parseHostConfig(input: unknown): HostConfig {
       }
     } else if (typeof wh.workflow !== 'string' || (!(wh.workflow in workflows) && !(raw.workflows ?? {})[wh.workflow])) p.push(`${where}: workflow "${wh.workflow}" is not defined.`)
     triggerService(wh.principal, where)
-    webhooks.push({ ...wh })
+    const whRate = wh.rateLimit === undefined ? undefined : rateLimitSetting(wh.rateLimit, DEFAULT_HOST_RATE_LIMITS.webhook, `${where}: rateLimit`, p)
+    webhooks.push({ ...wh, ...(whRate ? { rateLimit: whRate } : {}) })
   }
 
   const rateLimit = { burst: raw.tasks?.rateLimit?.burst ?? 10, perMinute: raw.tasks?.rateLimit?.perMinute ?? 30 }
@@ -293,6 +327,17 @@ export function parseHostConfig(input: unknown): HostConfig {
 
   if (p.length) throw new ConfigError(p)
   return { tenantId, http, store, ...(vault ? { vault } : {}), worker, queue, execution, workflows, services, schedules, webhooks, tasks, log: { level } }
+}
+
+/** A `{ burst, perMinute }` setting with defaults filled; problems are pushed onto `p`. */
+function rateLimitSetting(raw: unknown, fallback: RateLimitSetting, where: string, p: string[]): RateLimitSetting {
+  if (raw === undefined) return { ...fallback }
+  const r = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>
+  const setting = { burst: (r.burst ?? fallback.burst) as number, perMinute: (r.perMinute ?? fallback.perMinute) as number }
+  if (!raw || typeof raw !== 'object') p.push(`${where} must be { burst, perMinute }.`)
+  if (!Number.isInteger(setting.burst) || setting.burst < 1 || setting.burst > 1_000) p.push(`${where}.burst must be 1–1000.`)
+  if (typeof setting.perMinute !== 'number' || !(setting.perMinute > 0) || setting.perMinute > 6_000) p.push(`${where}.perMinute must be above 0 and at most 6000.`)
+  return setting
 }
 
 /** The M2 execution policy for a stored workflow graph. Also applied to API-submitted runs. */

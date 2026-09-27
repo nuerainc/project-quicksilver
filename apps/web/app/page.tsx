@@ -7,9 +7,22 @@ import {
   consoleHeaders,
   readConsoleToken,
   saveConsoleToken,
+  soleOperatorPrompt,
   type ConsoleDecisionRoute,
   type ConsoleWhoami,
+  type SoleOperatorPrompt,
 } from '@/lib/console-auth'
+
+/** A refused console call, with the server's status and body (for the sole-operator prompt). */
+class ConsoleCallError extends Error {
+  readonly status: number
+  readonly body: unknown
+  constructor(message: string, status: number, body: unknown) {
+    super(message)
+    this.status = status
+    this.body = body
+  }
+}
 
 type DecisionDecision = {
   authorized: boolean
@@ -124,8 +137,11 @@ export default function HomePage() {
   const [, startTransition] = useTransition()
 
   // Console sign-in: the token lives in sessionStorage (this tab only) and in
-  // memory; it is sent only to /api/decisions/* and /api/whoami.
+  // memory; it is sent only to this app's own API routes (mayCarryConsoleToken).
   const [token, setToken] = useState<string | null>(null)
+  // An approval separation of duties refused, where the sole-operator override
+  // is open to the signed-in person: ask for the written justification.
+  const [override, setOverride] = useState<{ decisionId: string; prompt: SoleOperatorPrompt } | null>(null)
   const [who, setWho] = useState<ConsoleWhoami | null>(null)
   const [authNote, setAuthNote] = useState<string | null>(null)
 
@@ -184,14 +200,18 @@ export default function HomePage() {
     setStatuses({})
     setObservations({})
     setProcesses({})
+    setOverride(null)
     try {
+      // Planning needs a principal with decision:propose (A-3); the server
+      // records that principal as the requester.
+      if (!token) throw new Error(authFailureMessage(401, 'plan')!)
       const res = await fetch('/api/plan', {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        headers: consoleHeaders('/api/plan', token, { 'content-type': 'application/json' }),
         body: JSON.stringify({ objective }),
       })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error ?? data.detail ?? 'Plan failed')
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(authFailureMessage(res.status, 'plan', data.error, data.retryAfterSeconds) ?? data.error ?? data.detail ?? 'Plan failed')
       setPlan(data)
       const next: Record<string, DecisionStatus> = {}
       const procs: Record<string, ProcessInfo | undefined> = {}
@@ -234,7 +254,7 @@ export default function HomePage() {
       const serverMessage = typeof data?.error === 'string'
         ? [data.error, ...(Array.isArray(data.reasons) ? data.reasons : [])].join(' ')
         : undefined
-      throw new Error(authFailureMessage(res.status, route, serverMessage) ?? data.error ?? data.detail ?? `${route} failed`)
+      throw new ConsoleCallError(authFailureMessage(res.status, route, serverMessage, data?.retryAfterSeconds) ?? data.error ?? data.detail ?? `${route} failed`, res.status, data)
     }
     return data as T
   }
@@ -242,10 +262,16 @@ export default function HomePage() {
   async function handleAct(
     decisionDocId: string,
     action: 'approve' | 'reject' | 'request-evidence',
+    justification?: string,
   ) {
     setActingId(decisionDocId)
     try {
-      const data = await callDecisionRoute<{ status?: string; process?: ProcessInfo }>(decisionDocId, 'action', { action })
+      const data = await callDecisionRoute<{ status?: string; process?: ProcessInfo }>(
+        decisionDocId,
+        'action',
+        justification ? { action, comment: justification } : { action },
+      )
+      setOverride((o) => (o?.decisionId === decisionDocId ? null : o))
       startTransition(() => {
         setStatuses((s) => ({
           ...s,
@@ -256,7 +282,15 @@ export default function HomePage() {
         if (data.process) setProcesses((p) => ({ ...p, [decisionDocId]: data.process }))
       })
     } catch (err) {
-      setError((err as Error).message)
+      // Separation of duties with the sole-operator override open: ask for a
+      // written justification instead of stopping here.
+      const prompt = action === 'approve' && err instanceof ConsoleCallError ? soleOperatorPrompt(err.status, err.body) : null
+      if (prompt) {
+        setOverride({ decisionId: decisionDocId, prompt })
+        setError(null)
+      } else {
+        setError((err as Error).message)
+      }
     } finally {
       setActingId(null)
     }
@@ -398,6 +432,16 @@ export default function HomePage() {
         )}
       </section>
 
+      {override && (
+        <SoleOperatorJustification
+          decisionId={override.decisionId}
+          prompt={override.prompt}
+          busy={actingId === override.decisionId}
+          onSubmit={(text) => handleAct(override.decisionId, 'approve', text)}
+          onCancel={() => setOverride(null)}
+        />
+      )}
+
       {plan && (
         <PlanAndDecisions
           plan={plan}
@@ -423,8 +467,9 @@ export default function HomePage() {
 
 /**
  * Sign-in for the decision buttons. The pasted token is kept in this tab's
- * sessionStorage only and sent only to this app's /api/decisions/* routes and
- * /api/whoami. The input is a password field and is cleared after sign-in.
+ * sessionStorage only and sent only to this app's own API routes (the decision
+ * routes, whoami, plan, query and the workflow routes; see mayCarryConsoleToken).
+ * The input is a password field and is cleared after sign-in.
  */
 function ConsoleSignIn({
   token, who, note, onSignIn, onSignOut,
@@ -481,11 +526,69 @@ function ConsoleSignIn({
             Sign in
           </button>
           <p className="w-full font-mono text-[11px] text-quicksilver-accent">
-            Needed for approve, execute, observe, resume and rollback. Kept in this tab only (cleared when the tab closes).
+            Needed to plan, approve, execute, observe, resume and roll back. Kept in this tab only (cleared when the tab closes).
           </p>
         </form>
       )}
       {note && <p className="mt-2 font-mono text-xs text-yellow-300">{note}</p>}
+    </section>
+  )
+}
+
+/**
+ * Separation of duties refused an approval because the signed-in person
+ * requested (or proposed) the decision, and they are the configured sole
+ * operator: they may approve anyway with a written justification, which is
+ * stored on the approval record with `soleOperatorOverride: true`.
+ */
+function SoleOperatorJustification({
+  decisionId, prompt, busy, onSubmit, onCancel,
+}: {
+  decisionId: string
+  prompt: SoleOperatorPrompt
+  busy: boolean
+  onSubmit: (justification: string) => void
+  onCancel: () => void
+}) {
+  const [text, setText] = useState('')
+  const long = text.trim().length >= prompt.minJustificationLength
+  return (
+    <section aria-label="Sole-operator justification" className="mb-8 rounded border border-yellow-500/60 bg-quicksilver-panel p-4 font-mono text-xs">
+      <h2 className="mb-2 uppercase tracking-widest text-yellow-300">Separation of duties: justification needed</h2>
+      <p className="mb-2 text-quicksilver-accent">
+        You requested decision <span className="text-quicksilver-signal">{decisionId}</span>, so another person would normally approve it.
+        As the sole operator you may approve it yourself with a written justification of at least {prompt.minJustificationLength} characters.
+        It is kept on the approval record, marked as an override.
+      </p>
+      {prompt.reasons.length > 0 && (
+        <ul className="mb-2 list-disc pl-5 text-quicksilver-accent">
+          {prompt.reasons.map((r) => <li key={r}>{r}</li>)}
+        </ul>
+      )}
+      <label htmlFor="sole-operator-justification" className="mb-1 block uppercase tracking-widest text-quicksilver-accent">Justification</label>
+      <textarea
+        id="sole-operator-justification"
+        rows={3}
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        className="w-full rounded border border-quicksilver-border bg-quicksilver-bg p-2 text-quicksilver-signal focus:border-quicksilver-quicksilver focus:outline-none"
+      />
+      <p className="mt-1 text-quicksilver-accent">{text.trim().length} / {prompt.minJustificationLength} characters minimum</p>
+      <div className="mt-2 flex gap-2">
+        <button
+          onClick={() => onSubmit(text.trim())}
+          disabled={!long || busy}
+          className="rounded border border-quicksilver-quicksilver bg-quicksilver-quicksilver/5 px-3 py-1.5 uppercase tracking-widest text-quicksilver-signal transition hover:bg-quicksilver-quicksilver/15 disabled:opacity-40"
+        >
+          {busy ? 'Approving…' : 'Approve with justification'}
+        </button>
+        <button
+          onClick={onCancel}
+          className="rounded border border-quicksilver-border px-3 py-1.5 uppercase tracking-widest text-quicksilver-accent transition hover:text-quicksilver-signal"
+        >
+          Cancel
+        </button>
+      </div>
     </section>
   )
 }

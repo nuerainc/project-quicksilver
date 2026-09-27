@@ -14,7 +14,7 @@
  *   QUICKSILVER_VAULT_KEY     vault master key (name configurable in the config)
  *   DATABASE_URL              Postgres URL when store.kind is "postgres" (name configurable)
  *   Model provider and SANITY_CONTEXT_* variables enable the read-only query agent.
- *   NEXT_PUBLIC_SANITY_PROJECT_ID + SANITY_AUTH_TOKEN enable durable evaluation records.
+ *   NEXT_PUBLIC_SANITY_PROJECT_ID + SANITY_WRITE_TOKEN (legacy: SANITY_AUTH_TOKEN) enable durable evaluation records.
  *   QUICKSILVER_SHADOW_STORE=sanity keeps shadow recommendations and Aura's verdict
  *     learner in Sanity (shadowRecommendation, auraVerdictLearner) instead of files.
  *   The task interface (M7 part 4) is always on: /api/tasks, task clients from
@@ -36,7 +36,7 @@ import { ConfigError, assertNoDevelopmentFlagsInProduction, loadHostConfig, type
 import type { AgentRunner, EvaluationSink } from './handlers.ts'
 import { QuicksilverHost } from './host.ts'
 import { Logger, parseLogLevel } from './log.ts'
-import { createSanityStoreClient, sanityConfigFromEnv } from './sanity-client.ts'
+import { createSanityClient, createSanityStoreClient } from './sanity-client.ts'
 import { FileShadowStore, MemoryShadowStore, type ShadowApiDeps, type ShadowStore } from './shadow-api.ts'
 import { SanityShadowStore } from './shadow-store-sanity.ts'
 import { FileGenesisStore, MemoryGenesisStore, type GenesisApiDeps } from './genesis-api.ts'
@@ -135,7 +135,7 @@ async function buildIntent(config: HostConfig, log: Logger) {
 async function buildShadowStore(config: HostConfig, log: Logger): Promise<ShadowStore> {
   if ((process.env.QUICKSILVER_SHADOW_STORE ?? '').trim() === 'sanity') {
     const client = await createSanityStoreClient()
-    if (!client) throw new Error('QUICKSILVER_SHADOW_STORE=sanity needs NEXT_PUBLIC_SANITY_PROJECT_ID and SANITY_AUTH_TOKEN.')
+    if (!client) throw new Error('QUICKSILVER_SHADOW_STORE=sanity needs NEXT_PUBLIC_SANITY_PROJECT_ID and SANITY_WRITE_TOKEN (or the legacy SANITY_AUTH_TOKEN).')
     log.info('shadow records are kept in Sanity')
     return new SanityShadowStore(client)
   }
@@ -231,13 +231,13 @@ async function buildAgentRunner(log: Logger): Promise<AgentRunner | undefined> {
 
 async function buildEvaluationSink(log: Logger): Promise<EvaluationSink | undefined> {
   // Throws for the legacy challenge project.
-  const sanity = sanityConfigFromEnv()
+  // Evaluation records are writes: SANITY_WRITE_TOKEN (A-7).
+  const sanity = await createSanityClient('write')
   if (!sanity) {
     log.warn('Sanity is not configured; step evaluations are logged but not stored as evaluationRecord documents')
     return undefined
   }
-  const { createClient } = await import('@sanity/client')
-  const client = createClient({ ...sanity, useCdn: false })
+  const { client } = sanity
   return async (entries) => {
     const now = new Date().toISOString()
     const docs = entries.map((e) => buildEvaluationRecord({

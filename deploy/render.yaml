@@ -41,6 +41,10 @@ services:
         sync: false
       - key: NEXT_PUBLIC_SANITY_PROJECT_ID
         sync: false
+      # Editor token for the host's Sanity writes (threat model A-7).
+      - key: SANITY_WRITE_TOKEN
+        sync: false
+      # Legacy combined token: fallback only. Remove once SANITY_WRITE_TOKEN is set.
       - key: SANITY_AUTH_TOKEN
         sync: false
       - key: AZURE_API_KEY
