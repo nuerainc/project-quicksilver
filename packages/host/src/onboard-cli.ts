@@ -69,6 +69,7 @@ import { availableTransitions, nextAutomaticTransition, type Facts } from '@quic
 import { validatePlaybook, type PlaybookDefinition } from '@quicksilver/kernel/playbooks'
 import { fileRankerStore } from './ranker-store.ts'
 import { judge, recommend, recordOutcome, shadowFacts, shadowReport, type Outcome, type ShadowLog, type Verdict } from '@quicksilver/kernel/playbooks/shadow'
+import { labConnectorPatterns, readLabBoundaries } from './lab-boundaries.ts'
 
 const root = process.env.INIT_CWD ?? process.cwd()
 const dir = resolve(root, process.env.QUICKSILVER_INTENT_DIR ?? 'data/intent')
@@ -140,7 +141,7 @@ switch (cmd) {
     if (!id || !file) fail('Usage: connect <intentId> <ledger.csv>')
     const graph = await graphOrFail(id)
     const text = await readFile(resolve(root, file), 'utf8')
-    const reading = readCsvLedger(text, { source: file.split(/[\\/]/).at(-1)! })
+    const reading = readCsvLedger(text, { source: file.split(/[\\/]/).at(-1)!, blockedPatterns: labConnectorPatterns(readLabBoundaries(root)) })
     for (const w of reading.warnings) console.log(`  ! ${w}`)
     const result = observeInto(graph, reading)
     await graphs.put(result.graph)

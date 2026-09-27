@@ -46,11 +46,15 @@ test('debit/credit exports work too, and unreadable rows are reported, not guess
   assert.match(readCsvLedger('foo,bar\n1,2\n', { source: 'x.csv' }).warnings[0]!, /Could not find/)
 })
 
-test('AMP boundary: patent-looking sources are refused', () => {
-  for (const s of ['AMP-ledger.csv', 'patent costs.csv', 'PPA Rev 4.2 budget.csv', 'provisional-filing.csv']) {
+test('patent boundary: patent-looking sources are refused, and a deployment can add patterns', () => {
+  for (const s of ['patent costs.csv', 'Patent-ledger.csv', 'provisional-filing.csv']) {
     assert.throws(() => readCsvLedger('Date,Amount\n2026-01-01,1\n', { source: s }), BlockedSourceError, s)
   }
   assert.doesNotThrow(() => readCsvLedger('Date,Amount\n2026-01-01,1\n', { source: 'sample.csv' }))
+  const extra = [/\bharbor\b/i]
+  assert.throws(() => readCsvLedger('Date,Amount\n2026-01-01,1\n', { source: 'harbor-budget.csv', blockedPatterns: extra }), BlockedSourceError)
+  assert.throws(() => readCsvLedger('Date,Amount\n2026-01-01,1\n', { source: 'patent.csv', blockedPatterns: extra }), BlockedSourceError, 'extra patterns never replace the built-ins')
+  assert.doesNotThrow(() => readCsvLedger('Date,Amount\n2026-01-01,1\n', { source: 'harbor-budget.csv' }))
 })
 
 test('observations enter the graph as OBSERVED, through the governed updater, without touching stated values', async () => {

@@ -22,6 +22,7 @@ import { DEFAULT_HAND_OVER } from '@quicksilver/kernel/playbooks/shadow'
 import type { HostConfig } from './config.ts'
 import { departmentStatus } from './operate-store.ts'
 import { DEFAULT_TASK_BOUNDARIES, mergeBoundaries, type TaskBoundaryConfig } from './task-boundaries.ts'
+import { readLabBoundaries } from './lab-boundaries.ts'
 import { FileTaskClientPersistence, MemoryTaskClientPersistence, TaskClientRegistry } from './task-clients.ts'
 import { FileTaskStore, MemoryTaskStore, validateCatalog, type TaskCatalog, type TaskStore } from './tasks.ts'
 
@@ -70,9 +71,13 @@ export function taskSetup(config: HostConfig, options: { baseDir: string; env?: 
     usedPath = catalogPath
   } else notes.push(`No task catalog at ${catalogPath}: every task goes to a human for triage.`)
 
+  // Built-in generic rules, then the lab's own (deploy/boundaries/lab.json),
+  // then any file named in the host config: each can only add.
+  const lab = readLabBoundaries(options.baseDir)
+  const withLab = lab ? mergeBoundaries(DEFAULT_TASK_BOUNDARIES, lab) : DEFAULT_TASK_BOUNDARIES
   const boundaries = config.tasks.boundaries
-    ? mergeBoundaries(DEFAULT_TASK_BOUNDARIES, JSON.parse(readFileSync(config.tasks.boundaries, 'utf8')) as Partial<TaskBoundaryConfig>)
-    : DEFAULT_TASK_BOUNDARIES
+    ? mergeBoundaries(withLab, JSON.parse(readFileSync(config.tasks.boundaries, 'utf8')) as Partial<TaskBoundaryConfig>)
+    : withLab
 
   const companyId = env.QUICKSILVER_COMPANY_ID?.trim()
   const intentDir = dataDir ? join(dataDir, 'intent') : undefined

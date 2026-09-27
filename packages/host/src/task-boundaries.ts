@@ -5,18 +5,21 @@
  * it came through. They only refuse; they never allow anything the kernel
  * would refuse.
  *
- * - Restricted material: text or inputs that look like AMP patent material are
- *   refused, with the same patterns the Onboard CSV connector uses
- *   (`BLOCKED_SOURCE_PATTERNS` in @quicksilver/aura), until the provisional
- *   application is filed. A config may add patterns; it can never remove the
- *   connector's.
+ * - Restricted material: text or inputs that look like restricted patent
+ *   material are refused, with the same patterns the Onboard CSV connector
+ *   uses (`BLOCKED_SOURCE_PATTERNS` in @quicksilver/aura), until the filing is
+ *   public. A config may add patterns; it can never remove the connector's.
  * - Frozen projects: a frozen project is read-only. A task whose capability
  *   belongs to a frozen project and is not one of its read-only capabilities is
  *   refused, and so is a task whose text or inputs name the project together
  *   with a word that asks for a change.
  *
- * To change a boundary, change the data (DEFAULT_TASK_BOUNDARIES, or a
- * boundaries file passed to the host), not the code.
+ * The built-in rules are generic. A deployment's own rules (its restricted
+ * projects, its frozen projects) live in data: the lab boundaries file
+ * (`deploy/boundaries/lab.json`, read by lab-boundaries.ts) and any
+ * boundaries file named in the host config. Both are merged over these
+ * defaults and can only add. To change a boundary, change the data, not the
+ * code.
  */
 import { BLOCKED_SOURCE_PATTERNS } from '@quicksilver/aura'
 
@@ -48,20 +51,12 @@ export interface TaskBoundaryConfig {
 export const DEFAULT_TASK_BOUNDARIES: TaskBoundaryConfig = Object.freeze({
   restrictedMaterial: [
     {
-      id: 'amp-patent-material',
+      id: 'restricted-patent-material',
       patterns: BLOCKED_SOURCE_PATTERNS.map((p) => p.source),
-      reason: 'This looks like AMP patent material. It stays out of Quicksilver until the provisional application is filed.',
+      reason: 'This looks like restricted patent material. It stays out of Quicksilver until the filing is public.',
     },
   ],
-  frozenProjects: [
-    {
-      id: 'forkling',
-      names: ['forkling'],
-      capabilityPrefixes: ['forkling.', 'forkling:'],
-      readOnlyCapabilities: ['forkling.read'],
-      reason: 'Forkling is frozen after deployment and read-only. No task may change it.',
-    },
-  ],
+  frozenProjects: [],
   writeWords: [
     'write', 'rewrite', 'update', 'change', 'edit', 'modify', 'delete', 'remove', 'deploy', 'redeploy', 'release',
     'push', 'commit', 'merge', 'publish', 'rename', 'migrate', 'patch', 'fix', 'refactor', 'add', 'create',

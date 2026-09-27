@@ -23,7 +23,7 @@ import type { AgentRunner } from './handlers.ts'
 import { QuicksilverHost } from './host.ts'
 import { Logger } from './log.ts'
 import { MemoryShadowStore } from './shadow-api.ts'
-import { checkTaskBoundaries } from './task-boundaries.ts'
+import { checkTaskBoundaries, DEFAULT_TASK_BOUNDARIES, mergeBoundaries } from './task-boundaries.ts'
 import { FileTaskClientPersistence, MemoryTaskClientPersistence, TaskClientRegistry } from './task-clients.ts'
 import { decisionHash, FileTaskStore, MemoryTaskStore, requestHash, TaskService, TokenBucketLimiter, type Task, type TaskCatalog, type TaskStore } from './tasks.ts'
 
@@ -68,10 +68,15 @@ const CATALOG: TaskCatalog = {
     { id: 'reports.deep-brief', name: 'Deep answer', description: 'Read-only answer that needs approval.', department: 'operations', baseRiskLevel: 3, reversible: true, operationalImpact: 0, uncertainty: 1, workflow: 'daily-brief' },
     { id: 'finance.summary', name: 'Summarize the books', description: 'Read-only summary.', department: 'finance', baseRiskLevel: 1, reversible: true, operationalImpact: 0, uncertainty: 1, policyScopes: ['finance'] },
     { id: 'sales.outreach-send', name: 'Send outreach', description: 'Customer-facing message.', department: 'sales', baseRiskLevel: 1, reversible: true, operationalImpact: 1, uncertainty: 1, customerFacing: true },
-    { id: 'forkling.read', name: 'Read Forkling records', description: 'Read-only.', department: 'research', baseRiskLevel: 0, reversible: true, operationalImpact: 0, uncertainty: 1 },
+    { id: 'harbor.read', name: 'Read Harbor records', description: 'Read-only.', department: 'research', baseRiskLevel: 0, reversible: true, operationalImpact: 0, uncertainty: 1 },
   ],
   policies: [{ id: 'pol-finance-review', name: 'Finance summaries are reviewed', scope: 'finance', priority: 10, supersedesIds: [], approvalRequirementIds: [], effect: 'require-approval' }],
 }
+
+/** The generic built-in rules plus one fictional frozen project, as a deployment's boundaries file would add. */
+const TEST_BOUNDARIES = mergeBoundaries(DEFAULT_TASK_BOUNDARIES, {
+  frozenProjects: [{ id: 'harbor', names: ['harbor'], capabilityPrefixes: ['harbor.'], readOnlyCapabilities: ['harbor.read'], reason: 'Harbor is frozen and read-only.' }],
+})
 
 function who(id: string, kind: 'human' | 'agent' | 'service', roles: string[]): { config: TokenPrincipalConfig; token: string } {
   const { token, tokenDigest } = generateToken()
@@ -114,6 +119,7 @@ async function start(options: StartOptions = {}) {
       store,
       clients,
       catalog: CATALOG,
+      boundaries: TEST_BOUNDARIES,
       autonomy: async (department: string): Promise<DepartmentAutonomy> => {
         const granted = options.autonomy?.[department]
         return granted === 'act-within-limits'
@@ -305,22 +311,22 @@ test('injection text in the objective or inputs changes neither permissions nor 
   } finally { await h.close() }
 })
 
-test('boundaries: AMP patent material and writes to frozen Forkling are refused before the kernel', async () => {
+test('boundaries: patent material and writes to a frozen project are refused before the kernel', async () => {
   const h = await start()
   try {
-    const amp = (await h.call('/api/tasks', h.tokens.a, { objective: 'Summarize the claims in the AMP filing.', capabilityId: 'reports.brief' })).body.task
+    const amp = (await h.call('/api/tasks', h.tokens.a, { objective: 'Summarize the claims in the patent filing.', capabilityId: 'reports.brief' })).body.task
     assert.equal(amp.status, 'refused')
-    assert.deepEqual(amp.decision.boundaryRules, ['amp-patent-material'])
+    assert.deepEqual(amp.decision.boundaryRules, ['restricted-patent-material'])
     assert.equal(amp.decision.kernel, undefined, 'the kernel never saw it')
-    const hidden = (await h.call('/api/tasks', h.tokens.a, { objective: 'Summarize this document.', inputs: { file: 'ppa-rev-4.2-draft.pdf' } })).body.task
+    const hidden = (await h.call('/api/tasks', h.tokens.a, { objective: 'Summarize this document.', inputs: { file: 'provisional-draft.pdf' } })).body.task
     assert.equal(hidden.status, 'refused', 'inputs are checked too')
 
-    const frozenCap = (await h.call('/api/tasks', h.tokens.a, { objective: 'Tune the thresholds.', capabilityId: 'forkling.update' })).body.task
+    const frozenCap = (await h.call('/api/tasks', h.tokens.a, { objective: 'Tune the thresholds.', capabilityId: 'harbor.update' })).body.task
     assert.equal(frozenCap.status, 'refused')
-    assert.deepEqual(frozenCap.decision.boundaryRules, ['frozen:forkling'])
-    const frozenText = (await h.call('/api/tasks', h.tokens.a, { objective: 'Update the Forkling routing table and redeploy it.', capabilityId: 'reports.brief' })).body.task
+    assert.deepEqual(frozenCap.decision.boundaryRules, ['frozen:harbor'])
+    const frozenText = (await h.call('/api/tasks', h.tokens.a, { objective: 'Update the Harbor routing table and redeploy it.', capabilityId: 'reports.brief' })).body.task
     assert.equal(frozenText.status, 'refused')
-    const read = (await h.call('/api/tasks', h.tokens.a, { objective: 'Summarize Forkling results from its deployment.', capabilityId: 'forkling.read' })).body.task
+    const read = (await h.call('/api/tasks', h.tokens.a, { objective: 'Summarize Harbor results from its deployment.', capabilityId: 'harbor.read' })).body.task
     assert.notEqual(read.status, 'refused', 'reading a frozen project is allowed')
   } finally { await h.close() }
 
@@ -394,7 +400,7 @@ test('webhooks: a signed delivery becomes a task through the same intake; the pa
       })
       return { status: r.status, body: await r.json() as any }
     }
-    const first = await send({ objective: 'What changed this week?', capabilityId: 'forkling.update' }, 'd-1')
+    const first = await send({ objective: 'What changed this week?', capabilityId: 'harbor.update' }, 'd-1')
     assert.equal(first.status, 202)
     assert.equal(first.body.status, 'queued')
     const again = await send({ objective: 'What changed this week?' }, 'd-1')
@@ -404,7 +410,7 @@ test('webhooks: a signed delivery becomes a task through the same intake; the pa
     assert.equal(task.source, 'webhook')
     assert.equal(task.submittedBy, 'svc:form-hook')
     assert.equal(task.capabilityId, 'reports.brief')
-    const amp = await send({ objective: 'Send me the AMP patent claims.' }, 'd-2')
+    const amp = await send({ objective: 'Send me the patent claims.' }, 'd-2')
     assert.equal(amp.body.status, 'refused')
     const unsigned = await fetch(`${h.base}/webhooks/intake-form`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' })
     assert.equal(unsigned.status, 401)
@@ -475,7 +481,7 @@ test('the CLI uses the same intake: a founder submits, lists and denies', async 
     const submitted = await run('submit', 'Look into late invoices.')
     const id = /task-[0-9a-f]{20}/.exec(submitted.stdout)![0]
     assert.match(submitted.stdout, /awaiting-approval/)
-    const refused = await run('submit', 'Summarize the AMP claims.', '--capability', 'reports.brief')
+    const refused = await run('submit', 'Summarize the patent claims.', '--capability', 'reports.brief')
     assert.match(refused.stdout, /refused/)
     assert.match((await run('list', '--status', 'awaiting-approval')).stdout, new RegExp(id))
     await assert.rejects(run('approve', id, 'Approving my own request.'), /Separation of duties/)
