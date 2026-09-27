@@ -135,6 +135,7 @@ Built since the M3 start:
 testing. **1.0.0 requires all three modes (Genesis, Onboard, Operate) to pass the
 parity gate with operational evidence.** See the
 [product definition](NUERA-QUICKSILVER-PRODUCT.md#81-versioning).
+The 0.9.0 gate is tracked as pass/fail requirements in [parity tests](platform/parity-tests.md), and its security prerequisites in the [threat model](platform/threat-model.md).
 
 Product-track rules: Layers 2 and 3 never gain authority. Every playbook step
 is a proposal through the NQC Kernel. Belief updates can only change
