@@ -27,7 +27,7 @@ reuses what M1 to M7 already built; nothing here re-implements it.
 |---|---|---|
 | 1. Governed tool runtime | Files, shell and code tools; local and Docker sandboxes; command and path policy; approval modes; checkpoints and rollback; hash-chained audit; agent loop whose completion the runtime decides; CLI | Done (`packages/operator`) |
 | 2. Memory | Session archive with full-text recall (SQLite FTS5), agent notes and a user profile with provenance (agent profile entries wait for the person; stated entries cannot be overwritten), frozen snapshot per run, project context files loaded as data with rule-changing lines removed | Done (`memory.ts`, 4 tests) |
-| 3. Skills | SKILL.md (open standard) loading, skills written by the agent after a solved task and held for approval, outcome scores per skill | |
+| 3. Skills | SKILL.md (open standard) with progressive loading; project skills in place; agent proposals and revisions held for review with a diff (active skills never overwritten, replaced versions archived); scanning for refused commands and rule-changing text; import from a folder (hub downloads) held for review; outcome scores (uses, verified, failed) shown to the agent; `--learn <run>` | Done (`skills.ts`, 3 tests) |
 | 4. Channels | One gateway: email, SMS, Telegram, Slack, Discord first; pairing codes, deny-by-default allowlists, one memory across channels; outbound messages through the kernel and WAES | |
 | 5. Automation | Schedules described in plain language (compiled to the existing cron triggers), delivery to any channel, per-automation cost, pause on failure | |
 | 6. Delegation | Isolated subagents with restricted toolsets, parallel fan-out, cost tracking | |

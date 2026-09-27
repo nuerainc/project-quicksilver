@@ -14,6 +14,12 @@
  *   --rollback <runId>  undo every file change a run made, then exit
  *   --memory review     confirm or reject profile entries the agent proposed, then exit
  *   --remember "<fact>" add a fact about you (stated), then exit
+ *   --skills review     accept or reject skills the agent proposed (shows the diff), then exit
+ *   --skills import <dir>  scan a skill folder (for example from a hub) and hold it for review
+ *   --learn <runId>     have the agent turn a finished run into a skill proposal
+ *
+ * Skills (SKILL.md standard) live in ~/.quicksilver/skills (QUICKSILVER_SKILLS_DIR)
+ * and in <workspace>/skills; the agent sees their names and loads one when it fits.
  *
  * Memory lives in <workspace>/.qs-memory: past runs (searchable by the agent
  * with recall), the agent's notes, and your profile. Project context files
@@ -36,6 +42,8 @@ import { FileCheckpointStore } from './checkpoints.ts'
 import { Gate, type Approver } from './gate.ts'
 import { runOperator } from './loop.ts'
 import { loadProjectContext, MemoryBook, memoryTools, SessionArchive } from './memory.ts'
+import { lineDiff, SkillLibrary, skillTools } from './skills.ts'
+import { homedir } from 'node:os'
 import { DockerSandbox } from './sandbox/docker.ts'
 import { LocalSandbox } from './sandbox/local.ts'
 import { EXEC_TOOLS } from './tools/exec.ts'
@@ -88,6 +96,32 @@ if (o.memory === 'review') {
   process.exit(0)
 }
 
+const skills = new SkillLibrary(process.env.QUICKSILVER_SKILLS_DIR || join(homedir(), '.quicksilver', 'skills'), workspace)
+if (o.skills === 'review') {
+  const pending = await skills.pending()
+  if (!pending.length) { console.log('No skills waiting for review.'); process.exit(0) }
+  const r = createInterface({ input: process.stdin, output: process.stdout })
+  for (const p of pending) {
+    const current = await skills.get(p.name)
+    console.log(`\n=== ${p.name}${current ? ' (revision)' : ' (new)'} — ${p.description}`)
+    console.log(current ? lineDiff(current.body, p.body) : p.body)
+    const a = (await r.question('Accept? (y/N) ')).trim().toLowerCase()
+    await skills.review(p.name, a === 'y' || a === 'yes')
+  }
+  r.close()
+  process.exit(0)
+}
+if (o.skills === 'import') {
+  const dir = o.goal[0]
+  if (!dir) { console.error('Usage: --skills import <folder>'); process.exit(1) }
+  const r = await skills.importFolder(join(root, dir))
+  console.log(r.ok ? `Held "${r.name}" for review (--skills review).${r.flags.length ? `\nFlags: ${r.flags.join(' ')}` : ''}` : `Refused: ${r.problems.join(' ')}`)
+  process.exit(r.ok ? 0 : 1)
+}
+if (o.learn) {
+  o.goal = [`Read run ${String(o.learn)} with read_run. If it solved something that will come up again, write a skill for it with propose_skill: when to use it, the steps that worked, the checks that proved it, and the mistakes to avoid. Then finish. If it is not worth a skill, finish and say why.`]
+}
+
 const goal = o.goal.join(' ').trim()
 if (!goal) {
   console.error('Usage: npm run operator -- "<goal>" [--workspace dir] [--verify cmd] [--mode manual|guarded|trusted] [--sandbox local|docker]')
@@ -106,11 +140,12 @@ const approver: Approver = async (r) => {
 
 const project = await loadProjectContext(workspace)
 for (const f of project.flagged) console.log(`  ! context line removed (it tried to change the agent's rules): ${f}`)
-const instructions = [await book.snapshot(), project.text].filter(Boolean).join('\n\n')
+const instructions = [await book.snapshot(), await skills.listing(), project.text].filter(Boolean).join('\n\n')
+const usedSkills: string[] = []
 
 console.log(`Operator — ${mode} mode, ${sandbox.describe()}\nWorkspace: ${workspace}\n`)
 const result = await runOperator({
-  gate: new Gate([...FILE_TOOLS, ...EXEC_TOOLS, ...memoryTools(book, archive)], { mode, workspace, audit }),
+  gate: new Gate([...FILE_TOOLS, ...EXEC_TOOLS, ...memoryTools(book, archive), ...skillTools(skills, usedSkills)], { mode, workspace, audit }),
   sandbox,
   checkpoints,
   audit,
@@ -131,6 +166,8 @@ const result = await runOperator({
 })
 rl.close()
 await archive.save(goal, result, result.messages)
+await skills.recordOutcome(usedSkills, result.status)
+if ((await skills.pending()).length) console.log(`\nA skill proposal waits for review: npm run operator -- --skills review`)
 archive.close()
 const waiting = (await book.all()).filter((e) => e.status === 'pending').length
 if (waiting) console.log(`\n${waiting} thing(s) the agent learned about you wait for review: npm run operator -- --workspace ${String(o.workspace ?? 'operator-workspace')} --memory review`)
