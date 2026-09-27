@@ -2,7 +2,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
-import { buildChoicePrompt, buildEarlierText, buildExamplesText, buildPrinciplesText, CHOICE_GOALS_METHOD, CHOICE_SYSTEM, CHOICE_SYSTEM_ALL, CHOICE_SYSTEM_RULES, systemForArm, type ChoiceScenario } from './choice-prompts.ts'
+import { buildChoicePrompt, buildEarlierText, buildExamplesText, buildPrinciplesText, CHOICE_CASES_METHOD, CHOICE_GOALS_METHOD, CHOICE_SYSTEM, CHOICE_SYSTEM_ALL, CHOICE_SYSTEM_RULES, systemForArm, type ChoiceScenario } from './choice-prompts.ts'
 
 const scenario: ChoiceScenario = {
   id: 's-test',
@@ -85,4 +85,10 @@ test('rolling examples show only answered earlier scenarios, labeled as this ser
   const t = buildEarlierText([scenario], { 's-test': { choice: 'b' } })
   assert.ok(t.startsWith('Here are decisions this same provider made earlier in this series'))
   assert.match(t, /They chose: b/)
+})
+
+test('--cases puts the closest-cases method before the goals method, and never a fixed order', () => {
+  assert.equal(systemForArm('all', { cases: true, goals: true }), `${CHOICE_SYSTEM_ALL}\n${CHOICE_CASES_METHOD}\n${CHOICE_GOALS_METHOD}`)
+  assert.equal(systemForArm('all', { cases: true }), `${CHOICE_SYSTEM_ALL}\n${CHOICE_CASES_METHOD}`)
+  assert.match(CHOICE_CASES_METHOD, /never rank their goals or principles in a fixed order/)
 })

@@ -72,9 +72,9 @@ export interface ChoiceContext {
   earlierText?: string
 }
 
-export function systemForArm(arm: ChoiceArm, options: { goals?: boolean } = {}): string {
+export function systemForArm(arm: ChoiceArm, options: { goals?: boolean; cases?: boolean } = {}): string {
   const base = arm === 'all' ? CHOICE_SYSTEM_ALL : arm === 'rules' || arm === 'rules+examples' ? CHOICE_SYSTEM_RULES : CHOICE_SYSTEM
-  return options.goals ? `${base}\n${CHOICE_GOALS_METHOD}` : base
+  return [base, options.cases ? CHOICE_CASES_METHOD : '', options.goals ? CHOICE_GOALS_METHOD : ''].filter(Boolean).join('\n')
 }
 
 function contextFor(arm: ChoiceArm, ctx: ChoiceContext): string {
@@ -128,3 +128,10 @@ export function buildEarlierText(earlier: ChoiceScenario[], answers: Record<stri
   if (!answered.length) return ''
   return buildExamplesText(answered, answers).replace(/^Here are earlier decisions this same provider made/, 'Here are decisions this same provider made earlier in this series')
 }
+
+/**
+ * Added with --cases (2026-09-26, after the founder pointed out that which of
+ * his priorities wins changes from situation to situation, so no fixed order
+ * of goals or principles can predict him). Decide by his closest earlier cases.
+ */
+export const CHOICE_CASES_METHOD = `Method: this provider's priorities change with the situation, so never rank their goals or principles in a fixed order. First find the 3 earlier decisions of theirs (from the examples above) most like this one: alike in what was at stake and who was affected, not in wording or business type. Note what they chose in each and why. Decide the way they decided in the closest cases, and use their principles only to settle what those cases leave open. The principles are in no particular order, and most will not apply to any one decision: use only the ones that bear on this one.`

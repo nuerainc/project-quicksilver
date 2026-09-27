@@ -70,11 +70,14 @@
  *   all+rolling         — and this set's earlier answers, each added only after
  *                         it was predicted (predict-then-learn)
  *   all+goals+rolling   — both
+ *   all+cases           — decide by the 3 closest earlier decisions, never a fixed order of goals
+ *   all+cases+goals     — closest cases, then each option against each goal
  * --set v3 --founder uses both earlier sets' answers as examples. --concurrency N (default 6)
  * sets how many model calls run at once; progress and time left print as it goes.
  * --variants a,b,c picks which run. --votes N asks N times and takes the
  * majority (ties go to the earliest pick), which cuts run-to-run noise.
  */
+import { createHash } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -100,6 +103,19 @@ const { assertAgentDispatch } = await import('./governance.ts')
 const { modelForRole, resolveId } = await import('./models.ts')
 
 const arg = (name: string) => { const i = process.argv.indexOf(name); return i > 0 ? process.argv[i + 1] : undefined }
+// --frozen v3: run a frozen predictor exactly as recorded in aura/eval/choice-predictor-<v>.json.
+// Its set, inputs, variant and votes come from the file, and the prompts must hash to what was frozen.
+const frozenName = arg('--frozen')
+const frozen = frozenName
+  ? JSON.parse(readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'aura', 'eval', `choice-predictor-${frozenName}.json`), 'utf8')) as {
+    version: number; set: string; variant: string; votes: number; founder: boolean; hashes: Record<string, string>
+  }
+  : null
+if (frozen) {
+  for (const f of ['--set', '--variants', '--votes', '--examples', '--examples-text', '--principles', '--profile', '--profile-v2']) if (process.argv.includes(f)) { console.log(`--frozen sets ${f} itself; leave it out.`); process.exit(1) }
+  process.argv.push('--set', frozen.set, '--variants', frozen.variant, '--votes', String(frozen.votes))
+  if (frozen.founder && !process.argv.includes('--founder')) process.argv.push('--founder')
+}
 let profilePath = arg('--profile'), choicesPath = arg('--choices')
 const picksOut = arg('--picks-out')
 // --examples <answers.json> [--examples-set v1|v2]: the provider's own earlier decisions, shown to the
@@ -128,7 +144,7 @@ if (founder) {
 const profileV2Path = arg('--profile-v2') ?? (founder ? join(founderDir, 'profile-answers-v2.json') : undefined)
 const votes = Math.max(1, Number(arg('--votes') ?? 1) || 1)
 const hasExamples = Boolean(examplesPath || examplesTextPath || profileV2Path || founderBoth)
-if (set === 'v1' ? !(profilePath || hasExamples || principlesPath) || !choicesPath : !picksOut && !choicesPath) {
+if (set === 'v1' ? !(profilePath || hasExamples || principlesPath) || !choicesPath : !picksOut && !choicesPath && !process.argv.includes('--hashes')) {
   console.log('Usage: --profile <profile-answers.json> --choices <scenario-answers.json> [--detail] [--picks-out <file>]\n   or: --set v2 --picks-out <file> [--profile <profile-answers.json>] [--choices <scenario-answers-v2.json>] [--detail]\n   add: [--examples <other-set-answers.json>] [--principles <principles-export.json>] [--picks-arm <arm>]')
   process.exit(1)
 }
@@ -168,9 +184,29 @@ const examplesText = (() => {
 const profileText = profile ? buildProfileText(profile.dimensions) : ''
 const principlesText = principles ? buildPrinciplesText(principles) : ''
 
+// What a frozen predictor pins: the scenarios, the system prompts and every piece of provider context.
+const sha = (t: string) => createHash('sha256').update(t, 'utf8').digest('hex')
+// The variant whose system prompt is pinned: the frozen one, or --hash-variant (default all+goals).
+const hashVariant = frozen?.variant ?? arg('--hash-variant') ?? 'all+goals'
+const promptHashes = (): Record<string, string> => ({
+  scenarios: sha(JSON.stringify(scenarios)),
+  system: sha(systemForArm('all', { goals: hashVariant.includes('+goals'), cases: hashVariant.includes('+cases') })),
+  principles: sha(principlesText),
+  profile: sha(profileText),
+  examples: sha(examplesText),
+})
+// --hashes: print them and stop (no model calls). Used to freeze a predictor.
+if (process.argv.includes('--hashes')) { console.log(JSON.stringify(promptHashes(), null, 1)); process.exit(0) }
+if (frozen) {
+  const now = promptHashes()
+  const changed = Object.keys(frozen.hashes).filter((k) => frozen.hashes[k] !== now[k])
+  if (changed.length) { console.log(`Frozen predictor v${frozen.version} no longer matches: ${changed.join(', ')} changed since it was frozen. Refusing to run.`); process.exit(1) }
+  console.log(`Frozen predictor v${frozen.version}: prompts and inputs match what was frozen.`)
+}
+
 // Variants: an arm plus the optional goals and rolling methods (see the header).
-interface Variant { name: string; arm: Arm; goals: boolean; rolling: boolean }
-const ALL_VARIANTS = ['all', 'all+goals', 'all+rolling', 'all+goals+rolling']
+interface Variant { name: string; arm: Arm; goals: boolean; rolling: boolean; cases: boolean }
+const ALL_VARIANTS = ['all', 'all+goals', 'all+cases', 'all+cases+goals', 'all+rolling', 'all+goals+rolling']
 const hasContext = hasExamples || Boolean(profile) || Boolean(principles)
 const variantArg = arg('--variants')
 const variantNames = variantArg
@@ -179,8 +215,8 @@ const variantNames = variantArg
     ? [...ALL_VARIANTS, ...(principles ? ['rules+examples'] : []), 'examples', 'none']
     : arms
 const variants: Variant[] = variantNames.map((name) => {
-  const [arm, ...mods] = name.split('+goals').join('|goals').split('+rolling').join('|rolling').split('|')
-  const v = { name, arm: arm as Arm, goals: mods.includes('goals'), rolling: mods.includes('rolling') }
+  const [arm, ...mods] = name.split('+goals').join('|goals').split('+rolling').join('|rolling').split('+cases').join('|cases').split('|')
+  const v = { name, arm: arm as Arm, goals: mods.includes('goals'), rolling: mods.includes('rolling'), cases: mods.includes('cases') }
   if (!(['profile', 'none', 'examples', 'rules', 'rules+examples', 'all'] as string[]).includes(v.arm)) { console.log(`Unknown variant "${name}".`); process.exit(1) }
   if (v.arm === 'all' && !hasContext) { console.log('Variant "all" needs --founder, --examples, --examples-text, --profile, --profile-v2 or --principles.'); process.exit(1) }
   if (v.arm !== 'all' && v.arm !== 'none' && !arms.includes(v.arm)) { console.log(`Variant "${name}" needs its inputs (arms available: ${arms.join(', ')}).`); process.exit(1) }
@@ -189,7 +225,7 @@ const variants: Variant[] = variantNames.map((name) => {
 const rolling = variants.some((v) => v.rolling)
 if (rolling && !choicesPath) { console.log('Rolling variants need --choices (or --founder): each answer joins the prompt after its scenario is predicted.'); process.exit(1) }
 
-const picksArm = arg('--picks-arm') ?? 'none'
+const picksArm = arg('--picks-arm') ?? (frozen ? frozen.variant : 'none')
 if (picksOut && !variants.some((v) => v.name === picksArm)) { console.log(`--picks-arm "${picksArm}" did not run (variants: ${variants.map((v) => v.name).join(', ')}).`); process.exit(1) }
 if (picksOut && rolling && variants.find((v) => v.name === picksArm)?.rolling) { console.log('--picks-arm cannot be a rolling variant: rolling picks depend on answers.'); process.exit(1) }
 
@@ -203,7 +239,18 @@ const rollingAnswers = rolling ? readAnswers() : {}
 async function predictOnce(s: ChoiceScenario, v: Variant, earlierText: string): Promise<string | null> {
   assertAgentDispatch('nuera-quicksilver:intent', 'reasoning', 'low')
   const ids = Object.keys(s.options) as [string, ...string[]]
-  const schema = v.goals
+  const similar = z.array(z.object({ earlier: z.string(), theyChose: z.string(), howAlike: z.string() }))
+  const schema = v.cases && v.goals
+    ? z.object({
+      similar,
+      goals: z.array(z.string()),
+      check: z.array(z.object({ option: z.enum(ids), keeps: z.array(z.string()), givesUp: z.array(z.string()) })),
+      choice: z.enum(ids),
+      reason: z.string(),
+    })
+    : v.cases
+    ? z.object({ similar, choice: z.enum(ids), reason: z.string() })
+    : v.goals
     ? z.object({
       goals: z.array(z.string()),
       check: z.array(z.object({ option: z.enum(ids), keeps: z.array(z.string()), givesUp: z.array(z.string()) })),
@@ -213,7 +260,7 @@ async function predictOnce(s: ChoiceScenario, v: Variant, earlierText: string): 
     : z.object({ choice: z.enum(ids), reason: z.string() })
   const prompt = buildChoicePrompt(v.arm, s, { profileText, examplesText, principlesText, earlierText })
   try {
-    const result = await generateText({ model: modelForRole(role), system: systemForArm(v.arm, { goals: v.goals }), prompt, experimental_output: Output.object({ schema }), maxRetries: 5 } as Parameters<typeof generateText>[0])
+    const result = await generateText({ model: modelForRole(role), system: systemForArm(v.arm, { goals: v.goals, cases: v.cases }), prompt, experimental_output: Output.object({ schema }), maxRetries: 5 } as Parameters<typeof generateText>[0])
     return ((result as unknown as { experimental_output?: { choice: string } }).experimental_output?.choice) ?? null
   } catch {
     return null
@@ -234,6 +281,8 @@ function majority(picks: Array<string | null>): string | null {
 // another prediction, so running calls side by side changes nothing but the time taken.
 const concurrency = Math.max(1, Number(arg('--concurrency') ?? 6) || 6)
 interface Task { s: ChoiceScenario; v: Variant; earlierText: string; vote: number }
+const picksIn = arg('--picks-in')
+if (picksIn && picksOut) { console.log('--picks-in scores saved picks; it cannot also write --picks-out.'); process.exit(1) }
 const tasks: Task[] = []
 for (let i = 0; i < scenarios.length; i++) {
   const s = scenarios[i]!
@@ -262,11 +311,17 @@ async function worker(): Promise<void> {
     }
   }
 }
-process.stderr.write(`${tasks.length} model calls, ${concurrency} at a time\n`)
-await Promise.all(Array.from({ length: Math.min(concurrency, tasks.length) }, worker))
+if (!picksIn) process.stderr.write(`${tasks.length} model calls, ${concurrency} at a time\n`)
+if (!picksIn) await Promise.all(Array.from({ length: Math.min(concurrency, tasks.length) }, worker))
 
 const predictions: Record<string, Record<string, string | null>> = Object.fromEntries(variants.map((v) => [v.name, {}]))
-for (const v of variants) for (const s of scenarios) predictions[v.name]![s.id] = majority(raw.get(`${v.name}\u0000${s.id}`) ?? [])
+if (picksIn) {
+  // Score picks recorded earlier (before the answers existed); no model calls.
+  const saved = read(picksIn) as { arm: string; set: string; picks: Record<string, string | null>; createdAt: string }
+  if (saved.set !== set) { console.log(`--picks-in is for set ${saved.set}, not ${set}.`); process.exit(1) }
+  console.log(`Scoring picks recorded ${saved.createdAt} (arm "${saved.arm}").`)
+  for (const v of variants) predictions[v.name] = { ...saved.picks }
+} else for (const v of variants) for (const s of scenarios) predictions[v.name]![s.id] = majority(raw.get(`${v.name}\u0000${s.id}`) ?? [])
 
 // Blind picks, written before any answers are read (non-rolling variants only).
 if (picksOut) {
