@@ -104,7 +104,7 @@ const SYSTEM = `You are Quicksilver Operator, an agent that does real work in a 
 Rules:
 - Work step by step with the tools. Read before you edit. Prefer small, checkable changes.
 - Some calls wait for a person or are refused by policy; when refused, find another way or explain why you cannot.
-- When the work is complete, call finish with a short summary and evidence: the ids of tool calls that show it works (for example a test run).
+- When the work is complete, call finish with a short summary and evidence: the "call id" shown at the top of each tool result that shows it works (for example a test run).
 - Never claim something works unless a tool result in this run shows it. The runtime checks your evidence and runs its own verification.
 - If you are blocked, call finish with outcome "blocked" and say what you need.`
 
@@ -172,7 +172,8 @@ export async function runOperator(deps: OperatorDeps, options: RunOptions): Prom
         if (bad.length) {
           const note = `Evidence names calls that did not run or did not succeed: ${bad.map((b) => b.callId).join(', ')}.`
           notes.push(note)
-          messages.push({ role: 'tool', callId: call.id, tool: 'finish', output: `${note} Cite only successful calls from this run, or do the work that shows it.` })
+          const valid = [...succeeded].slice(-12)
+          messages.push({ role: 'tool', callId: call.id, tool: 'finish', output: `${note} Cite only successful calls from this run, by the id shown as "call id" in their results${valid.length ? ` (successful so far: ${valid.join(', ')})` : ''}, or do the work that shows it.` })
           continue
         }
         if (!options.verify?.length) {
@@ -222,7 +223,8 @@ export async function runOperator(deps: OperatorDeps, options: RunOptions): Prom
       if (result.ok) succeeded.add(call.id)
       await deps.audit.append({ runId, kind: 'tool-result', at: now(), data: { callId: call.id, tool: call.name, ok: result.ok, facts: result.facts ?? {}, output: result.output.slice(0, 2000) } })
       emit({ type: 'tool', tool: call.name, ok: result.ok, output: result.output })
-      messages.push({ role: 'tool', callId: call.id, tool: call.name, output: result.output })
+      // Show the id so the model can cite this call as evidence in finish.
+      messages.push({ role: 'tool', callId: call.id, tool: call.name, output: `[call id: ${call.id}${result.ok ? '' : ', failed'}]\n${result.output}` })
     }
   }
   return end('stopped', `Stopped: the run used its ${maxSteps} model steps.`)

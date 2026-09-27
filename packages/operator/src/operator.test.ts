@@ -181,6 +181,7 @@ test('loop: a run is verified only when the runtime\'s own checks pass', async (
   // The model was told its first finish failed the checks.
   assert.ok(model.seen[2]!.some((m) => m.role === 'tool' && m.tool === 'finish' && /checks failed/.test(m.output)))
   assert.equal(verifyAudit(await deps.audit.read()).valid, true)
+  assert.ok(model.seen[1]!.some((m) => m.role === 'tool' && m.output.startsWith('[call id: w1]')), 'the model sees the id it must cite')
 })
 
 test('loop: false evidence is rejected, and checks that never pass end in failed', async () => {
