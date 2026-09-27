@@ -90,9 +90,10 @@ How the token is stored:
   person who approves is not the requester.
 - If the browser blocks storage (some private windows), the token is kept in
   page memory only and is lost on reload; the page says so.
-- Anyone who can run script in the page can read the token. The web app has no
-  content security policy yet (threat model T-67); use the page on a trusted
-  machine and sign out when done.
+- Anyone who can run script in the page can read the token. The web app sends
+  a nonce-based Content-Security-Policy (only its own nonce-stamped scripts,
+  `connect-src 'self'`, no framing; threat model T-67) to make that hard;
+  still use the page on a trusted machine and sign out when done.
 
 ## Live end-to-end run
 
