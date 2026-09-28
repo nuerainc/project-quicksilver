@@ -1,7 +1,10 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 
-import { InMemoryWorkflowPublicationStore, workflowDigest } from './publication.ts'
+import { FileWorkflowPublicationStore, InMemoryWorkflowPublicationStore, workflowDigest } from './publication.ts'
 import type { WorkflowGraph } from './graph.ts'
 
 const graph = (version: number): WorkflowGraph => ({
@@ -62,4 +65,23 @@ test('Publication: review, publish, deprecation and rollback are digest-audited'
   assert.deepEqual(store.snapshot().audit.map((entry) => entry.event), [
     'draft-created', 'submitted-for-review', 'published', 'draft-created', 'submitted-for-review', 'published', 'rolled-back',
   ])
+})
+
+test('Publication: file-backed store survives restart and writes a private atomic snapshot', () => {
+  const directory = mkdtempSync(join(tmpdir(), 'quicksilver-publication-'))
+  const file = join(directory, 'tenant-a', 'workflows.json')
+  try {
+    const first = new FileWorkflowPublicationStore(file)
+    first.createDraft(graph(1), author, 100)
+    first.submitForReview('brief', 1, author, 110)
+    first.review('brief', 1, reviewer, 120)
+    first.publish('brief', 1, publisher, 130)
+
+    const restarted = new FileWorkflowPublicationStore(file)
+    assert.equal(restarted.getPublished('brief')?.digest, workflowDigest(graph(1)))
+    assert.equal(restarted.snapshot().audit.length, 3)
+    assert.match(readFileSync(file, 'utf8'), /"status": "published"/)
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
 })
