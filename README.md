@@ -112,7 +112,7 @@ Kernel, and recorded.
 7. **Wellbeing alignment,** with WAES review of every offer, claim and outbound message.
 8. **Platform baseline parity,** proven by a pass/fail test for each baseline item.
 
-**Published version:** 0.4.0 (M1 governance foundation, M2 single-tenant host and M3 intent layer complete; the host runs on the founder's computer, and always-on hosting moves to M5). Later milestone foundations are documented in the roadmap but do not yet represent a hosted 1.0 release. Following the Nuera RDL versioning standard, Nuera Quicksilver stays on 0.x until all three modes pass the
+**Verified milestone baseline:** 0.8.0 (M1–M7 implementation-complete; M7's four acceptance areas pass 89/89 focused tests). The host runs on the founder's computer, and always-on hosting moves to M5. Later enterprise work remains on the M8–M9 path and does not represent a hosted 1.0 release. Following the Nuera RDL versioning standard, Nuera Quicksilver stays on 0.x until all three modes pass the
 parity gate; M8 is the enterprise feature-complete 0.9.0 release candidate, and
 M9 is the target for completing all new enterprise features and releasing 1.0.0
 with operational evidence for every mode.

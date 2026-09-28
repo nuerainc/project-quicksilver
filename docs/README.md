@@ -16,6 +16,7 @@ by Quicksilver, our Sanity Challenge 2026 submission, which lives separately at
 - [v1.0.0 execution plan](V1-PLAN.md): dependency-aware implementation, pilot, and release gates
 - [authoritative enterprise specification](NUERA-QUICKSILVER-ENTERPRISE-SPEC-v1.md): merged platform target and Supervisor Agent contract
 - [M8–M9 enterprise plan](M8-M9-ENTERPRISE-PLAN.md): feature-complete release candidate, hardening, evidence, and 1.0.0 gate
+- [M7 release evidence](platform/m7-release-evidence.md): executable acceptance matrix and verification results for all four M7 parts
 
 Copies of the challenge submission, DEV posts, and demo script are kept here as
 historical records, each marked with a banner. They do not describe the new platform's current capability

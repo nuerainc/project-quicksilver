@@ -447,7 +447,7 @@ capability roadmap:
 
 | Product version | Gate |
 |---|---|
-| 0.4.0 | Intent layer; current repository version |
+| 0.8.0 | M7 kernel depth verified; current implementation baseline |
 | 0.5.0 | Playbooks and Onboard pilot evidence |
 | 0.6.0 | Genesis demonstration |
 | 0.7.0 | Operate foundation |

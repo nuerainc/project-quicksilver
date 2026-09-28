@@ -1,8 +1,8 @@
 # Threat model
 
 This is the security threat model for Nuera Quicksilver as the code stands on
-2026-09-27 (repository version 0.4.0, with M4 to M7 built and waiting on their
-evidence). Every mitigation below names the code that provides it and, where one
+2026-09-28 (verified implementation baseline 0.8.0, with M4 to M7 built;
+operational evidence remains a separate release gate). Every mitigation below names the code that provides it and, where one
 exists, the test that proves it. A claim without a test says so.
 
 It is a working document, not a certification. Reread it at each milestone and

@@ -4,8 +4,10 @@ This document turns the product's parity gate into a list of pass/fail
 requirements, each with the evidence that exists for it today. It is the
 "pass/fail test for each baseline item" that the
 [product definition](../NUERA-QUICKSILVER-PRODUCT.md) (goal 8) asks for. The
-statuses reflect the repository on 2026-09-27, with every regression suite
-passing: kernel 314, host 108, Aura 103, agent 32, seed/web 37 (594 tests).
+statuses reflect the repository on 2026-09-28, with every credential-free
+regression suite passing: 610/610 tests and all TypeScript checks. The focused
+M7 acceptance suites independently pass 89/89 tests; see [M7 release
+evidence](m7-release-evidence.md).
 
 A requirement is not complete until it meets the roadmap's completion
 standard: connected to its runtime path, auditable, with defined failure
