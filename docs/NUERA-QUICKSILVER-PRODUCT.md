@@ -252,9 +252,11 @@ it runs a company. Current status is tracked in
 | M5: Genesis demonstration | 0.6.0 | Economic playbook, experiments, ledger, WAES review, **always-on hosting** (moved from M2; payment webhooks need a public address); a $500, 30-day digital-only run | M3, M4. **Built 2026-09-26**; the run waits on the entity and payment accounts | Feb–Mar 2027 |
 | M6: Operate | 0.7.0 | Steady-state operations and reinvestment | M4, M5 | Mar–Apr 2027 |
 | M7: Kernel depth | 0.8.0 | Policy versioning, supersession and scope nesting; capability graph (inheritance, dependencies, conflicts, risk multipliers); what-if simulation; a governed task interface for other Nuera projects | M6. **Parts 1–2 built 2026-09-27**; simulation and the task interface to come | Before the 0.9.0 release candidate |
+| **M8: Enterprise feature-complete release candidate** | **0.9.0** | Supervisor Agent control plane; complete agent family; calibrated evaluation; workflow publishing and bounded loops; hosted/scalable runtime; SDKs/CLI; SSO/OIDC; multi-tenancy; durable audit; traces/dashboards; extension runtime; marketplace foundations; signed domain packs; compliance evidence workflows; Genesis/Onboard/Operate integration | M7 | Feature-complete release candidate; no 1.0.0 claim yet |
+| **M9: Enterprise hardening and complete release** | **1.0.0** | Integration, security and compliance closure; operational evidence; parity closure; marketplace/domain-pack evidence; three-mode evidence; backup/restore and rollback drills; stable API/SDK release and production hand-off | M8 | **All new enterprise features complete by M9** |
 
-M2 is deliberately single-tenant. SSO and multi-tenant hosting come before
-the 0.9.0 release candidate. M2 was completed with the host running on the
+M2 is deliberately single-tenant. SSO and multi-tenant hosting are delivered in
+M8 before the 0.9.0 release candidate. M2 was completed with the host running on the
 founder's computer; always-on hosting moved to M5 (founder decision,
 2026-09-26), when the Genesis run needs a public address for payment webhooks.
 The M4 Onboard pilot runs on the local host.

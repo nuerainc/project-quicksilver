@@ -111,7 +111,7 @@ export interface HostConfig {
   vault?: { path: string; keyEnv: string }
   worker: { id: string; concurrency: number; pollIntervalMs: number }
   queue: { maxQueued?: number; maxQueuedPerTenant?: number; maxRunningPerTenant?: number; leaseMs?: number; defaultMaxAttempts?: number }
-  execution: { maxAgentSteps: number; allowedAgents: string[] }
+  execution: { maxAgentSteps: number; allowedAgents: string[]; authorizationKeyEnv: string }
   workflows: Record<string, WorkflowGraph>
   services: ServicePrincipalConfig[]
   schedules: ScheduleConfig[]
@@ -243,11 +243,13 @@ export function parseHostConfig(input: unknown): HostConfig {
   const execution = {
     maxAgentSteps: raw.execution?.maxAgentSteps ?? 3,
     allowedAgents: raw.execution?.allowedAgents ?? ['query'],
+    authorizationKeyEnv: raw.execution?.authorizationKeyEnv ?? 'QUICKSILVER_AUTHORIZATION_KEY',
   }
   if (!Number.isInteger(execution.maxAgentSteps) || execution.maxAgentSteps < 1 || execution.maxAgentSteps > 16) p.push('execution.maxAgentSteps must be 1–16.')
   if (!Array.isArray(execution.allowedAgents) || execution.allowedAgents.some((a: unknown) => a !== 'query')) {
     p.push('execution.allowedAgents may only contain "query" at this version (read-only). Other agents arrive with the playbook milestone.')
   }
+  if (typeof execution.authorizationKeyEnv !== 'string' || !ENV_NAME.test(execution.authorizationKeyEnv)) p.push('execution.authorizationKeyEnv must be an environment variable name.')
 
   const workflows: Record<string, WorkflowGraph> = {}
   for (const [id, graph] of Object.entries((raw.workflows ?? {}) as Record<string, unknown>)) {

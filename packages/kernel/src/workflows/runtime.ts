@@ -1,5 +1,6 @@
 import { validateWorkflowGraph, type WorkflowGraph, type WorkflowNode } from './graph.ts'
 import { evaluateWorkflowConditionExpression } from './condition.ts'
+import type { SupervisorControlResult } from '../supervisor.ts'
 
 export type WorkflowSafetyDecision = 'ALLOW' | 'BLOCK' | 'ESCALATE' | 'SKIPPED'
 
@@ -14,6 +15,9 @@ export interface WorkflowEvaluation {
 
 export interface WorkflowRuntimeContext {
   input: unknown
+  /** Durable identity bindings supplied by the hosted worker when available. */
+  runId?: string
+  tenantId?: string
   outputs: Readonly<Record<string, unknown>>
   evaluations: Readonly<Record<string, WorkflowEvaluation>>
   /** Handlers should pass this signal through to cancellable provider/tool APIs. */
@@ -26,6 +30,10 @@ export interface WorkflowRuntimeHandlers {
   validateTool?(node: WorkflowNode, context: WorkflowRuntimeContext): Promise<{ allowed: boolean; reasons: string[] }>
   evaluate?(node: WorkflowNode, candidate: unknown, context: WorkflowRuntimeContext, phase: 'before-execution' | 'result'): Promise<WorkflowEvaluation>
   approve?(node: WorkflowNode, output: unknown, context: WorkflowRuntimeContext): Promise<{ approved: boolean; reason?: string }>
+  /** Protected steps require a current kernel-issued authorization, not only a boolean approval. */
+  authorizeExecution?(node: WorkflowNode, output: unknown, context: WorkflowRuntimeContext): Promise<SupervisorControlResult>
+  /** The executor must verify the signed record and consume it exactly once before dispatch. */
+  consumeExecutionAuthorization?(node: WorkflowNode, authorization: NonNullable<SupervisorControlResult['authorization']>, context: WorkflowRuntimeContext): Promise<{ consumed: boolean; reason?: string }>
   evaluateCondition?(node: WorkflowNode, expression: string, context: WorkflowRuntimeContext): Promise<boolean>
 }
 
@@ -36,6 +44,9 @@ export interface WorkflowStepRecord {
   detail?: string
   /** Set when a handler threw an error carrying a provider retry hint (e.g. HTTP 429 Retry-After). */
   retryAfterMs?: number
+  /** Durable reference to the kernel authorization used for a protected step. */
+  authorizationId?: string
+  authorizationFingerprint?: string
 }
 
 export interface WorkflowExecutionResult {
@@ -46,6 +57,8 @@ export interface WorkflowExecutionResult {
 }
 
 export interface WorkflowExecutionOptions {
+  runId?: string
+  tenantId?: string
   /** Maximum simultaneous independent, low/moderate-impact agent nodes (1–16). Defaults to 1. */
   maxConcurrentAgents?: number
   /**
@@ -112,7 +125,7 @@ export async function executeWorkflowGraph(
     }
 
     if (parallelBatch.length > 1) {
-      const snapshot = runtimeContext(input, outputs, evaluations)
+      const snapshot = runtimeContext(input, outputs, evaluations, options)
       const outcomes = await Promise.all(parallelBatch.map((node) => executeNode(node, snapshot, input, outputs, incomingEdges, handlers, runSignal)))
       let terminal: Extract<WorkflowNodeOutcome, { success: false }> | undefined
       for (let index = 0; index < parallelBatch.length; index += 1) {
@@ -143,7 +156,7 @@ export async function executeWorkflowGraph(
       steps.push({ nodeId, status: 'skipped', detail: 'No active workflow path reaches this step.' })
       continue
     }
-    const outcome = await executeNode(node, runtimeContext(input, outputs, evaluations), input, outputs, incomingEdges, handlers, runSignal)
+    const outcome = await executeNode(node, runtimeContext(input, outputs, evaluations, options), input, outputs, incomingEdges, handlers, runSignal)
     if ('output' in outcome) outputs[nodeId] = outcome.output
     if (outcome.evaluation) evaluations[nodeId] = outcome.evaluation
     steps.push(outcome.step)
@@ -173,8 +186,14 @@ function isParallelAgent(node: WorkflowNode): boolean {
     && node.config?.supervisorApprovalRequired !== true
 }
 
-function runtimeContext(input: unknown, outputs: Record<string, unknown>, evaluations: Record<string, WorkflowEvaluation>): WorkflowRuntimeContext {
-  return { input, outputs: { ...outputs }, evaluations: { ...evaluations } }
+function runtimeContext(input: unknown, outputs: Record<string, unknown>, evaluations: Record<string, WorkflowEvaluation>, options: WorkflowExecutionOptions): WorkflowRuntimeContext {
+  return {
+    input,
+    ...(options.runId ? { runId: options.runId } : {}),
+    ...(options.tenantId ? { tenantId: options.tenantId } : {}),
+    outputs: { ...outputs },
+    evaluations: { ...evaluations },
+  }
 }
 
 function activateNext(node: WorkflowNode, output: unknown, edges: WorkflowGraph['edges'], activated: Set<string>): void {
@@ -198,6 +217,7 @@ async function executeNode(
   const timeoutMs = node.config?.timeoutMs
   const withTimeout = <T>(ms: number | undefined, operation: (signal: AbortSignal) => Promise<T>) => withDeadline(ms, runSignal, operation)
   let evaluationForNode: WorkflowEvaluation | undefined
+  let executionAuthorization: SupervisorControlResult['authorization'] | undefined
   const blocked = (detail: string, safetyDecision?: WorkflowSafetyDecision): WorkflowNodeOutcome => ({
     success: false,
     step: { nodeId: node.id, status: 'blocked', ...(safetyDecision ? { safetyDecision } : {}), detail },
@@ -237,6 +257,9 @@ async function executeNode(
         if (!handlers.approve) return blocked('Supervisor approval is not configured; tool execution was stopped safely.', toolSafetyDecision)
         const approval = await withTimeout(timeoutMs, (signal) => handlers.approve!(node, { proposedInput: input, priorOutputs: context.outputs }, { ...context, signal }))
         if (approval?.approved !== true) return blocked(approval?.reason || 'Supervisor approval was not granted; tool execution was stopped safely.', toolSafetyDecision)
+        const authorization = await validateExecutionAuthorization(node, { proposedInput: input, priorOutputs: context.outputs }, context, handlers, withTimeout)
+        if (!authorization.allowed) return blocked(authorization.reason, toolSafetyDecision)
+        executionAuthorization = authorization.authorization
       }
     }
 
@@ -280,12 +303,23 @@ async function executeNode(
       if (!handlers.approve) return blocked('Supervisor approval is not configured; the workflow stopped safely.', safetyDecision)
       const approval = await withTimeout(timeoutMs, (signal) => handlers.approve!(node, output, { ...context, signal }))
       if (approval?.approved !== true) return blocked(approval?.reason || 'Supervisor approval was not granted.', safetyDecision)
+      const authorization = await validateExecutionAuthorization(node, output, context, handlers, withTimeout)
+      if (!authorization.allowed) return blocked(authorization.reason, safetyDecision)
+      executionAuthorization = authorization.authorization
     }
 
     return {
       success: true,
       output,
-      step: { nodeId: node.id, status: 'completed', ...(displaySafetyDecision ? { safetyDecision: displaySafetyDecision } : {}) },
+      step: {
+        nodeId: node.id,
+        status: 'completed',
+        ...(displaySafetyDecision ? { safetyDecision: displaySafetyDecision } : {}),
+        ...(executionAuthorization ? {
+          authorizationId: executionAuthorization.authorizationId,
+          authorizationFingerprint: executionAuthorization.actionFingerprint,
+        } : {}),
+      },
       ...(evaluationForNode ? { evaluation: evaluationForNode } : {}),
     }
   } catch (cause) {
@@ -299,6 +333,33 @@ async function executeNode(
     }
     return failed((cause as Error)?.message || 'Workflow step failed.', retryHint(cause))
   }
+}
+
+async function validateExecutionAuthorization(
+  node: WorkflowNode,
+  output: unknown,
+  context: WorkflowRuntimeContext,
+  handlers: WorkflowRuntimeHandlers,
+  withTimeout: <T>(ms: number | undefined, operation: (signal: AbortSignal) => Promise<T>) => Promise<T>,
+): Promise<{ allowed: true; authorization: NonNullable<SupervisorControlResult['authorization']> } | { allowed: false; reason: string }> {
+  if (!handlers.authorizeExecution) {
+    return { allowed: false, reason: 'Kernel execution authorization is not configured; the protected step was stopped safely.' }
+  }
+  const result = await withTimeout(node.config?.timeoutMs, (signal) => handlers.authorizeExecution!(node, output, { ...context, signal }))
+  if (result?.status !== 'ready-to-execute' || !result.authorization) {
+    return { allowed: false, reason: result?.reasons?.join(' ') || 'Kernel execution authorization was not valid; the protected step was stopped safely.' }
+  }
+  if (!result.authorization.keyId || !result.authorization.signature || result.authorization.status !== 'issued') {
+    return { allowed: false, reason: 'Signed kernel authorization metadata is missing or has already been consumed.' }
+  }
+  if (!handlers.consumeExecutionAuthorization) {
+    return { allowed: false, reason: 'Executor authorization verification is not configured; the protected step was stopped safely.' }
+  }
+  const consumed = await withTimeout(node.config?.timeoutMs, (signal) => handlers.consumeExecutionAuthorization!(node, result.authorization!, { ...context, signal }))
+  if (consumed?.consumed !== true) {
+    return { allowed: false, reason: consumed?.reason || 'Executor rejected the signed kernel authorization; the protected step was stopped safely.' }
+  }
+  return { allowed: true, authorization: result.authorization }
 }
 
 async function runAgentWithRetry(

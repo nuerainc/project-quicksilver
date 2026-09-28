@@ -133,7 +133,12 @@ export class WorkflowRunWorker {
     let result: WorkflowExecutionResult
     try {
       const handlers = await this.options.resolveHandlers(run)
-      result = await executeWorkflowGraph(run.graph, run.input, handlers, { ...this.options.execution, signal: controller.signal })
+      result = await executeWorkflowGraph(run.graph, run.input, handlers, {
+        ...this.options.execution,
+        runId: run.runId,
+        tenantId: run.tenantId,
+        signal: controller.signal,
+      })
     } catch (error) {
       result = { status: 'failed', outputs: {}, steps: [], error: `Run setup failed: ${(error as Error)?.message ?? 'unknown error'}` }
     } finally {

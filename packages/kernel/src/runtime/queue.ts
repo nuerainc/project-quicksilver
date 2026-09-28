@@ -292,6 +292,11 @@ export class WorkflowRunQueue {
       throw new Error(`Run "${runId}" changed while its outcome was being recorded; outcome not applied.`)
     }
     await this.event(runId, event, { actor: workerId, ...(detail ? { detail } : {}) })
+    for (const step of result.steps) {
+      if (!step.authorizationId) continue
+      const authorizationDetail = `id=${step.authorizationId}${step.authorizationFingerprint ? ` fingerprint=${step.authorizationFingerprint}` : ''} node=${step.nodeId}`
+      await this.recordAuthorizationLifecycle(runId, step.authorizationId, step.authorizationFingerprint, workerId, step.status === 'completed')
+    }
     return next
   }
 
@@ -408,6 +413,25 @@ export class WorkflowRunQueue {
 
   private async event(runId: string, type: WorkflowRunEventType, extra: { actor?: string; detail?: string } = {}) {
     return this.store.appendEvent({ runId, at: this.now(), type, ...extra })
+  }
+
+  /** Record authorization issuance and optional consumption exactly once. */
+  async recordAuthorizationLifecycle(runId: string, authorizationId: string, fingerprint: string | undefined, actor: string, consumed = true): Promise<void> {
+    const detail = `id=${authorizationId}${fingerprint ? ` fingerprint=${fingerprint}` : ''}`
+    await this.authorizationEvent(runId, 'authorization-issued', detail, actor)
+    if (consumed) await this.authorizationEvent(runId, 'authorization-consumed', detail, actor)
+  }
+
+  async recordAuthorizationRevoked(runId: string, authorizationId: string, reason: string, actor: string): Promise<void> {
+    if (!reason.trim()) throw new Error('Authorization revocation requires a reason.')
+    await this.authorizationEvent(runId, 'authorization-revoked', `id=${authorizationId} reason=${reason}`, actor)
+  }
+
+  /** Authorization lifecycle events are idempotent so a recovered worker cannot replay consumption. */
+  private async authorizationEvent(runId: string, type: 'authorization-issued' | 'authorization-consumed' | 'authorization-revoked', detail: string, actor: string): Promise<void> {
+    const existing = await this.store.events(runId)
+    if (existing.some((event) => event.type === type && event.detail === detail)) return
+    await this.event(runId, type, { actor, detail })
   }
 
   private validateRequest(request: EnqueueWorkflowRunRequest): string[] {

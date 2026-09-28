@@ -82,6 +82,9 @@ export type WorkflowRunEventType =
   | 'lease-expired'
   | 'redriven'
   | 'access-denied'
+  | 'authorization-issued'
+  | 'authorization-consumed'
+  | 'authorization-revoked'
 
 export interface WorkflowRunEvent {
   runId: string

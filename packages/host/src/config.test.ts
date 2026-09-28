@@ -35,7 +35,7 @@ test('defaults are filled for a minimal config', () => {
   assert.equal(config.http.host, '127.0.0.1', 'loopback unless the config says otherwise (A-4)')
   assert.equal(config.http.metricsPublic, false)
   assert.deepEqual(config.store, { kind: 'memory' })
-  assert.deepEqual(config.execution, { maxAgentSteps: 3, allowedAgents: ['query'] })
+  assert.deepEqual(config.execution, { maxAgentSteps: 3, allowedAgents: ['query'], authorizationKeyEnv: 'QUICKSILVER_AUTHORIZATION_KEY' })
   assert.equal(config.worker.concurrency, 2)
 })
 

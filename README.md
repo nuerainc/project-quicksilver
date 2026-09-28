@@ -38,6 +38,30 @@
 >
 > Canonical product docs: [Product definition](./docs/NUERA-QUICKSILVER-PRODUCT.md) · [Documentation index](./docs/README.md) · [NQC Kernel](./docs/nqc/README.md) · [Platform](./docs/platform/README.md) · [Spec coverage](./docs/NUERA-QUICKSILVER-SPEC-COVERAGE.md) · [Roadmap](./docs/NUERA-QUICKSILVER-ROADMAP.md)
 
+## Current status
+
+The repository is a **tested platform foundation**, not a hosted production
+service. The credential-free verification path currently covers the kernel,
+agents, host, Aura, web/security helpers, and TypeScript packages. The web app
+builds locally; the Sanity Studio and live agent paths additionally require the
+dedicated Sanity project, Context MCP configuration, and model credentials.
+
+| Area | Status | Evidence or next dependency |
+|---|---|---|
+| NQC Kernel, policy, capability, process and workflow governance | Built and tested | `npm run kernel:test` |
+| Durable run queue, worker, triggers and stores | Built and tested | Kernel runtime and store-contract suites |
+| Single-tenant host, vault, management API, logs and metrics | Built and tested | `npm run host:test` |
+| Aura intent and provenance layer | Built foundation and tested | `npm run aura:test` |
+| Web console and API routes | Builds and security-tested | `npm run build` and `npm run seed:test` |
+| Sanity Studio, schema deployment and seed data | Requires dedicated project configuration | `SANITY_STUDIO_PROJECT_ID` and Sanity auth |
+| Live Context MCP and model-backed planning | Requires external credentials | `npm run verify:mcp` and `npm run verify:llm` |
+| Public hosting, SSO/OIDC and multi-tenant hosting | Not operationally complete | See parity items P-014, P-107 and P-108 |
+| Effectful external integrations | Not implemented | See parity item P-095 |
+
+For a credential-free health check, run `npm run verify`. For contributor setup
+and package boundaries, read [CONTRIBUTING.md](./CONTRIBUTING.md). Project terms
+are defined in the [glossary](./docs/GLOSSARY.md).
+
 <p align="center">
   <img src="docs/images/console.png" alt="The Quicksilver console: a CEO intent box pre-filled with 'Reduce production downtime by 20% over the next 30 days without increasing OPEX.' and a Send to Quicksilver button" width="760"><br>
   <sub>The objective console, carried over from the challenge build.</sub>
@@ -68,8 +92,8 @@ Kernel, and recorded.
 |---|---|---|
 | **Foundation:** platform runtime | Durable runs, triggers, agent manifests, governed memory, routing, SDKs | Foundation |
 | **Layer 1:** NQC Kernel loop | Propose → evaluate → authorize → route → supervisor approval → execute and log, for every action | Built / Foundation |
-| **Layer 2:** intent loop | Turns an objective into a decision graph whose values are tagged by provenance (`HUMAN_SPECIFIED`, `OBSERVED`, `AGENT_INFERRED`, `SYSTEM_CONSTRAINT`) | Not built yet |
-| **Layer 3:** playbook loops | Swappable business playbooks, stored as content: process stages that run workflow graphs | Building blocks exist |
+| **Layer 2:** intent loop | Turns an objective into a decision graph whose values are tagged by provenance (`HUMAN_SPECIFIED`, `OBSERVED`, `AGENT_INFERRED`, `SYSTEM_CONSTRAINT`) | Built foundation |
+| **Layer 3:** playbook loops | Swappable business playbooks, stored as content: process stages that run workflow graphs | Building blocks / pilot foundation |
 
 ### Operating modes
 
@@ -88,11 +112,12 @@ Kernel, and recorded.
 7. **Wellbeing alignment,** with WAES review of every offer, claim and outbound message.
 8. **Platform baseline parity,** proven by a pass/fail test for each baseline item.
 
-**Version:** 0.4.0 (M1 governance foundation, M2 single-tenant host and M3 intent layer complete; the host runs on the founder's computer, and always-on hosting moves to M5). Following the Nuera RDL versioning standard, Nuera Quicksilver stays on 0.x until all three modes pass the
-parity gate; each milestone raises the minor version (M1 → 0.2.0 … M6 → 0.7.0), and
-1.0.0 requires operational evidence for every mode.
+**Published version:** 0.4.0 (M1 governance foundation, M2 single-tenant host and M3 intent layer complete; the host runs on the founder's computer, and always-on hosting moves to M5). Later milestone foundations are documented in the roadmap but do not yet represent a hosted 1.0 release. Following the Nuera RDL versioning standard, Nuera Quicksilver stays on 0.x until all three modes pass the
+parity gate; M8 is the enterprise feature-complete 0.9.0 release candidate, and
+M9 is the target for completing all new enterprise features and releasing 1.0.0
+with operational evidence for every mode.
 
-Milestones M1–M6, the versioning table and the success metrics are in the
+Milestones M1–M9, the versioning table and the success metrics are in the
 [product definition](./docs/NUERA-QUICKSILVER-PRODUCT.md#8-goals). What
 exists today is described below.
 
@@ -189,11 +214,24 @@ at quicksilver-seven.vercel.app belongs to the
 
 ## Tests
 
-| Check | Result |
-|---|---|
-| Kernel suites (`npm run kernel:test`): authorization, risk, process engine, workflow graphs and runtime, Quicksilver Engine, NQC, routing, memory, registries, durable run queue, identity/RBAC, triggers, run-store contract (memory, file, Postgres) | **213 / 213** |
-| Agent tests: model config, strict-schema guards for every model schema, agent contracts | **17 / 17** |
-| Host tests (`npm run host:test`): management API and auth, worker, blocked tools, webhooks, vault and rotation, logs, metrics, config validation | **29 / 29** |
+Run the complete credential-free regression and type-check path with:
+
+```bash
+npm run verify
+```
+
+The command prints the live test total instead of relying on a manually
+maintained number. The most recent repository validation recorded **594 passing
+tests** across the kernel, agent, host, Aura, and seed/web suites. The web
+production build also passed; the Studio build was blocked only because this
+sandbox did not have the dedicated Sanity project configuration.
+
+| Check | Command | Credentials |
+|---|---|---|
+| Kernel, agent, host, Aura, seed/web suites and type checks | `npm run verify` | No |
+| Full workspace build | `npm run build` | Dedicated Sanity project for Studio |
+| Sanity Context MCP verification | `npm run verify:mcp` | Context MCP credentials |
+| Model provider verification | `npm run verify:llm` | Model credentials |
 
 Inherited from the challenge build, and run against that build's live
 environment rather than this repository: a live governance stress test (lanes,
@@ -239,6 +277,7 @@ project-quicksilver/
 ├── deploy/             Dockerfile, Compose (Postgres + host), example host config
 ├── docs/               Canonical NQC/platform docs plus historical challenge writeups (marked as such)
 ├── ARCHITECTURE.md     Design and data model
+├── CONTRIBUTING.md     Contributor setup, boundaries, and verification
 ├── SUBMISSION.md       Historical: the Sanity Challenge submission record
 └── BUILD-LOG.md        Day-by-day build history across every environment
 ```
@@ -246,7 +285,8 @@ project-quicksilver/
 ## Run it locally
 
 ```bash
-npm install
+npm ci
+npm run verify             # no external credentials required
 cp .env.example .env
 # Set the dedicated project in the root .env and apps/studio/.env.
 # Fill the new project's API token and Context MCP endpoints in the root .env.
@@ -285,7 +325,7 @@ of the challenge documents ([submission record](./SUBMISSION.md),
 [Path One post](./docs/DEV-POST-PATH-ONE.md), [Path Two post](./docs/DEV-POST-PATH-TWO.md),
 [demo script](./docs/DEMO-SCRIPT.md)) are kept here for history.
 
-**MiniMax Agent** built the architecture through hardening. **Claude Code** (via Cowork) added the Knowledge Base integration, the live reviewer, the deployment, the process engine and the live testing. The manual work was done in **VS Code**. All of it is in one unified [build log](./BUILD-LOG.md), including every real error and how it was fixed. Later Nuera Quicksilver work (regression suites, the durable run runtime) was added with Claude in Cowork.
+**MiniMax Agent** built the architecture through hardening. **Claude Code** (via Cowork) added the Knowledge Base integration, the live reviewer, the deployment, the process engine and the live testing. The manual work was done in **VS Code**. All of it is in one unified [build log](./BUILD-LOG.md), including every real error and how it was fixed. Later Nuera Quicksilver work (regression suites, the durable run runtime) was added with Claude in Cowork. Historical challenge documents are retained for context and do not define the current platform; see the [documentation index](./docs/README.md).
 
 ## License
 

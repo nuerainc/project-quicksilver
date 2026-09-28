@@ -5,7 +5,7 @@ requirements, each with the evidence that exists for it today. It is the
 "pass/fail test for each baseline item" that the
 [product definition](../NUERA-QUICKSILVER-PRODUCT.md) (goal 8) asks for. The
 statuses reflect the repository on 2026-09-27, with every regression suite
-passing: kernel 306, host 98, Aura 103, agent 32, seed 4 (543 tests).
+passing: kernel 314, host 108, Aura 103, agent 32, seed/web 37 (594 tests).
 
 A requirement is not complete until it meets the roadmap's completion
 standard: connected to its runtime path, auditable, with defined failure
@@ -398,15 +398,13 @@ not gate Quicksilver's releases.
    the approver saw (P-039), add web route tests (P-039, P-042, P-015).
 3. **Build what the roadmap already commits to before 0.9.0:** SSO/OIDC
    (P-108) and multi-tenant isolation with tests (P-107).
-4. **Decide the baseline scope (founder decision).** Section 7 says the gate
-   "covers the whole baseline". Read literally, 0.9.0 needs channels, media,
-   browser automation, commerce and hosting for experiments (P-022 to P-027,
-   P-031), plus the partial domains. That is most of the remaining work. The
-   shortest honest path is to decide, in the product definition, which
-   baseline items each mode actually needs (for example Genesis needs
-   commerce, hosting for experiment pages and at least one customer channel
-   with WAES; Onboard needs live connectors), and mark the rest as post-1.0.0.
-   Until that decision, 0.9.0 cannot be claimed.
+4. **Apply the M8–M9 enterprise decision.** The authoritative enterprise
+   specification and [M8–M9 enterprise plan](../M8-M9-ENTERPRISE-PLAN.md) now
+   commit all new enterprise capabilities to completion by M9. The exact
+   baseline mapping still belongs in `V1-SCOPE.md`, but no enterprise feature
+   may be silently labelled post-1.0.0. If a baseline row is excluded, record
+   the rationale, owner, replacement behavior, and explicit product-owner
+   exception before the 0.9.0 candidate.
 5. **Build the mode-critical missing pieces** that remain in scope after step
    4: live connectors (P-088), effectful executors behind approval (P-095),
    WAES as a service (P-045) or an explicit decision to keep manual reviews.

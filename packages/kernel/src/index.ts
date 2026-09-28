@@ -112,6 +112,8 @@ export * from './workflows/graph.ts'
 
 export * from './agents/registry.ts'
 
+export * from './supervisor.ts'
+
 export * from './workflows/runtime.ts'
 
 export * from './workflows/condition.ts'

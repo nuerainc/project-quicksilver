@@ -29,6 +29,13 @@ today and how the planned layers plug into it.
 The layers stay separate. Layers 2 and 3 never gain authority: everything they
 want done arrives at the kernel as a proposal.
 
+The Supervisor Agent is a governed control-plane worker, not a second authority
+plane. It coordinates evaluation, routes approval-required work to a Human
+Supervisor, submits only kernel-issued execution authorizations, observes
+outcomes, and proposes rollback. Its `agent` identity cannot hold authority
+permissions, approve itself, impersonate a human, or change the action/policy/
+evidence binding. See the [authoritative enterprise specification](./docs/NUERA-QUICKSILVER-ENTERPRISE-SPEC-v1.md).
+
 ## 2. The model
 
 A company is not a document. It is a graph of **entities** (humans, agents, systems, services) bound by **policies**, **capabilities**, **permissions**, and **evidence**, pursuing **objectives** through **workflows**, producing and consuming **state**.

@@ -9,6 +9,7 @@ import assert from 'node:assert/strict'
 import {
   AgentRegistry,
   BUILT_IN_AGENT_MANIFESTS,
+  coordinateSupervisorControl,
   ToolRegistry,
   createBuiltInAgentRegistry,
   evaluateAgentOutput,
@@ -172,6 +173,75 @@ test('AgentRegistry: agents can never hold approval authority', () => {
   assert.throws(() => registry.register({ id: 'nuera-quicksilver:boss', version: 1, authority: 'approve' as 'review', tasks: ['planning'], maximumImpact: 'low', requiresEvaluation: true }), /cannot authorize/)
   assert.throws(() => registry.register({ id: 'other:agent', version: 1, authority: 'propose', tasks: ['planning'], maximumImpact: 'low', requiresEvaluation: true }), /namespaced/)
   assert.throws(() => registry.register({ id: 'nuera-quicksilver:dup', version: 1, authority: 'propose', tasks: ['planning', 'planning'], maximumImpact: 'low', requiresEvaluation: true }), /duplicates/)
+})
+
+test('Supervisor Agent: registered as a review-only control-plane worker', () => {
+  const registry = createBuiltInAgentRegistry()
+  const supervisor = registry.get('nuera-quicksilver:supervisor')
+  assert.equal(supervisor?.authority, 'review')
+  assert.equal(registry.authorizeDispatch('nuera-quicksilver:supervisor', 'evaluation', 'critical').allowed, true)
+  assert.equal(registry.authorizeDispatch('nuera-quicksilver:supervisor', 'planning').allowed, false)
+})
+
+const supervisorRequest = {
+  supervisorAgentId: 'nuera-quicksilver:supervisor',
+  tenantId: 'acme',
+  actionFingerprint: 'action:abc',
+  policySnapshot: 'policy:1',
+  evidenceDigest: 'evidence:1',
+  capability: 'orders.send',
+  safetyDecision: 'ALLOW' as const,
+  requiresHumanApproval: true,
+  now: 1_000,
+}
+
+test('Supervisor Agent: waits for a human approval and cannot use an agent approval', () => {
+  assert.equal(coordinateSupervisorControl(supervisorRequest).status, 'awaiting-human-approval')
+  const result = coordinateSupervisorControl({
+    ...supervisorRequest,
+    approval: {
+      approvedBy: 'agent:reviewer', approvedByKind: 'agent', tenantId: 'acme',
+      actionFingerprint: 'action:abc', policySnapshot: 'policy:1', evidenceDigest: 'evidence:1', approvedAt: 900,
+    },
+  })
+  assert.equal(result.status, 'blocked')
+  assert.ok(result.reasons.some((reason) => reason.includes('human principal')))
+})
+
+test('Supervisor Agent: only a matching, current kernel authorization reaches execution', () => {
+  const approval = {
+    approvedBy: 'user:supervisor', approvedByKind: 'human' as const, tenantId: 'acme',
+    actionFingerprint: 'action:abc', policySnapshot: 'policy:1', evidenceDigest: 'evidence:1', approvedAt: 900,
+  }
+  const authorization = {
+    authorizationId: 'auth:1', tenantId: 'acme', actionFingerprint: 'action:abc', policySnapshot: 'policy:1',
+    evidenceDigest: 'evidence:1', capability: 'orders.send', issuedAt: 800, expiresAt: 2_000,
+  }
+  const ready = coordinateSupervisorControl({ ...supervisorRequest, approval, authorization })
+  assert.equal(ready.status, 'ready-to-execute')
+  assert.equal(ready.authorization?.authorizationId, 'auth:1')
+
+  const stale = coordinateSupervisorControl({ ...supervisorRequest, approval, authorization: { ...authorization, expiresAt: 1_000 } })
+  assert.equal(stale.status, 'blocked')
+  assert.ok(stale.reasons.some((reason) => reason.includes('expired')))
+
+  const mismatched = coordinateSupervisorControl({ ...supervisorRequest, approval, authorization: { ...authorization, actionFingerprint: 'action:other' } })
+  assert.equal(mismatched.status, 'blocked')
+  assert.ok(mismatched.reasons.some((reason) => reason.includes('exact action fingerprint')))
+})
+
+test('Supervisor Agent: kernel BLOCK is never overridden by approval or authorization', () => {
+  const result = coordinateSupervisorControl({
+    ...supervisorRequest,
+    safetyDecision: 'BLOCK',
+    requiresHumanApproval: false,
+    authorization: {
+      authorizationId: 'auth:blocked', tenantId: 'acme', actionFingerprint: 'action:abc', policySnapshot: 'policy:1',
+      evidenceDigest: 'evidence:1', capability: 'orders.send', issuedAt: 900, expiresAt: 2_000,
+    },
+  })
+  assert.equal(result.status, 'blocked')
+  assert.ok(result.reasons.some((reason) => reason.includes('cannot override')))
 })
 
 // ── NQC contract ──────────────────────────────────────────────────────────

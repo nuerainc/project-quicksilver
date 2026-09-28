@@ -1,4 +1,5 @@
 import type { NqcEvaluationResponse } from '@quicksilver/kernel'
+import { createSignedAuthorizationCoordinator, type AuthorizationSigningKey } from '@quicksilver/kernel/runtime'
 import type { WorkflowRunRecord } from '@quicksilver/kernel/runtime'
 import type { WorkflowNode } from '@quicksilver/kernel/workflows/graph'
 import type { WorkflowRuntimeHandlers } from '@quicksilver/kernel/workflows/runtime'
@@ -51,6 +52,7 @@ export interface HandlerFactoryOptions {
   execution: { maxAgentSteps: number; allowedAgents: string[] }
   log: Logger
   metrics: HostMetrics
+  authorizationKey?: AuthorizationSigningKey
 }
 
 export const TOOL_BLOCKED_REASON = 'Tool steps are blocked on the hosted runtime at this version; effectful tools need verified supervisor approval.'
@@ -67,6 +69,9 @@ export function createHandlerFactory(options: HandlerFactoryOptions) {
       : typeof input?.question === 'string'
         ? input.question
         : JSON.stringify(input ?? null)
+    const authorization = options.authorizationKey
+      ? createSignedAuthorizationCoordinator(options.authorizationKey)
+      : undefined
 
     return {
       async runAgent(node, context) {
@@ -84,6 +89,14 @@ export function createHandlerFactory(options: HandlerFactoryOptions) {
       },
       async runTool() {
         throw new Error(TOOL_BLOCKED_REASON)
+      },
+      async authorizeExecution(node, output, context) {
+        if (!authorization) return { status: 'blocked', reasons: ['Host authorization signing key is not configured; protected execution is stopped safely.'] }
+        return authorization.authorizeExecution(node, output, context)
+      },
+      async consumeExecutionAuthorization(node, record, context) {
+        if (!authorization) return { consumed: false, reason: 'Host authorization signing key is not configured; protected execution is stopped safely.' }
+        return authorization.consumeExecutionAuthorization(node, record, context)
       },
       async evaluate(node) {
         const step = steps.get(node.id)

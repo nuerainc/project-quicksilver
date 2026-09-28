@@ -26,12 +26,12 @@ function agentGraph(id = 'wf-agent'): WorkflowGraph {
   }
 }
 
-function toolGraph(): WorkflowGraph {
+function toolGraph(config: WorkflowNode['config'] = {}): WorkflowGraph {
   return {
     schemaVersion: 1, id: 'wf-tool', version: 1, entryNodeId: 'start',
     nodes: [
       { id: 'start', kind: 'trigger', label: 'Start' },
-      { id: 'tool-1', kind: 'tool', label: 'Tool', config: { toolId: 'sanity.query' } },
+      { id: 'tool-1', kind: 'tool', label: 'Tool', config: { toolId: 'sanity.query', ...config } },
       { id: 'done', kind: 'output', label: 'Done' },
     ],
     edges: [{ id: 'e1', from: 'start', to: 'tool-1' }, { id: 'e2', from: 'tool-1', to: 'done' }],
@@ -75,6 +75,38 @@ test('Queue: enqueue validates, snapshots, freezes, and digests the graph', asyn
   assert.equal((await queue.get('run-1'))!.graph.nodes[1]!.label, 'Agent', 'later edits never change a queued run')
   const events = await queue.store.events('run-1')
   assert.deepEqual(events.map((e) => [e.seq, e.type, e.detail]), [[1, 'queued', 'trigger=webhook:hook-7']])
+})
+
+test('Worker: protected execution emits durable, replay-safe authorization lifecycle events', async () => {
+  const { store, queue } = setup()
+  await queue.enqueue({ graph: toolGraph({ sideEffect: true, evaluationRequired: true, supervisorApprovalRequired: true }), input: 'x', tenantId: 'acme' })
+  const worker = new WorkflowRunWorker({
+    queue, workerId: 'w-auth', concurrency: 1,
+    resolveHandlers: () => ({
+      ...handlers(),
+      async authorizeExecution() {
+        return {
+          status: 'ready-to-execute' as const,
+          reasons: [],
+          authorization: {
+            authorizationId: 'auth:run-1:tool-1', keyId: 'kernel-key-1', signature: 'hmac-sha256:test', status: 'issued', tenantId: 'acme', actionFingerprint: 'action:tool-1',
+            policySnapshot: 'policy:1', evidenceDigest: 'evidence:1', capability: 'sanity.query', issuedAt: 1, expiresAt: 2_000_000,
+          },
+        }
+      },
+      async consumeExecutionAuthorization() { return { consumed: true } },
+    }),
+  })
+  await worker.drain()
+  const events = await store.events('run-1')
+  assert.deepEqual(events.map((event) => event.type), ['queued', 'claimed', 'completed', 'authorization-issued', 'authorization-consumed'])
+  assert.match(events.at(-1)?.detail ?? '', /id=auth:run-1:tool-1/)
+
+  await queue.recordAuthorizationLifecycle('run-1', 'auth:run-1:tool-1', 'action:tool-1', 'w-auth')
+  assert.equal((await store.events('run-1')).filter((event) => event.type === 'authorization-consumed').length, 1)
+  await queue.recordAuthorizationRevoked('run-1', 'auth:revoked', 'operator cancelled', 'supervisor-1')
+  await queue.recordAuthorizationRevoked('run-1', 'auth:revoked', 'operator cancelled', 'supervisor-1')
+  assert.equal((await store.events('run-1')).filter((event) => event.type === 'authorization-revoked').length, 1)
 })
 
 test('Queue: invalid graphs and malformed requests are rejected at admission', async () => {

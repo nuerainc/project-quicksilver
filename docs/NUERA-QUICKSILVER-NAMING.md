@@ -12,6 +12,11 @@ them to the current Quicksilver repository.
   authority for safety and execution decisions.
 - **Nuera Quicksilver Agents** are worker agents. They propose plans and
   perform bounded work under NQC Kernel controls.
+- The **Supervisor Agent** is a governed control-plane worker within the agent
+  family. It coordinates evaluation, approval requests, execution readiness,
+  observation and rollback proposals, but it is not an authority holder and
+  cannot approve itself, impersonate a human supervisor, or bypass the NQC
+  Kernel. The **Human Supervisor** is the authority-bearing principal.
 - **Quicksilver Engine** is the evaluation engine integrated with NQC Kernel,
   evolved from our Quicksilver Sanity Challenge submission
   ([nuerainc/quicksilver-sanity-challenge](https://github.com/nuerainc/quicksilver-sanity-challenge)).

@@ -105,6 +105,19 @@ function handlers(overrides: Partial<WorkflowRuntimeHandlers> = {}): WorkflowRun
     async evaluate(node, _c, _ctx, phase) { calls.push(`eval:${node.id}:${phase}`); return { safetyDecision: 'ALLOW', reasoningScore: 90 } },
     async validateTool(node) { calls.push(`validate:${node.id}`); return { allowed: true, reasons: [] } },
     async approve(node) { calls.push(`approve:${node.id}`); return { approved: true } },
+    async authorizeExecution(node) {
+      calls.push(`authorize:${node.id}`)
+      return {
+        status: 'ready-to-execute' as const,
+        reasons: [],
+        authorization: {
+          authorizationId: `auth:${node.id}`, keyId: 'kernel-key-1', signature: 'hmac-sha256:test', status: 'issued', tenantId: 'test', actionFingerprint: `action:${node.id}`,
+          policySnapshot: 'policy:test', evidenceDigest: 'evidence:test', capability: node.config?.toolId ?? node.config?.agentId ?? 'test',
+          issuedAt: 1, expiresAt: Number.MAX_SAFE_INTEGER,
+        },
+      }
+    },
+    async consumeExecutionAuthorization(node) { calls.push(`consume:${node.id}`); return { consumed: true } },
     ...overrides,
   }
 }
@@ -376,7 +389,9 @@ test('Runtime: side-effect tools are evaluated and approved before execution, in
   const h = handlers()
   const result = await executeWorkflowGraph(toolGraph({ sideEffect: true, evaluationRequired: true, supervisorApprovalRequired: true }), 'x', h)
   assert.equal(result.status, 'completed')
-  assert.deepEqual(h.calls, ['validate:tool-1', 'eval:tool-1:before-execution', 'approve:tool-1', 'tool:tool-1'])
+  assert.deepEqual(h.calls, ['validate:tool-1', 'eval:tool-1:before-execution', 'approve:tool-1', 'authorize:tool-1', 'consume:tool-1', 'tool:tool-1'])
+  assert.equal(result.steps[1]?.authorizationId, 'auth:tool-1')
+  assert.equal(result.steps[1]?.authorizationFingerprint, 'action:tool-1')
 })
 
 test('Runtime: a denied or missing approval means the side-effect tool never runs', async () => {
@@ -388,9 +403,36 @@ test('Runtime: a denied or missing approval means the side-effect tool never run
   delete (none as Partial<WorkflowRuntimeHandlers>).approve
   assert.equal((await executeWorkflowGraph(toolGraph(cfg), 'x', none)).status, 'blocked')
   assert.ok(!none.calls.includes('tool:tool-1'))
+  const noAuthorization = handlers()
+  delete (noAuthorization as Partial<WorkflowRuntimeHandlers>).authorizeExecution
+  const missingKernelGrant = await executeWorkflowGraph(toolGraph(cfg), 'x', noAuthorization)
+  assert.equal(missingKernelGrant.status, 'blocked')
+  assert.match(missingKernelGrant.error ?? '', /Kernel execution authorization/)
+  assert.ok(!noAuthorization.calls.includes('tool:tool-1'))
+  const noConsumer = handlers()
+  delete (noConsumer as Partial<WorkflowRuntimeHandlers>).consumeExecutionAuthorization
+  const missingVerifier = await executeWorkflowGraph(toolGraph(cfg), 'x', noConsumer)
+  assert.equal(missingVerifier.status, 'blocked')
+  assert.match(missingVerifier.error ?? '', /Executor authorization verification/)
   const sim = handlers({ evaluate: async () => ({ safetyDecision: 'SKIPPED', simulated: true }) })
   assert.equal((await executeWorkflowGraph(toolGraph(cfg), 'x', sim)).status, 'blocked')
   assert.ok(!sim.calls.includes('tool:tool-1'))
+})
+
+test('Runtime: a Supervisor Agent result without a ready kernel authorization never dispatches', async () => {
+  const h = handlers({ authorizeExecution: async () => ({ status: 'blocked' as const, reasons: ['authorization fingerprint mismatch'] }) })
+  const result = await executeWorkflowGraph(toolGraph({ sideEffect: true, evaluationRequired: true, supervisorApprovalRequired: true }), 'x', h)
+  assert.equal(result.status, 'blocked')
+  assert.equal(result.error, 'authorization fingerprint mismatch')
+  assert.ok(!h.calls.includes('tool:tool-1'))
+})
+
+test('Runtime: executor signature verification rejects a forged authorization before dispatch', async () => {
+  const h = handlers({ consumeExecutionAuthorization: async () => ({ consumed: false, reason: 'Authorization signature is invalid.' }) })
+  const result = await executeWorkflowGraph(toolGraph({ sideEffect: true, evaluationRequired: true, supervisorApprovalRequired: true }), 'x', h)
+  assert.equal(result.status, 'blocked')
+  assert.equal(result.error, 'Authorization signature is invalid.')
+  assert.ok(!h.calls.includes('tool:tool-1'))
 })
 
 test('Runtime: agent retries honour maxAttempts; tools are called once', async () => {

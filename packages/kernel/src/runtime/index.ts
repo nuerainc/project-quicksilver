@@ -10,3 +10,5 @@
 export * from './store.ts'
 export * from './queue.ts'
 export * from './worker.ts'
+export * from './authorization.ts'
+export * from './authorization-coordinator.ts'

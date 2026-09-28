@@ -26,6 +26,8 @@
     "./workflows/condition": "./src/workflows/condition.ts",
     "./agents": "./src/agents/registry.ts",
     "./runtime": "./src/runtime/index.ts",
+    "./runtime/authorization": "./src/runtime/authorization.ts",
+    "./runtime/authorization-coordinator": "./src/runtime/authorization-coordinator.ts",
     "./runtime/file-store": "./src/runtime/file-store.ts",
     "./identity": "./src/identity/index.ts",
     "./identity/tokens": "./src/identity/tokens.ts",

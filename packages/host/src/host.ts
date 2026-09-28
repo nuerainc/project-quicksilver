@@ -8,6 +8,7 @@ import {
   InMemoryWorkflowRunStore,
   WorkflowRunQueue,
   WorkflowRunWorker,
+  type AuthorizationSigningKey,
   type WorkflowRunRecord,
   type WorkflowRunStatus,
   type WorkflowRunStore,
@@ -137,6 +138,10 @@ export class QuicksilverHost {
     this.hostPrincipal = { id: HOST_PRINCIPAL_ID, kind: 'service', tenantId: config.tenantId, roles: ['host-runtime'] }
 
     const store = deps.store ?? new InMemoryWorkflowRunStore()
+    const authorizationSecret = (deps.env ?? process.env)[config.execution.authorizationKeyEnv]
+    const authorizationKey: AuthorizationSigningKey | undefined = authorizationSecret
+      ? { keyId: `${config.tenantId}:${config.worker.id}`, secret: authorizationSecret }
+      : undefined
     this.queue = new WorkflowRunQueue({ store, access: this.access, ...config.queue, ...(deps.now ? { now: deps.now } : {}) })
     this.worker = new WorkflowRunWorker({
       queue: this.queue,
@@ -150,6 +155,7 @@ export class QuicksilverHost {
         execution: config.execution,
         log: this.log,
         metrics: this.metrics,
+        ...(authorizationKey ? { authorizationKey } : {}),
       }),
       onRunFinished: (run) => this.onRunFinished(run),
     })
