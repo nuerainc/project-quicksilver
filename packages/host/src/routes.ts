@@ -113,6 +113,12 @@ export const HOST_ROUTES: readonly HostRoute[] = Object.freeze<HostRoute[]>([
   { method: 'GET', path: '/api/schedules', access: anyOf('run:read') },
   { method: 'GET', path: '/api/webhooks', access: anyOf('run:read') },
   { method: 'GET', path: '/api/workflows', access: anyOf('workflow:read') },
+  { method: 'GET', path: '/api/workflows/:id', access: anyOf('workflow:read') },
+  { method: 'POST', path: '/api/workflows/drafts', rateLimit: 'write', access: anyOf('workflow:write') },
+  { method: 'POST', path: '/api/workflows/:id/submit-review', rateLimit: 'write', access: anyOf('workflow:write') },
+  { method: 'POST', path: '/api/workflows/:id/review', rateLimit: 'write', access: anyOf('workflow:publish') },
+  { method: 'POST', path: '/api/workflows/:id/publish', rateLimit: 'write', access: anyOf('workflow:publish') },
+  { method: 'POST', path: '/api/workflows/:id/rollback', rateLimit: 'write', access: anyOf('workflow:publish') },
 
   // ── Secrets and administration ──
   { method: 'GET', path: '/api/secrets', feature: 'vault', access: anyOf('secret:read', 'secret:use') },

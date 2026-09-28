@@ -70,7 +70,7 @@ const stubRunner: AgentRunner = async ({ input }) => {
 interface Harness {
   host: QuicksilverHost
   base: string
-  tokens: Record<'viewer' | 'operator' | 'supervisor' | 'auditor' | 'admin', string>
+  tokens: Record<'viewer' | 'operator' | 'developer' | 'supervisor' | 'publisher' | 'auditor' | 'admin', string>
   evaluations: EvaluationEntry[]
   logs: string[]
   webhookSecret: string
@@ -82,7 +82,9 @@ async function startHost(overrides: Record<string, unknown> = {}, extra: { agent
   const dir = await mkdtemp(join(tmpdir(), 'qs-host-'))
   const viewer = person('entity-viewer', ['viewer'])
   const operator = person('entity-operator', ['operator'])
+  const developer = person('entity-developer', ['developer'])
   const supervisor = person('entity-supervisor', ['supervisor'])
+  const publisher = person('entity-publisher', ['supervisor'])
   const auditor = person('entity-auditor', ['auditor'])
   const admin = person('entity-admin', ['tenant-admin'])
   const webhookSecret = generateWebhookSecret()
@@ -103,7 +105,7 @@ async function startHost(overrides: Record<string, unknown> = {}, extra: { agent
   const evaluations: EvaluationEntry[] = []
   const logs: string[] = []
   const host = new QuicksilverHost(config, {
-    principals: [viewer.config, operator.config, supervisor.config, auditor.config, admin.config],
+    principals: [viewer.config, operator.config, developer.config, supervisor.config, publisher.config, auditor.config, admin.config],
     env,
     logger: new Logger({ level: 'debug', sink: { write: (line) => logs.push(line) } }),
     ...(extra.agentRunner === null ? {} : { agentRunner: extra.agentRunner ?? stubRunner }),
@@ -116,7 +118,7 @@ async function startHost(overrides: Record<string, unknown> = {}, extra: { agent
   return {
     host,
     base: `http://127.0.0.1:${port}`,
-    tokens: { viewer: viewer.token, operator: operator.token, supervisor: supervisor.token, auditor: auditor.token, admin: admin.token },
+    tokens: { viewer: viewer.token, operator: operator.token, developer: developer.token, supervisor: supervisor.token, publisher: publisher.token, auditor: auditor.token, admin: admin.token },
     evaluations,
     logs,
     webhookSecret,
@@ -380,6 +382,31 @@ test('schedules and webhooks are listed without secrets', async () => {
     assert.ok(hooks.includes('erp-orders') && !hooks.includes(h.webhookSecret))
     const workflows = await (await api(h, '/api/workflows', { token: h.tokens.viewer })).json() as { workflows: unknown[] }
     assert.equal(workflows.workflows.length, 2)
+  } finally {
+    await h.close()
+  }
+})
+
+test('workflow publication: developer drafts, independent supervisors review and publish, and viewers cannot mutate', async () => {
+  const h = await startHost()
+  try {
+    const draft = await api(h, '/api/workflows/drafts', { method: 'POST', token: h.tokens.developer, body: { graph: { ...briefGraph, id: 'published-brief', version: 1 } } })
+    assert.equal(draft.status, 201)
+    assert.equal((await draft.json() as { publication: { status: string; digest: string } }).publication.status, 'draft')
+
+    assert.equal((await api(h, '/api/workflows/published-brief/submit-review', { method: 'POST', token: h.tokens.developer, body: { version: 1 } })).status, 200)
+    assert.equal((await api(h, '/api/workflows/published-brief/review', { method: 'POST', token: h.tokens.developer, body: { version: 1 } })).status, 403)
+    const review = await api(h, '/api/workflows/published-brief/review', { method: 'POST', token: h.tokens.supervisor, body: { version: 1 } })
+    assert.equal(review.status, 200, await review.text())
+    assert.equal((await api(h, '/api/workflows/published-brief/publish', { method: 'POST', token: h.tokens.supervisor, body: { version: 1 } })).status, 409)
+    assert.equal((await api(h, '/api/workflows/published-brief/publish', { method: 'POST', token: h.tokens.publisher, body: { version: 1 } })).status, 200)
+
+    const published = await (await api(h, '/api/workflows/published-brief', { token: h.tokens.viewer })).json() as { versions: Array<{ status: string; digest: string }> }
+    assert.equal(published.versions.length, 1)
+    assert.equal(published.versions[0]!.status, 'published')
+    assert.match(published.versions[0]!.digest, /^sha256:/)
+    assert.equal((await api(h, '/api/workflows/unknown-workflow', { token: h.tokens.viewer })).status, 404)
+    assert.equal((await api(h, '/api/workflows/drafts', { method: 'POST', token: h.tokens.viewer, body: { graph: briefGraph } })).status, 403)
   } finally {
     await h.close()
   }

@@ -47,3 +47,21 @@ ordering, and restart persistence. The suite is included in
 This is the M8 contract foundation. A later host/Sanity adapter must provide
 persistent storage, tenant-scoped access checks, and API/UI routes without
 weakening the kernel lifecycle.
+
+## Host API integration
+
+The single-tenant host now exposes the lifecycle through authenticated routes:
+
+| Method | Route | Required permission | Purpose |
+|---|---|---|---|
+| `GET` | `/api/workflows/:id` | `workflow:read` | Read configured metadata and publication versions |
+| `POST` | `/api/workflows/drafts` | `workflow:write` | Create a validated draft |
+| `POST` | `/api/workflows/:id/submit-review` | `workflow:write` | Submit the authored version for review |
+| `POST` | `/api/workflows/:id/review` | `workflow:publish` | Record independent human review |
+| `POST` | `/api/workflows/:id/publish` | `workflow:publish` | Publish the reviewed version |
+| `POST` | `/api/workflows/:id/rollback` | `workflow:publish` | Restore a reviewed deprecated version |
+
+The host applies its normal bearer authentication, tenant boundary, route-table
+permission floor, rate limits, and JSON body limits before invoking the kernel
+store. File-backed hosts use a private `workflow-publications.json` snapshot
+next to the configured run store; memory-backed hosts use an in-memory adapter.

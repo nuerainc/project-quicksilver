@@ -1,6 +1,7 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 import { readFileSync } from 'node:fs'
 import type { AddressInfo } from 'node:net'
+import { dirname, join } from 'node:path'
 
 import { AccessController, type AccessDecision, type Principal } from '@quicksilver/kernel/identity'
 import { StaticTokenIdentityProvider, type TokenPrincipalConfig } from '@quicksilver/kernel/identity/tokens'
@@ -15,6 +16,7 @@ import {
 } from '@quicksilver/kernel/runtime'
 import { CronScheduler, WebhookTrigger, type VerifiedWebhookDelivery, type WebhookSinkOutcome } from '@quicksilver/kernel/triggers'
 import { TokenBucketLimiter } from '@quicksilver/kernel/rate-limit'
+import { FileWorkflowPublicationStore, InMemoryWorkflowPublicationStore, type WorkflowPublicationActor, type WorkflowPublicationVersion } from '@quicksilver/kernel/workflows/publication'
 
 import { checkWorkflow, type HostConfig, type WebhookTaskConfig } from './config.ts'
 import { createHandlerFactory, type AgentRunner, type EvaluationSink } from './handlers.ts'
@@ -44,6 +46,8 @@ export interface HostDependencies {
   principals?: readonly TokenPrincipalConfig[]
   /** A run store; defaults from `config.store` are built by `main.ts`. In-memory when omitted. */
   store?: WorkflowRunStore
+  /** Versioned workflow publication state; defaults to a file adapter for file-backed hosts. */
+  publicationStore?: InMemoryWorkflowPublicationStore
   /** Environment for `env:` secret references and the vault key. */
   env?: Record<string, string | undefined>
   agentRunner?: AgentRunner
@@ -91,6 +95,7 @@ export class QuicksilverHost {
   readonly metrics: HostMetrics
   readonly access: AccessController
   readonly queue: WorkflowRunQueue
+  readonly publications: InMemoryWorkflowPublicationStore
   readonly worker: WorkflowRunWorker
   readonly scheduler: CronScheduler
   readonly vault?: SecretsVault
@@ -138,6 +143,9 @@ export class QuicksilverHost {
     this.hostPrincipal = { id: HOST_PRINCIPAL_ID, kind: 'service', tenantId: config.tenantId, roles: ['host-runtime'] }
 
     const store = deps.store ?? new InMemoryWorkflowRunStore()
+    this.publications = deps.publicationStore ?? (config.store.kind === 'file'
+      ? new FileWorkflowPublicationStore(join(dirname(config.store.path), 'workflow-publications.json'))
+      : new InMemoryWorkflowPublicationStore())
     const authorizationSecret = (deps.env ?? process.env)[config.execution.authorizationKeyEnv]
     const authorizationKey: AuthorizationSigningKey | undefined = authorizationSecret
       ? { keyId: `${config.tenantId}:${config.worker.id}`, secret: authorizationSecret }
@@ -578,7 +586,50 @@ export class QuicksilverHost {
     if (path === '/api/workflows' && method === 'GET') {
       const denied = this.authorize(principal, 'workflow:read')
       if (denied) return denied
-      return { status: 200, body: { workflows: Object.entries(this.config.workflows).map(([id, g]) => ({ id, graphId: g.id, version: g.version, nodes: g.nodes.length })) } }
+      const published = this.publications.snapshot().versions.filter((version) => version.status === 'published')
+      return { status: 200, body: { workflows: Object.entries(this.config.workflows).map(([id, g]) => ({ id, graphId: g.id, version: g.version, nodes: g.nodes.length, source: 'host-config' })), published: published.map(publicationSummary) } }
+    }
+    if (parts[1] === 'workflows' && parts.length === 3 && method === 'GET') {
+      const denied = this.authorize(principal, 'workflow:read')
+      if (denied) return denied
+      const versions = this.publications.snapshot().versions.filter((version) => version.workflowId === parts[2])
+      if (!versions.length && !this.config.workflows[parts[2]!]) return { status: 404, body: { error: 'Workflow not found.' } }
+      return { status: 200, body: { configured: this.config.workflows[parts[2]!] ?? null, versions: versions.map(publicationSummary) } }
+    }
+    if (path === '/api/workflows/drafts' && method === 'POST') {
+      const denied = this.authorize(principal, 'workflow:write')
+      if (denied) return denied
+      const body = await readJson(req, this.config.http.maxBodyBytes)
+      if (!body.ok) return { status: body.status, body: { error: body.error } }
+      const graph = (body.value as { graph?: unknown }).graph
+      if (!graph || typeof graph !== 'object') return { status: 400, body: { error: 'Provide a workflow graph in graph.' } }
+      try {
+        const created = this.publications.createDraft(graph as never, publicationActor(principal), Date.now())
+        return { status: 201, body: { publication: publicationSummary(created) } }
+      } catch (error) {
+        return { status: 409, body: { error: (error as Error).message } }
+      }
+    }
+    if (parts[1] === 'workflows' && parts.length === 4 && method === 'POST' && ['submit-review', 'review', 'publish', 'rollback'].includes(parts[3]!)) {
+      const permission = parts[3] === 'submit-review' ? 'workflow:write' : 'workflow:publish'
+      const denied = this.authorize(principal, permission)
+      if (denied) return denied
+      const body = await readJson(req, this.config.http.maxBodyBytes)
+      if (!body.ok) return { status: body.status, body: { error: body.error } }
+      const version = (body.value as { version?: unknown }).version
+      if (!Number.isInteger(version) || (version as number) < 1) return { status: 400, body: { error: 'version must be a positive integer.' } }
+      try {
+        const actor = publicationActor(principal)
+        let result: WorkflowPublicationVersion
+        if (parts[3] === 'submit-review') result = this.publications.submitForReview(parts[2]!, version as number, actor, Date.now())
+        else if (parts[3] === 'review') result = this.publications.review(parts[2]!, version as number, actor, Date.now())
+        else if (parts[3] === 'publish') result = this.publications.publish(parts[2]!, version as number, actor, Date.now())
+        else result = this.publications.rollback(parts[2]!, version as number, actor, Date.now())
+        return { status: 200, body: { publication: publicationSummary(result) } }
+      } catch (error) {
+        const message = (error as Error).message
+        return { status: /not found/i.test(message) ? 404 : 409, body: { error: message } }
+      }
     }
 
     // Secrets (metadata and writes only; values are never returned by the API)
@@ -675,7 +726,25 @@ export class QuicksilverHost {
     return this.authorize(principal, permission)
   }
 }
+function publicationActor(principal: Principal): WorkflowPublicationActor {
+  return { id: principal.id, kind: principal.kind, canPublish: principal.kind === 'human' }
+}
 
+function publicationSummary(version: WorkflowPublicationVersion) {
+  return {
+    workflowId: version.workflowId,
+    version: version.version,
+    digest: version.digest,
+    authoredBy: version.authoredBy,
+    status: version.status,
+    createdAt: new Date(version.createdAt).toISOString(),
+    ...(version.reviewedBy ? { reviewedBy: version.reviewedBy, reviewedAt: new Date(version.reviewedAt!).toISOString() } : {}),
+    ...(version.publishedAt ? { publishedAt: new Date(version.publishedAt).toISOString() } : {}),
+    ...(version.deprecatedAt ? { deprecatedAt: new Date(version.deprecatedAt).toISOString() } : {}),
+    ...(version.rollbackOfVersion ? { rollbackOfVersion: version.rollbackOfVersion } : {}),
+    nodes: version.graph.nodes.length,
+  }
+}
 function summarize(run: WorkflowRunRecord) {
   return {
     runId: run.runId,

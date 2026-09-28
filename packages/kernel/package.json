@@ -23,6 +23,7 @@
     "./tools/registry": "./src/tools/registry.ts",
     "./workflows/graph": "./src/workflows/graph.ts",
     "./workflows/runtime": "./src/workflows/runtime.ts",
+    "./workflows/publication": "./src/workflows/publication.ts",
     "./workflows/condition": "./src/workflows/condition.ts",
     "./agents": "./src/agents/registry.ts",
     "./runtime": "./src/runtime/index.ts",
