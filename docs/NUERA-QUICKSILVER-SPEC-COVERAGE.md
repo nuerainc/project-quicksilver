@@ -68,7 +68,7 @@ current implementation intentionally refuses the capability.
 | Requirement | Current repository evidence | Status / remaining work |
 |---|---|---|
 | Python / JavaScript SDKs and CLI | Internal Python SDK + `qs` CLI and internal TypeScript SDK for workflow validate/preview/gated read-only run | Foundation; not published, stable API contract not declared, broader auth/agent APIs absent |
-| Go SDK and local harness | Neither found | Missing; build after stable API contract and auth model |
+| Go SDK and local harness | Dependency-free internal Go client at `packages/sdk-go`; supports validate, safe preview, and gated read-only run; CI builds and vets the module | Foundation only; no contract tests, stable API guarantee, publishing, or local harness |
 | Agent creation API | No API to create, validate, version, or deploy agent definitions | Missing; requires standard agent contract, identity, permissions, and audit model |
 | Plugin and tool schemas | Versioned in-process tool schemas and validation for current MCP path | Foundation; no install lifecycle, isolation, permissions UX, or persistent catalog |
 | Marketplace and publishing | No extension catalog | Missing: versioning, signing, review, approval, publishing, revocation, and tenant trust controls |

@@ -65,4 +65,6 @@ or an envelope such as `{"graph": {"nodes": [], "edges": []}}`.
 - No Python async client, workflow authoring, retries, or persistence layer.
 - The CLI does not manage credentials; use environment configuration and
   avoid placing secrets in workflow files or command history.
-- Go SDK and broader agent creation APIs remain future work.
+- The Go client is an internal foundation documented in the
+  [Go SDK guide](sdk-go.md); its contract is not stable or published. Broader
+  agent creation APIs remain future work.
