@@ -28,6 +28,12 @@ export interface WorkflowRunTrigger {
   source?: string
 }
 
+/** Provenance binding for runs admitted from the publication store. */
+export interface WorkflowRunPublication {
+  version: number
+  digest: string
+}
+
 export interface WorkflowRunLease {
   workerId: string
   expiresAt: number
@@ -45,6 +51,8 @@ export interface WorkflowRunRecord {
   workflowVersion: number
   /** SHA-256 of the canonical graph snapshot, so an audit can prove what ran. */
   graphDigest: string
+  /** Present when admission resolved a published workflow version. */
+  publication?: WorkflowRunPublication
   /** Frozen snapshot of the graph at enqueue time; later edits never change a queued run. */
   graph: WorkflowGraph
   input: unknown
@@ -174,8 +182,9 @@ export class InMemoryWorkflowRunStore implements WorkflowRunStore {
   protected applyCompareAndSet(next: WorkflowRunRecord, expectedRevision: number): boolean {
     const current = this.runs.get(next.runId)
     if (!current || current.revision !== expectedRevision || next.revision !== expectedRevision + 1) return false
-    if (next.tenantId !== current.tenantId || next.idempotencyKey !== current.idempotencyKey || next.graphDigest !== current.graphDigest) {
-      throw new Error('Run identity fields (tenant, idempotency key, graph digest) are immutable.')
+    if (next.tenantId !== current.tenantId || next.idempotencyKey !== current.idempotencyKey || next.graphDigest !== current.graphDigest
+      || JSON.stringify(next.publication) !== JSON.stringify(current.publication)) {
+      throw new Error('Run identity fields (tenant, idempotency key, graph digest, publication) are immutable.')
     }
     this.runs.set(next.runId, structuredClone(next))
     return true

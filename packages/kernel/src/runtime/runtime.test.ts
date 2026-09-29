@@ -77,6 +77,20 @@ test('Queue: enqueue validates, snapshots, freezes, and digests the graph', asyn
   assert.deepEqual(events.map((e) => [e.seq, e.type, e.detail]), [[1, 'queued', 'trigger=webhook:hook-7']])
 })
 
+test('Queue: publication provenance must match the graph and remains immutable', async () => {
+  const { queue } = setup()
+  const graph = agentGraph('published-agent')
+  const digest = graphDigest(graph)
+  const admitted = await queue.enqueue({ graph, input: null, tenantId: 'acme', publication: { version: graph.version, digest } })
+  assert.equal(admitted.accepted, true)
+  if (!admitted.accepted) return
+  assert.deepEqual(admitted.run.publication, { version: graph.version, digest })
+  const invalid = await queue.enqueue({ graph, input: null, tenantId: 'acme', publication: { version: graph.version + 1, digest } })
+  assert.equal(invalid.accepted, false)
+  if (invalid.accepted) return
+  assert.match(invalid.reasons[0]!, /does not match/)
+})
+
 test('Worker: protected execution emits durable, replay-safe authorization lifecycle events', async () => {
   const { store, queue } = setup()
   await queue.enqueue({ graph: toolGraph({ sideEffect: true, evaluationRequired: true, supervisorApprovalRequired: true }), input: 'x', tenantId: 'acme' })

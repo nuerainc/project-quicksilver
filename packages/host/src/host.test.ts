@@ -426,9 +426,10 @@ test('published workflow admission runs the immutable published graph and return
     const admittedBody = await admitted.json() as { runId: string; publication: { version: number; digest: string } }
     assert.equal(admittedBody.publication.version, 7)
     assert.match(admittedBody.publication.digest, /^sha256:/)
-    const run = await (await api(h, `/api/runs/${admittedBody.runId}`, { token: h.tokens.viewer })).json() as { run: { workflowVersion: number; graphDigest: string } }
+    const run = await (await api(h, `/api/runs/${admittedBody.runId}`, { token: h.tokens.viewer })).json() as { run: { workflowVersion: number; graphDigest: string; publication: { version: number; digest: string } } }
     assert.equal(run.run.workflowVersion, 7)
     assert.equal(run.run.graphDigest, admittedBody.publication.digest)
+    assert.deepEqual(run.run.publication, admittedBody.publication)
   } finally {
     await h.close()
   }

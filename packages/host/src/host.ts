@@ -527,6 +527,7 @@ export class QuicksilverHost {
       if (issues.length) return { status: 422, body: { error: 'Workflow violates the host execution policy.', issues } }
       const result = await this.queue.enqueue({
         graph,
+        ...(publication ? { publication: { version: publication.version, digest: publication.digest } } : {}),
         input: input ?? null,
         tenantId: this.config.tenantId,
         trigger: { kind: 'api', source: principal.id },
@@ -757,6 +758,7 @@ function summarize(run: WorkflowRunRecord) {
     maxAttempts: run.maxAttempts,
     trigger: run.trigger,
     requestedBy: run.requestedBy,
+    ...(run.publication ? { publication: run.publication } : {}),
     createdAt: new Date(run.createdAt).toISOString(),
     updatedAt: new Date(run.updatedAt).toISOString(),
     ...(run.lastError ? { lastError: run.lastError } : {}),

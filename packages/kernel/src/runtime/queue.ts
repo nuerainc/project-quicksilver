@@ -7,6 +7,7 @@ import {
   TERMINAL_RUN_STATUSES,
   type WorkflowRunEventType,
   type WorkflowRunRecord,
+  type WorkflowRunPublication,
   type WorkflowRunStatus,
   type WorkflowRunStore,
   type WorkflowRunTrigger,
@@ -41,6 +42,8 @@ export interface WorkflowRunQueueOptions {
 
 export interface EnqueueWorkflowRunRequest {
   graph: WorkflowGraph
+  /** Optional immutable publication binding supplied by a publication-aware host. */
+  publication?: WorkflowRunPublication
   input: unknown
   tenantId: string
   trigger?: WorkflowRunTrigger
@@ -132,6 +135,10 @@ export class WorkflowRunQueue {
 
     const validation = validateWorkflowGraph(request.graph)
     if (!validation.valid) return { accepted: false, code: 'invalid-graph', reasons: validation.errors }
+    const digest = graphDigest(request.graph)
+    if (request.publication && (request.publication.version !== request.graph.version || request.publication.digest !== digest)) {
+      return { accepted: false, code: 'invalid-request', reasons: ['Publication binding does not match the admitted workflow graph.'] }
+    }
 
     const queued = await this.store.list({ status: 'queued' })
     if (queued.length >= this.maxQueued) {
@@ -150,7 +157,8 @@ export class WorkflowRunQueue {
       tenantId: request.tenantId,
       workflowId: graph.id,
       workflowVersion: graph.version,
-      graphDigest: graphDigest(graph),
+      graphDigest: digest,
+      ...(request.publication ? { publication: { ...request.publication } } : {}),
       graph,
       input: structuredClone(request.input),
       trigger: request.trigger ?? { kind: 'manual' },
