@@ -30,11 +30,11 @@ import { approvalDigest } from '../supervisor.ts'
 import { buildEvaluationRecord as _buildEvaluationRecord, MAX_EVALUATION_SUBJECT_CHARS as _MAX } from '../index.ts'
 import { applyUpstreamEscalation as _applyUpstream, evaluateNqcRequest as _evaluate } from './index.ts'
 
-// ── Quicksilver Engine ────────────────────────────────────────────────────
+// â”€â”€ Quicksilver Engine â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 const grounded = {
   agentOutput: 'Line 3 pressure is within tolerance per SOP-12.',
-  context: ['SOP-12: tolerance 40–60 psi', 'Sensor: 52 psi'],
+  context: ['SOP-12: tolerance 40â€“60 psi', 'Sensor: 52 psi'],
   citedReferences: ['SOP-12'],
   availableReferences: ['SOP-12'],
 }
@@ -88,7 +88,7 @@ test('Engine: critical work without grounding is penalised further', () => {
   assert.equal(normal - critical, 15)
 })
 
-// ── tool validation ───────────────────────────────────────────────────────
+// â”€â”€ tool validation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 test('Tool validation: unknown tools, sequence mismatches, and missing args fail closed', () => {
   const r = validateToolRequest({ name: 'ghost', arguments: undefined, sequence: 2 }, [], 1)
@@ -129,7 +129,7 @@ test('Tool validation: approval must be verified and dependencies completed', ()
   assert.equal(ok.requiresApproval, true)
 })
 
-// ── registries ────────────────────────────────────────────────────────────
+// â”€â”€ registries â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 test('ToolRegistry: invalid, duplicate, and unsafe manifests are refused', () => {
   const registry = new ToolRegistry()
@@ -189,6 +189,7 @@ const supervisorKey = { keyId: 'kernel-key-1', secret: '0123456789abcdef01234567
 const supervisorRequest = {
   supervisorAgentId: 'nuera-quicksilver:supervisor',
   tenantId: 'acme',
+  runId: 'run-1',
   actionFingerprint: 'action:abc',
   policySnapshot: 'policy:1',
   evidenceDigest: 'evidence:1',
@@ -326,7 +327,7 @@ test('Supervisor Agent: kernel BLOCK is never overridden by approval or authoriz
   assert.ok(result.reasons.some((reason) => reason.includes('cannot override')))
 })
 
-// ── NQC contract ──────────────────────────────────────────────────────────
+// â”€â”€ NQC contract â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 test('NQC: clean moderate-impact work is allowed with no memory proposals', () => {
   const r = evaluateNqcRequest({ ...grounded, agentId: 'nuera-quicksilver:query', impactLevel: 'moderate' })
@@ -361,7 +362,7 @@ test('NQC: a credential inside a failure exemplar is blocked from memory', () =>
   assert.ok(r.memoryUpdates.some((u) => u.status === 'blocked'))
 })
 
-// ── memory governance ─────────────────────────────────────────────────────
+// â”€â”€ memory governance â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 const memory: GovernedMemoryEntry = { id: 'm-1', kind: 'failure-exemplar', domain: 'reasoning', content: 'Empty output.', source: 'engine', confidence: 0.8, retentionDays: 30 }
 
@@ -404,7 +405,7 @@ test('Memory: the persistence callback runs only for governed writes', async () 
   assert.equal(writes, 1)
 })
 
-// ── routing ───────────────────────────────────────────────────────────────
+// â”€â”€ routing â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 const profile = (id: string, extra: Partial<ModelPerformanceProfile> = {}): ModelPerformanceProfile => ({
   modelId: id, supportedTasks: ['reasoning', 'code'], taskAccuracy: { reasoning: 0.8, code: 0.7 },
@@ -466,7 +467,7 @@ test('Routing: performance updates are bounded moving averages and ignore other 
   assert.equal(clamped.p95LatencyMs, 0)
 })
 
-// ── reasoning stress ──────────────────────────────────────────────────────
+// â”€â”€ reasoning stress â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 test('Stress: challenges are deterministic and cycle through all four categories', () => {
   assert.deepEqual(generateReasoningStressChallenge(42), generateReasoningStressChallenge(42))
@@ -481,7 +482,7 @@ test('Stress: rubrics accept correct final answers and reject traps', () => {
   const [groups, perGroup, removed] = arithmetic.prompt.match(/\d+/g)!.map(Number)
   assert.equal(scoreReasoningStressAnswer(arithmetic.id, String(groups! * perGroup! - removed!)).passed, true)
   assert.equal(scoreReasoningStressAnswer(arithmetic.id, String(groups! * perGroup!)).passed, removed === 0)
-  assert.equal(scoreReasoningStressAnswer('qs-reasoning-v1-1', 'No — affirming the consequent.').passed, true)
+  assert.equal(scoreReasoningStressAnswer('qs-reasoning-v1-1', 'No â€” affirming the consequent.').passed, true)
   assert.equal(scoreReasoningStressAnswer('qs-reasoning-v1-1', 'Yes.').passed, false)
   assert.equal(scoreReasoningStressAnswer('qs-reasoning-v1-2', 'It cannot be determined.').passed, true)
   assert.equal(scoreReasoningStressAnswer('qs-reasoning-v1-2', '42 liters').passed, false)
@@ -503,7 +504,7 @@ test('Stress: suite scores provider answers, counts provider failures, and honou
   await assert.rejects(runReasoningStressSuite(async () => 'x', { seed: 0, count: 51 }))
 })
 
-// ── M1 item 5: durable evaluation records ─────────────────────────────────
+// â”€â”€ M1 item 5: durable evaluation records â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 test('Evaluation record: captures scores and safety decision without private reasoning', () => {
   const evaluation = _evaluate({ agentId: 'nuera-quicksilver:query', taskType: 'reasoning', agentOutput: 'answer', context: ['doc-1'], impactLevel: 'low' })
@@ -521,7 +522,7 @@ test('Evaluation record: long subjects are truncated and odd ids refused', () =>
   assert.throws(() => _buildEvaluationRecord({ id: 'bad id/../x', now: 'n', source: 'query', agentId: 'a', taskType: 't', subject: 's', requestedBy: 'r', evaluation }))
 })
 
-// ── M1 item 6: planner escalation tightens per-action decisions ───────────
+// â”€â”€ M1 item 6: planner escalation tightens per-action decisions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 test('Upstream escalation: an escalated planner turns ALLOW into human review', () => {
   const allow = { decision: { authorized: true, riskLevel: 1, requiresApproval: false, blockingReasons: [], concerns: [], policyConflicts: [], policyChecks: [], policyResolutions: [], uncitedPolicyIds: [], averageEvidenceConfidence: 1, recommendation: 'execute-autonomously' }, evaluation: {} as never, escalationReasons: [], safetyDecision: 'ALLOW' } as never
