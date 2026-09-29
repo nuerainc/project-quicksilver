@@ -1,0 +1,35 @@
+{
+  "note": "Nuera's own standing boundaries, merged over the generic built-in rules (packages/host/src/task-boundaries.ts). They can only add. Kept out of public editions.",
+  "restrictedMaterial": [
+    {
+      "id": "amp-patent-material",
+      "patterns": [
+        "\\bamp\\b",
+        "patent",
+        "\\bppa\\b",
+        "provisional"
+      ],
+      "reason": "This looks like AMP patent material. It stays out of Quicksilver until the provisional application is filed."
+    }
+  ],
+  "frozenProjects": [
+    {
+      "id": "forkling",
+      "names": [
+        "forkling"
+      ],
+      "capabilityPrefixes": [
+        "forkling.",
+        "forkling:"
+      ],
+      "readOnlyCapabilities": [
+        "forkling.read"
+      ],
+      "reason": "Forkling is frozen after deployment and read-only. No task may change it."
+    }
+  ],
+  "connectorPatterns": [
+    "\\bamp\\b",
+    "\\bppa\\b"
+  ]
+}

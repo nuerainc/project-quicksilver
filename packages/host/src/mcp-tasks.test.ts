@@ -98,7 +98,7 @@ test('MCP tool calls return the same results as the HTTP API', async () => {
     for (const args of [
       { objective: 'Look into late invoices.' },
       { objective: 'What changed this week?', capabilityId: 'reports.brief' },
-      { objective: 'Summarize the AMP claims.' },
+      { objective: 'Summarize the patent claims.' },
       { objective: 'Pay the vendor.', capabilityId: 'finance.pay' },
     ]) {
       const viaApi = await h.api('/api/tasks', h.tokens.a, args)

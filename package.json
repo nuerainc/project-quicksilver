@@ -32,7 +32,7 @@
     "lint": "npm run lint --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "seed:test": "node --experimental-strip-types --no-warnings --test apps/studio/seed/policies.test.ts apps/web/lib/decision-route-auth.test.ts apps/web/lib/console-auth.test.ts apps/web/lib/security-headers.test.ts apps/web/lib/app-routes.test.ts apps/web/lib/sanity-tokens.test.ts apps/web/lib/demo-mode.test.ts",
-    "host:test": "node --experimental-strip-types --no-warnings --test packages/host/src/host.test.ts packages/host/src/handlers.test.ts packages/host/src/vault.test.ts packages/host/src/observability.test.ts packages/host/src/config.test.ts packages/host/src/intent-api.test.ts packages/host/src/shadow-api.test.ts packages/host/src/sanity-stores.test.ts packages/host/src/genesis-api.test.ts packages/host/src/genesis-reviews.test.ts packages/host/src/decisions-api.test.ts packages/host/src/operate.test.ts packages/host/src/whatif.test.ts packages/host/src/tasks.test.ts packages/host/src/mcp-tasks.test.ts packages/host/src/host-routes.test.ts",
+    "host:test": "node --experimental-strip-types --no-warnings --test packages/host/src/host.test.ts packages/host/src/handlers.test.ts packages/host/src/vault.test.ts packages/host/src/observability.test.ts packages/host/src/config.test.ts packages/host/src/intent-api.test.ts packages/host/src/shadow-api.test.ts packages/host/src/sanity-stores.test.ts packages/host/src/genesis-api.test.ts packages/host/src/genesis-reviews.test.ts packages/host/src/decisions-api.test.ts packages/host/src/operate.test.ts packages/host/src/whatif.test.ts packages/host/src/tasks.test.ts packages/host/src/mcp-tasks.test.ts packages/host/src/host-routes.test.ts packages/host/src/lab-boundaries.test.ts",
     "aura:test": "node --experimental-strip-types --no-warnings --test packages/aura/src/aura.test.ts packages/aura/src/ledger.test.ts packages/aura/src/profile.test.ts packages/aura/src/store.test.ts packages/aura/src/predict.test.ts packages/aura/src/onboard.test.ts packages/aura/src/learn.test.ts packages/aura/src/predict-v2.test.ts packages/aura/src/impact-v3.test.ts packages/aura/src/questions.test.ts packages/aura/src/rank-learn.test.ts packages/aura/src/principles.test.ts packages/aura/src/profile-v2.test.ts packages/aura/src/decisions.test.ts packages/aura/src/dimension-score.test.ts packages/aura/src/sealed.test.ts",
     "aura:eval": "node --experimental-strip-types --no-warnings packages/aura/src/eval-cli.ts",
     "aura:choices:model": "npm run choices:eval --workspace=@quicksilver/agent --",
@@ -47,7 +47,11 @@
     "mcp:tasks": "node --experimental-strip-types --no-warnings packages/host/src/mcp-tasks.ts",
     "aura:rank": "node --experimental-strip-types --no-warnings packages/aura/src/rank-cli.ts",
     "aura:choices:cv": "node --experimental-strip-types --no-warnings packages/aura/src/choices-cv.ts",
-    "aura:dims": "node --experimental-strip-types --no-warnings packages/aura/src/dims-cli.ts"
+    "aura:dims": "node --experimental-strip-types --no-warnings packages/aura/src/dims-cli.ts",
+    "operator": "node --experimental-strip-types --no-warnings packages/operator/src/cli.ts",
+    "operator:test": "node --experimental-strip-types --no-warnings --test packages/operator/src/operator.test.ts packages/operator/src/channels.test.ts packages/operator/src/automations.test.ts",
+    "operator:gateway": "node --experimental-strip-types --no-warnings packages/operator/src/gateway-cli.ts",
+    "operator:auto": "node --experimental-strip-types --no-warnings packages/operator/src/automations-cli.ts"
   },
   "engines": {
     "node": ">=20"

@@ -12,8 +12,7 @@
 ![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript&logoColor=white)
 ![Sanity](https://img.shields.io/badge/Sanity-Content_Lake_%2B_Context_MCP-F03E2F?logo=sanity&logoColor=white)
 ![AI SDK 6](https://img.shields.io/badge/AI_SDK-6-000000?logo=vercel&logoColor=white)
-![Kernel tests](https://img.shields.io/badge/kernel_tests-334%2F334-2EA043)
-![Agent tests](https://img.shields.io/badge/agent_tests-32%2F32-2EA043)
+![CI](https://github.com/nuerainc/project-quicksilver/actions/workflows/ci.yml/badge.svg)
 ![License: MIT](https://img.shields.io/badge/license-MIT-blue)
 
 [**Docs**](./docs/README.md) ·
@@ -221,10 +220,9 @@ npm run verify
 ```
 
 The command prints the live test total instead of relying on a manually
-maintained number. The most recent repository validation recorded **594 passing
-tests** across the kernel, agent, host, Aura, and seed/web suites. The web
-production build also passed; the Studio build was blocked only because this
-sandbox did not have the dedicated Sanity project configuration.
+maintained number. GitHub Actions runs this credential-free regression and
+type-check path for pull requests and pushes to `main`. Live Sanity and
+model-provider checks remain separate because they require external credentials.
 
 | Check | Command | Credentials |
 |---|---|---|
@@ -246,7 +244,7 @@ The challenge-era stress test found real bugs: a risk formula that scored nearly
 | Layer | Choice |
 |---|---|
 | App | Next.js 15 (App Router), TypeScript, Tailwind; not currently deployed |
-| Content & state | Dedicated Nuera Quicksilver Sanity project (`f87t11g1`), pending configuration; the challenge dataset is not used by this repo |
+| Content & state | Dedicated Nuera Quicksilver Sanity project (`f87t11g1`), isolated from the public challenge dataset; Studio schema deployment remains pending |
 | Agent read path | Sanity **Context MCP**, in both GROQ mode (live dataset) and Knowledge Base mode (cited, with contradiction detection) |
 | Agent harness | AI SDK 6 + `@ai-sdk/mcp`, role-based models (planner + independent reviewer; Azure OpenAI in production) |
 | Authority | **NQC Kernel**: deterministic TypeScript with no LLM, fail-closed |
@@ -295,8 +293,8 @@ npm run dev:web
 ```
 
 The dedicated Sanity project is `f87t11g1`, and local project IDs now point to
-it. Schema deployment and seed writes remain pending until a new project-scoped API token is configured and the schema is
-deployed. Set
+it. Studio schema deployment remains pending until valid project-scoped access
+is configured. Set
 `QUICKSILVER_PROCESS_ENGINE=on` to run the existing Decision Lifecycle process
 engine from the configured project.
 

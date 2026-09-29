@@ -11,9 +11,10 @@ import type { GraphVariable, IntentGraph } from './types.ts'
  *     enters the graph through the governed belief updater as a service
  *     actor, so the memory governor still screens it and a human-stated value
  *     is never overwritten.
- *   - Boundary: sources that look like AMP patent material are refused until
- *     the provisional application is filed (the default pattern list can be
- *     extended, never emptied by a connector).
+ *   - Boundary: sources that look like restricted patent material are refused
+ *     until the filing is public. The built-in patterns are generic; a
+ *     deployment adds its own (for example from a lab boundaries file) through
+ *     `blockedPatterns`. They extend the list; nothing can empty it.
  */
 
 export interface Observation {
@@ -42,11 +43,11 @@ export interface ConnectorReading {
   warnings: string[]
 }
 
-export const BLOCKED_SOURCE_PATTERNS: readonly RegExp[] = Object.freeze([/\bamp\b/i, /patent/i, /\bppa\b/i, /provisional/i])
+export const BLOCKED_SOURCE_PATTERNS: readonly RegExp[] = Object.freeze([/patent/i, /provisional/i])
 
 export class BlockedSourceError extends Error {
   constructor(source: string) {
-    super(`Source "${source}" looks like AMP patent material; it stays out of Quicksilver connectors until the provisional application is filed.`)
+    super(`Source "${source}" looks like restricted patent material; it stays out of Quicksilver connectors until the filing is public.`)
     this.name = 'BlockedSourceError'
   }
 }
@@ -65,6 +66,8 @@ export interface CsvLedgerOptions {
   columns?: { date?: string; amount?: string; category?: string; description?: string; debit?: string; credit?: string }
   /** Categories counted as revenue; by default any positive amount is revenue. */
   revenueCategories?: string[]
+  /** More source-name patterns to refuse, on top of BLOCKED_SOURCE_PATTERNS (never instead of them). */
+  blockedPatterns?: readonly RegExp[]
 }
 
 /** Parse CSV text (RFC 4180 quoting). */
@@ -143,7 +146,7 @@ export function monthlyTotals(transactions: Transaction[], revenueCategories?: s
 }
 
 export function readCsvLedger(text: string, options: CsvLedgerOptions): ConnectorReading {
-  assertSourceAllowed(options.source)
+  assertSourceAllowed(options.source, options.blockedPatterns)
   const rows = parseCsv(text)
   const warnings: string[] = []
   if (rows.length < 2) return { connectorId: 'csv-ledger', kind: 'ledger', source: options.source, observations: [], transactions: [], warnings: ['The file has no data rows.'] }
