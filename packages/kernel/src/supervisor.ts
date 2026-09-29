@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto'
 
+import { policySnapshotIsCurrent } from './policy-snapshot.ts'
 import { verifyExecutionAuthorization, type AuthorizationSigningKey } from './runtime/authorization.ts'
 import type { SafetyDecision } from './nqc/index.ts'
 
@@ -76,6 +77,13 @@ export interface SupervisorControlRequest {
   runId: string
   actionFingerprint: string
   policySnapshot: string
+  /**
+   * Digest of the policy state in force *now*. Compared against the snapshot
+   * this action was evaluated under, so a decision made before a policy
+   * changed cannot execute against the new one. A caller that cannot determine
+   * the live policy state must leave this empty and be refused.
+   */
+  currentPolicySnapshot: string
   evidenceDigest: string
   workflowDigest: string
   capability: string
@@ -122,6 +130,12 @@ export function coordinateSupervisorControl(
   if (!request.runId.trim()) reasons.push('Durable run binding is required.')
   if (!request.actionFingerprint.trim()) reasons.push('Exact action fingerprint is required.')
   if (!request.policySnapshot.trim()) reasons.push('Policy snapshot binding is required.')
+  if (!request.currentPolicySnapshot.trim()) reasons.push('The policy state in force now could not be established; refusing rather than assuming the decision is current.')
+  // The decision was evaluated under one policy state; it may only execute
+  // under that same state. A policy that changed in between invalidates it.
+  if (request.currentPolicySnapshot.trim() && !policySnapshotIsCurrent(request.policySnapshot, request.currentPolicySnapshot)) {
+    reasons.push('The policy has changed since this action was evaluated; the decision must be made again under the current policy.')
+  }
   if (!request.evidenceDigest.trim()) reasons.push('Evidence digest binding is required.')
   if (!request.workflowDigest.trim()) reasons.push('Workflow content digest is required.')
   if (!request.capability.trim()) reasons.push('Capability binding is required.')

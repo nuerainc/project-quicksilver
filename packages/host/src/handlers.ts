@@ -1,4 +1,4 @@
-import type { NqcEvaluationResponse } from '@quicksilver/kernel'
+import { policySnapshot, type NqcEvaluationResponse, type PolicyRef } from '@quicksilver/kernel'
 import { createSignedAuthorizationCoordinator, type AuthorizationSigningKey } from '@quicksilver/kernel/runtime'
 import type { WorkflowRunRecord } from '@quicksilver/kernel/runtime'
 import type { WorkflowNode } from '@quicksilver/kernel/workflows/graph'
@@ -53,6 +53,14 @@ export interface HandlerFactoryOptions {
   log: Logger
   metrics: HostMetrics
   authorizationKey?: AuthorizationSigningKey
+  /**
+   * The policy state in force for this host, used to derive the policy snapshot
+   * that every protected grant is bound to. Supplying this is what lets the
+   * gate refuse a decision made under a policy that has since changed. Omit it
+   * only if protected execution is not enabled: without it, issuing a grant
+   * would mean assuming the policy is unchanged.
+   */
+  policies?: PolicyRef[]
 }
 
 export const TOOL_BLOCKED_REASON = 'Tool steps are blocked on the hosted runtime at this version; effectful tools need verified supervisor approval.'
@@ -70,7 +78,10 @@ export function createHandlerFactory(options: HandlerFactoryOptions) {
         ? input.question
         : JSON.stringify(input ?? null)
     const authorization = options.authorizationKey
-      ? createSignedAuthorizationCoordinator(options.authorizationKey, { workflowDigest: run.graphDigest })
+      ? createSignedAuthorizationCoordinator(options.authorizationKey, {
+        workflowDigest: run.graphDigest,
+        ...(options.policies ? { policySnapshot: policySnapshot(options.policies) } : {}),
+      })
       : undefined
 
     return {

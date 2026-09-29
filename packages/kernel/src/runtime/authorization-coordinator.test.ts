@@ -10,7 +10,7 @@ const node: WorkflowNode = {
   config: { toolId: 'orders.send', sideEffect: true, evaluationRequired: true, supervisorApprovalRequired: true },
 }
 const context = { input: null, runId: 'run-1', tenantId: 'acme', outputs: {}, evaluations: {} }
-const options = { now: () => 1_000, ttlMs: 10_000, workflowDigest: 'sha256:wf1' }
+const options = { now: () => 1_000, ttlMs: 10_000, workflowDigest: 'sha256:wf1', policySnapshot: 'sha256:policy-1' }
 
 test('Coordinator: issues a signed authorization bound to the hosted run context', async () => {
   const coordinator = createSignedAuthorizationCoordinator(key, options)
@@ -68,4 +68,13 @@ test('Coordinator: without a workflow digest protected execution stops rather th
   const result = await coordinator.authorizeExecution(node, {}, context)
   assert.equal(result.status, 'blocked')
   assert.match(result.reasons[0] ?? '', /digest/i)
+})
+
+test('Coordinator: without a policy snapshot protected execution stops rather than issuing a grant', async () => {
+  // The previous default was the literal `kernel:current`, which made every
+  // grant look current no matter how the policy had moved.
+  const coordinator = createSignedAuthorizationCoordinator(key, { now: () => 1_000, ttlMs: 10_000, workflowDigest: 'sha256:wf1' })
+  const result = await coordinator.authorizeExecution(node, {}, context)
+  assert.equal(result.status, 'blocked')
+  assert.match(result.reasons[0] ?? '', /policy snapshot/i)
 })

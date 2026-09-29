@@ -10,6 +10,7 @@ import {
   type SeparationSettings,
 } from './capability-graph.ts'
 import { WAES_BLOCK_REASONS, type WaesReviewFact } from './waes.ts'
+import { policySnapshot } from './policy-snapshot.ts'
 
 /** Defaults used when the QUICKSILVER_RISK_* env vars are unset or invalid. */
 export const DEFAULT_RISK_AUTO_MAX: RiskLevel = 2
@@ -62,6 +63,12 @@ export interface AuthorizeResult {
   authorized: boolean
   riskLevel: RiskLevel
   requiresApproval: boolean
+  /**
+   * Digest of the policy state this decision was governed under. Carry it onto
+   * the action and the grant so execution can refuse a decision made under
+   * policy that has since changed.
+   */
+  policySnapshot: string
   blockingReasons: string[]
   concerns: string[]
   policyConflicts: string[]
@@ -194,6 +201,7 @@ export function authorize(args: AuthorizeArgs): AuthorizeResult {
     authorized,
     riskLevel,
     requiresApproval,
+    policySnapshot: policySnapshot(policies),
     blockingReasons,
     concerns,
     policyConflicts: authority.conflicts,
