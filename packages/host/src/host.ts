@@ -519,8 +519,10 @@ export class QuicksilverHost {
       const body = await readJson(req, this.config.http.maxBodyBytes)
       if (!body.ok) return { status: body.status, body: { error: body.error } }
       const { workflow, input, idempotencyKey, priority } = body.value as Record<string, unknown>
-      if (typeof workflow !== 'string' || !(workflow in this.config.workflows)) return { status: 422, body: { error: 'workflow must name a configured workflow.' } }
-      const graph = this.config.workflows[workflow]!
+      if (typeof workflow !== 'string') return { status: 422, body: { error: 'workflow must name a published or configured workflow.' } }
+      const publication = this.publications.getPublished(workflow)
+      const graph = publication?.graph ?? this.config.workflows[workflow]
+      if (!graph) return { status: 422, body: { error: 'workflow must name a published or configured workflow.' } }
       const issues = checkWorkflow(graph, this.config.execution)
       if (issues.length) return { status: 422, body: { error: 'Workflow violates the host execution policy.', issues } }
       const result = await this.queue.enqueue({
@@ -532,7 +534,7 @@ export class QuicksilverHost {
         ...(typeof idempotencyKey === 'string' ? { idempotencyKey } : {}),
         ...(typeof priority === 'number' ? { priority } : {}),
       })
-      if (result.accepted) return { status: result.deduplicated ? 200 : 202, body: { runId: result.run.runId, deduplicated: result.deduplicated, status: result.run.status } }
+      if (result.accepted) return { status: result.deduplicated ? 200 : 202, body: { runId: result.run.runId, deduplicated: result.deduplicated, status: result.run.status, ...(publication ? { publication: { version: publication.version, digest: publication.digest } } : {}) } }
       const code = { forbidden: 403, backpressure: 429, 'invalid-graph': 422, 'invalid-request': 400 }[result.code]
       return { status: code, body: { error: result.reasons.join(' '), code: result.code } }
     }

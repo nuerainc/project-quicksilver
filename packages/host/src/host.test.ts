@@ -411,3 +411,25 @@ test('workflow publication: developer drafts, independent supervisors review and
     await h.close()
   }
 })
+
+test('published workflow admission runs the immutable published graph and returns its digest binding', async () => {
+  const h = await startHost()
+  try {
+    const graph = { ...briefGraph, id: 'published-run', version: 7 }
+    assert.equal((await api(h, '/api/workflows/drafts', { method: 'POST', token: h.tokens.developer, body: { graph } })).status, 201)
+    assert.equal((await api(h, '/api/workflows/published-run/submit-review', { method: 'POST', token: h.tokens.developer, body: { version: 7 } })).status, 200)
+    assert.equal((await api(h, '/api/workflows/published-run/review', { method: 'POST', token: h.tokens.supervisor, body: { version: 7 } })).status, 200)
+    assert.equal((await api(h, '/api/workflows/published-run/publish', { method: 'POST', token: h.tokens.publisher, body: { version: 7 } })).status, 200)
+
+    const admitted = await api(h, '/api/runs', { method: 'POST', token: h.tokens.operator, body: { workflow: 'published-run', input: 'published input' } })
+    assert.equal(admitted.status, 202)
+    const admittedBody = await admitted.json() as { runId: string; publication: { version: number; digest: string } }
+    assert.equal(admittedBody.publication.version, 7)
+    assert.match(admittedBody.publication.digest, /^sha256:/)
+    const run = await (await api(h, `/api/runs/${admittedBody.runId}`, { token: h.tokens.viewer })).json() as { run: { workflowVersion: number; graphDigest: string } }
+    assert.equal(run.run.workflowVersion, 7)
+    assert.equal(run.run.graphDigest, admittedBody.publication.digest)
+  } finally {
+    await h.close()
+  }
+})
