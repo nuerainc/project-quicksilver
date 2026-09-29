@@ -16,7 +16,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { register } from 'node:module'
 import { readdirSync, statSync } from 'node:fs'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import { join, relative, sep } from 'node:path'
 
 import { digestToken } from '../../../packages/kernel/src/identity/tokens.ts'
@@ -70,7 +70,9 @@ async function loadHandlers(): Promise<RouteHandler[]> {
   for (const file of findRouteFiles(API_DIR).sort()) {
     const rel = relative(API_DIR, file).split(sep).slice(0, -1).join('/')
     const path = `/api/${rel}`.replace(/\[([^\]]+)\]/g, 'test-$1')
-    const mod = (await import(file)) as Record<string, unknown>
+    // Dynamic import takes a URL: on Windows a bare absolute path has a `c:`
+    // scheme, which the ESM loader rejects.
+    const mod = (await import(pathToFileURL(file).href)) as Record<string, unknown>
     for (const method of HTTP_METHODS) {
       if (typeof mod[method] === 'function') out.push({ key: `${method} /api/${rel}`, path, method, handler: mod[method] as Handler })
     }

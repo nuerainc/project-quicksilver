@@ -30,6 +30,16 @@ import { decisionHash, FileTaskStore, MemoryTaskStore, requestHash, TaskService,
 const TENANT = 'nuera'
 const execFileP = promisify(execFile)
 
+/**
+ * Assert a written file is owner-only. Windows has no POSIX mode bits, so
+ * `chmod` is a no-op and access there is governed by ACLs instead; the 0o600
+ * contract is therefore only assertable on POSIX platforms.
+ */
+async function assertOwnerOnly(path: string): Promise<void> {
+  if (process.platform === 'win32') return
+  assert.equal((await stat(path)).mode & 0o777, 0o600)
+}
+
 const briefGraph: WorkflowGraph = {
   schemaVersion: 1, id: 'daily-brief', version: 1, entryNodeId: 'start',
   nodes: [
@@ -412,7 +422,7 @@ test('the file store is append-only, atomic and private', async () => {
     } finally { await h.close() }
     const files = (await readdir(dir)).filter((f) => f.endsWith('.json'))
     assert.deepEqual(files, [`${task.id}.json`])
-    assert.equal((await stat(join(dir, files[0]!))).mode & 0o777, 0o600)
+    await assertOwnerOnly(join(dir, files[0]!))
     assert.equal(task.audit.length >= 2, true)
     const store = new FileTaskStore(dir)
     await assert.rejects(store.put({ ...task, objective: 'Rewritten.', revision: task.revision + 1 }, task.revision), /never changes/)
@@ -429,7 +439,7 @@ test('client tokens are stored hashed and shown once (registry and CLI)', async 
     const raw = await readFile(join(dir, 'clients.json'), 'utf8')
     assert.equal(raw.includes(token), false, 'the token is never written')
     assert.equal(raw.includes(digestToken(token)), true, 'only its digest is')
-    assert.equal((await stat(join(dir, 'clients.json'))).mode & 0o777, 0o600)
+    await assertOwnerOnly(join(dir, 'clients.json'))
     assert.equal(JSON.stringify(await registry.list()).includes('sha256:'), false, 'listing shows no digest')
     assert.equal(client.principalId, 'client:desk-app')
     const p = await registry.authenticate(token) as Principal
