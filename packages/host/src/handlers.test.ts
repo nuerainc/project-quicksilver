@@ -25,13 +25,14 @@ function run() {
   }
 }
 
-function factory(authorizationKey?: { keyId: string; secret: string }, policies?: PolicyRef[]) {
+function factory(authorizationKey?: { keyId: string; secret: string }, policies?: PolicyRef[], evidenceCount?: number) {
   return createHandlerFactory({
     execution: { maxAgentSteps: 3, allowedAgents: ['query'] },
     log: new Logger({ level: 'error', sink: { write: () => {} } }),
     metrics: createHostMetrics(),
     ...(authorizationKey ? { authorizationKey } : {}),
     ...(policies ? { policies } : {}),
+    ...(evidenceCount ? { evidenceCount } : {}),
   })(run())
 }
 
@@ -41,7 +42,7 @@ const hostPolicies: PolicyRef[] = [{
 }]
 
 test('Host handlers: configured signing key issues and consumes a protected authorization', async () => {
-  const handlers = factory({ keyId: 'acme:host-1', secret: '0123456789abcdef0123456789abcdef' }, hostPolicies)
+  const handlers = factory({ keyId: 'acme:host-1', secret: '0123456789abcdef0123456789abcdef' }, hostPolicies, 2)
   const node = graph.nodes[1]!
   const context = { input: null, runId: 'run-1', tenantId: 'acme', outputs: {}, evaluations: {} }
   const decision = await handlers.authorizeExecution!(node, null, context)
@@ -61,12 +62,23 @@ test('Host handlers: a signing key without a known policy state cannot issue a g
   assert.match(decision.reasons.join(' '), /policy snapshot/i)
 })
 
+test('Host handlers: a host that declares no evidence cannot issue a grant', async () => {
+  const key = { keyId: 'acme:host-1', secret: '0123456789abcdef0123456789abcdef' }
+  const node = graph.nodes[1]!
+  const context = { input: null, runId: 'run-1', tenantId: 'acme', outputs: {}, evaluations: {} }
+  // Policy known, evidence not: an action with nothing behind it is refused
+  // rather than granted on the strength of a digest that happens to be valid.
+  const decision = await factory(key, hostPolicies).authorizeExecution!(node, null, context)
+  assert.equal(decision.status, 'blocked')
+  assert.match(decision.reasons.join(' '), /evidence/i)
+})
+
 test('Host handlers: a changed policy produces a different snapshot on the grant', async () => {
   const key = { keyId: 'acme:host-1', secret: '0123456789abcdef0123456789abcdef' }
   const node = graph.nodes[1]!
   const context = { input: null, runId: 'run-1', tenantId: 'acme', outputs: {}, evaluations: {} }
-  const before = await factory(key, hostPolicies).authorizeExecution!(node, null, context)
-  const after = await factory(key, [{ ...hostPolicies[0]!, version: 2 }]).authorizeExecution!(node, null, context)
+  const before = await factory(key, hostPolicies, 2).authorizeExecution!(node, null, context)
+  const after = await factory(key, [{ ...hostPolicies[0]!, version: 2 }], 2).authorizeExecution!(node, null, context)
   assert.equal(before.status, 'ready-to-execute')
   assert.equal(after.status, 'ready-to-execute')
   assert.notEqual(before.authorization?.policySnapshot, after.authorization?.policySnapshot)

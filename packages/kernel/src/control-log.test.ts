@@ -180,7 +180,7 @@ test('Control log: a real gate decision is recorded as the gate reached it', () 
   const key = { keyId: 'kernel-key-1', secret: '0123456789abcdef0123456789abcdef' }
   const request = {
     supervisorAgentId: 'nuera-quicksilver:supervisor', tenantId: 'acme', runId: 'run-1', actionFingerprint: 'action:abc',
-    policySnapshot: 'policy:1', currentPolicySnapshot: 'policy:1', evidenceDigest: 'evidence:1', workflowDigest: 'sha256:wf1',
+    policySnapshot: 'policy:1', currentPolicySnapshot: 'policy:1', evidenceDigest: 'evidence:1', evidenceCount: 2, workflowDigest: 'sha256:wf1',
     capability: 'orders.send', safetyDecision: 'ALLOW' as const, requiresHumanApproval: true, now,
   }
 

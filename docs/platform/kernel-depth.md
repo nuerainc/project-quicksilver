@@ -243,6 +243,23 @@ snapshot travels with the decision. At execution the gate compares it against
 decision whose policy has since moved. A caller that cannot establish the live
 policy state is refused rather than assumed current.
 
+**Contract version 4 binds the evidence count.** A digest alone cannot express
+"no evidence" — the digest of an empty set is a perfectly valid digest — so
+every record also carries `evidenceCount`. The issuer self-verifies, so a grant
+with no evidence behind it cannot be minted at all; the gate refuses a request
+that declares zero, and refuses a grant presented against a different amount of
+evidence than it was issued for. This is the rule the decision path already
+applies (`authorize()` blocks on `No evidence supports this action`), now
+enforced on the execution side too.
+
+The host supplies its evidence through `HandlerFactoryOptions.evidenceCount`.
+As with policies, omitting it while a signing key is configured stops protected
+execution rather than assuming evidence exists. **This is currently the host's
+declared evidence for the run, not a per-action set** — the workflow run record
+carries no evidence of its own, so this knob stands in for per-action evidence
+until the run record grows one. Treat protected execution on the hosted
+workflow path as not yet meaningful until that is done.
+
 The host supplies its policy set through `HandlerFactoryOptions.policies`.
 Leaving it unset while a signing key is configured means the host cannot
 establish the live policy, so protected execution stops; that is a deliberate

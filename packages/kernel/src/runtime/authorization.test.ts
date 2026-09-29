@@ -11,10 +11,10 @@ import {
 const key = { keyId: 'kernel-key-1', secret: '0123456789abcdef0123456789abcdef' }
 const input = {
   tenantId: 'acme', runId: 'run-1', nodeId: 'tool-1', actionFingerprint: 'action:abc',
-  policySnapshot: 'policy:1', evidenceDigest: 'evidence:1', workflowDigest: 'sha256:wf1',
+  policySnapshot: 'policy:1', evidenceDigest: 'evidence:1', evidenceCount: 2, workflowDigest: 'sha256:wf1',
   approvalDigest: 'sha256:ap1', capability: 'orders.send', expiresAt: 2_000,
 }
-const expected = { tenantId: 'acme', runId: 'run-1', nodeId: 'tool-1', actionFingerprint: 'action:abc', workflowDigest: 'sha256:wf1', approvalDigest: 'sha256:ap1' }
+const expected = { tenantId: 'acme', runId: 'run-1', nodeId: 'tool-1', actionFingerprint: 'action:abc', workflowDigest: 'sha256:wf1', approvalDigest: 'sha256:ap1', evidenceCount: 2 }
 
 test('Authorization: issued records verify against tenant, run, node, and exact action', () => {
   const record = issueExecutionAuthorization(input, key, 1_000)
@@ -75,4 +75,17 @@ test('Authorization: a grant is bound to the approval it rests on', () => {
   assert.equal(other.valid, false)
   assert.ok(other.reasons.some((reason) => /this approval/.test(reason)), other.reasons.join(' '))
   assert.equal(verifyExecutionAuthorization(record, key, { ...expected, now: 1_500 }).valid, true)
+})
+
+test('Authorization: a grant with no evidence cannot be issued or verified', () => {
+  assert.throws(
+    () => issueExecutionAuthorization({ ...input, evidenceCount: 0 }, key, 1_000),
+    /At least one piece of evidence/,
+  )
+  // And a record that somehow carries none is still refused on verification.
+  const record = issueExecutionAuthorization(input, key, 1_000)
+  const forged = { ...record, evidenceCount: 0 }
+  const result = verifyExecutionAuthorization(forged, key, { ...expected, evidenceCount: 0, now: 1_500 })
+  assert.equal(result.valid, false)
+  assert.ok(result.reasons.some((reason) => /At least one piece of evidence/.test(reason)), result.reasons.join(' '))
 })

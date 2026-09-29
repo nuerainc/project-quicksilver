@@ -25,6 +25,7 @@ export interface KernelExecutionAuthorization {
   actionFingerprint: string
   policySnapshot: string
   evidenceDigest: string
+  evidenceCount: number
   workflowDigest: string
   /** Digest of the human approval this grant rests on, or NO_APPROVAL_DIGEST. */
   approvalDigest: string
@@ -85,6 +86,12 @@ export interface SupervisorControlRequest {
    */
   currentPolicySnapshot: string
   evidenceDigest: string
+  /**
+   * How many pieces of evidence support this action. A digest cannot express
+   * "none" — the digest of an empty set is a valid digest — so the count is
+   * what lets the gate refuse an action that has no evidence behind it.
+   */
+  evidenceCount: number
   workflowDigest: string
   capability: string
   safetyDecision: SafetyDecision
@@ -137,6 +144,9 @@ export function coordinateSupervisorControl(
     reasons.push('The policy has changed since this action was evaluated; the decision must be made again under the current policy.')
   }
   if (!request.evidenceDigest.trim()) reasons.push('Evidence digest binding is required.')
+  if (!Number.isInteger(request.evidenceCount) || request.evidenceCount < 1) {
+    reasons.push('No evidence supports this action; an action with no evidence cannot be authorized.')
+  }
   if (!request.workflowDigest.trim()) reasons.push('Workflow content digest is required.')
   if (!request.capability.trim()) reasons.push('Capability binding is required.')
 
@@ -175,6 +185,7 @@ export function coordinateSupervisorControl(
     if (authorization.actionFingerprint !== request.actionFingerprint) reasons.push('Authorization is not bound to the exact action fingerprint.')
     if (authorization.policySnapshot !== request.policySnapshot) reasons.push('Authorization is bound to a different policy snapshot.')
     if (authorization.evidenceDigest !== request.evidenceDigest) reasons.push('Authorization is bound to a different evidence digest.')
+    if (authorization.evidenceCount !== request.evidenceCount) reasons.push('Authorization is bound to a different amount of evidence.')
     if (authorization.workflowDigest !== request.workflowDigest) reasons.push('Authorization is bound to different workflow content.')
     // The grant must rest on the very approval being presented. Without this an
     // approval could be swapped, or a grant issued with no approval at all
@@ -199,6 +210,7 @@ export function coordinateSupervisorControl(
         actionFingerprint: request.actionFingerprint,
         workflowDigest: request.workflowDigest,
         approvalDigest: presentedApprovalDigest,
+        evidenceCount: request.evidenceCount,
         now,
       },
     )

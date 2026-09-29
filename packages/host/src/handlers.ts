@@ -61,6 +61,14 @@ export interface HandlerFactoryOptions {
    * would mean assuming the policy is unchanged.
    */
   policies?: PolicyRef[]
+  /**
+   * How many pieces of evidence support the actions this host authorizes.
+   * Required for protected execution and must be at least one, mirroring the
+   * rule the decision path already applies: an action with no evidence behind
+   * it cannot be authorized. Until the run record carries per-action evidence,
+   * this is the host's declared evidence for the run, not a per-action set.
+   */
+  evidenceCount?: number
 }
 
 export const TOOL_BLOCKED_REASON = 'Tool steps are blocked on the hosted runtime at this version; effectful tools need verified supervisor approval.'
@@ -81,6 +89,7 @@ export function createHandlerFactory(options: HandlerFactoryOptions) {
       ? createSignedAuthorizationCoordinator(options.authorizationKey, {
         workflowDigest: run.graphDigest,
         ...(options.policies ? { policySnapshot: policySnapshot(options.policies) } : {}),
+        ...(options.evidenceCount ? { evidenceCount: options.evidenceCount } : {}),
       })
       : undefined
 

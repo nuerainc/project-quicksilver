@@ -10,6 +10,12 @@ export interface ExecutionAuthorizationPayload {
   actionFingerprint: string
   policySnapshot: string
   evidenceDigest: string
+  /**
+   * How many pieces of evidence support this action. A digest alone cannot
+   * express "none": the digest of an empty set is a perfectly valid digest, so
+   * without the count an action with no evidence at all would bind cleanly.
+   */
+  evidenceCount: number
   /** Binds the grant to the exact workflow content it was issued for. */
   workflowDigest: string
   /** Digest of the human approval this grant rests on, if any. */
@@ -20,7 +26,7 @@ export interface ExecutionAuthorizationPayload {
 }
 
 export interface ExecutionAuthorizationRecord extends ExecutionAuthorizationPayload {
-  contractVersion: 3
+  contractVersion: 4
   status: ExecutionAuthorizationStatus
   keyId: string
   signature: string
@@ -56,6 +62,7 @@ export function issueExecutionAuthorization(
     actionFingerprint: payload.actionFingerprint,
     policySnapshot: payload.policySnapshot,
     evidenceDigest: payload.evidenceDigest,
+    evidenceCount: payload.evidenceCount,
     workflowDigest: payload.workflowDigest,
     approvalDigest: payload.approvalDigest,
     capability: payload.capability,
@@ -64,7 +71,7 @@ export function issueExecutionAuthorization(
   }
   const record: ExecutionAuthorizationRecord = {
     ...base,
-    contractVersion: 3,
+    contractVersion: 4,
     status: 'issued',
     keyId: key.keyId,
     signature: signAuthorization(base, key),
@@ -77,12 +84,12 @@ export function issueExecutionAuthorization(
 export function verifyExecutionAuthorization(
   record: ExecutionAuthorizationRecord,
   key: AuthorizationSigningKey,
-  expected: { tenantId: string; runId: string; nodeId: string; actionFingerprint: string; workflowDigest: string; approvalDigest: string; now?: number },
+  expected: { tenantId: string; runId: string; nodeId: string; actionFingerprint: string; workflowDigest: string; approvalDigest: string; evidenceCount: number; now?: number },
 ): AuthorizationVerification {
   const reasons: string[] = []
   const now = expected.now ?? Date.now()
   try { validateSigningKey(key) } catch (error) { reasons.push((error as Error).message) }
-  if (!record || record.contractVersion !== 3) reasons.push('Authorization record contract version is invalid.')
+  if (!record || record.contractVersion !== 4) reasons.push('Authorization record contract version is invalid.')
   if (!record?.authorizationId?.trim()) reasons.push('Authorization id is required.')
   if (record?.keyId !== key?.keyId) reasons.push('Authorization signing key does not match.')
   if (record?.status !== 'issued') reasons.push(`Authorization record is not issued (status: ${record?.status ?? 'unknown'}).`)
@@ -92,6 +99,12 @@ export function verifyExecutionAuthorization(
   if (record?.actionFingerprint !== expected.actionFingerprint) reasons.push('Authorization action fingerprint does not match.')
   if (record?.workflowDigest !== expected.workflowDigest) reasons.push('Authorization is not bound to this workflow content.')
   if (record?.approvalDigest !== expected.approvalDigest) reasons.push('Authorization is not bound to this approval.')
+  if (record?.evidenceCount !== expected.evidenceCount) reasons.push('Authorization is bound to a different amount of evidence.')
+  // A digest alone cannot express "none", so the count is what makes an
+  // unevidenced action refusable rather than cleanly bound.
+  if (!Number.isInteger(expected.evidenceCount) || expected.evidenceCount < 1) {
+    reasons.push('At least one piece of evidence must support the action; an action with no evidence cannot be authorized.')
+  }
   if (record?.issuedAt > now) reasons.push('Authorization was issued in the future.')
   if (record?.expiresAt <= now) reasons.push('Authorization has expired.')
   if (record?.expiresAt <= record?.issuedAt) reasons.push('Authorization expiry must be after issue time.')
@@ -110,7 +123,7 @@ export function verifyExecutionAuthorization(
 export function consumeExecutionAuthorization(record: ExecutionAuthorizationRecord, key: AuthorizationSigningKey, now = Date.now()): ExecutionAuthorizationRecord {
   const verification = verifyExecutionAuthorization(record, key, {
     tenantId: record.tenantId, runId: record.runId, nodeId: record.nodeId, actionFingerprint: record.actionFingerprint,
-    workflowDigest: record.workflowDigest, approvalDigest: record.approvalDigest, now,
+    workflowDigest: record.workflowDigest, approvalDigest: record.approvalDigest, evidenceCount: record.evidenceCount, now,
   })
   if (!verification.valid) throw new Error(`Cannot consume execution authorization: ${verification.reasons.join(' ')}`)
   return Object.freeze({ ...record, status: 'consumed', consumedAt: now })
@@ -121,7 +134,7 @@ export function revokeExecutionAuthorization(record: ExecutionAuthorizationRecor
   if (!reason.trim()) throw new Error('A revocation reason is required.')
   const verification = verifyExecutionAuthorization(record, key, {
     tenantId: record.tenantId, runId: record.runId, nodeId: record.nodeId, actionFingerprint: record.actionFingerprint,
-    workflowDigest: record.workflowDigest, approvalDigest: record.approvalDigest, now,
+    workflowDigest: record.workflowDigest, approvalDigest: record.approvalDigest, evidenceCount: record.evidenceCount, now,
   })
   if (!verification.valid) throw new Error(`Cannot revoke execution authorization: ${verification.reasons.join(' ')}`)
   return Object.freeze({ ...record, status: 'revoked', revokedAt: now, revokeReason: reason })
@@ -131,7 +144,7 @@ function payloadOf(record: ExecutionAuthorizationRecord): ExecutionAuthorization
   return {
     authorizationId: record.authorizationId, tenantId: record.tenantId, runId: record.runId, nodeId: record.nodeId,
     actionFingerprint: record.actionFingerprint, policySnapshot: record.policySnapshot, evidenceDigest: record.evidenceDigest,
-    workflowDigest: record.workflowDigest, approvalDigest: record.approvalDigest, capability: record.capability, issuedAt: record.issuedAt, expiresAt: record.expiresAt,
+    workflowDigest: record.workflowDigest, approvalDigest: record.approvalDigest, evidenceCount: record.evidenceCount, capability: record.capability, issuedAt: record.issuedAt, expiresAt: record.expiresAt,
   }
 }
 
@@ -160,7 +173,7 @@ function validateSigningKey(key: AuthorizationSigningKey): void {
 function verifyOrThrow(record: ExecutionAuthorizationRecord, key: AuthorizationSigningKey, now: number): void {
   const result = verifyExecutionAuthorization(record, key, {
     tenantId: record.tenantId, runId: record.runId, nodeId: record.nodeId, actionFingerprint: record.actionFingerprint,
-    workflowDigest: record.workflowDigest, approvalDigest: record.approvalDigest, now,
+    workflowDigest: record.workflowDigest, approvalDigest: record.approvalDigest, evidenceCount: record.evidenceCount, now,
   })
   if (!result.valid) throw new Error(`Invalid execution authorization: ${result.reasons.join(' ')}`)
 }

@@ -10,7 +10,7 @@ const node: WorkflowNode = {
   config: { toolId: 'orders.send', sideEffect: true, evaluationRequired: true, supervisorApprovalRequired: true },
 }
 const context = { input: null, runId: 'run-1', tenantId: 'acme', outputs: {}, evaluations: {} }
-const options = { now: () => 1_000, ttlMs: 10_000, workflowDigest: 'sha256:wf1', policySnapshot: 'sha256:policy-1' }
+const options = { now: () => 1_000, ttlMs: 10_000, workflowDigest: 'sha256:wf1', policySnapshot: 'sha256:policy-1', evidenceCount: 2 }
 
 test('Coordinator: issues a signed authorization bound to the hosted run context', async () => {
   const coordinator = createSignedAuthorizationCoordinator(key, options)
@@ -77,4 +77,15 @@ test('Coordinator: without a policy snapshot protected execution stops rather th
   const result = await coordinator.authorizeExecution(node, {}, context)
   assert.equal(result.status, 'blocked')
   assert.match(result.reasons[0] ?? '', /policy snapshot/i)
+})
+
+test('Coordinator: an action with no evidence is never granted', async () => {
+  const none = createSignedAuthorizationCoordinator(key, { ...options, evidenceCount: 0 })
+  const result = await none.authorizeExecution(node, {}, context)
+  assert.equal(result.status, 'blocked')
+  assert.match(result.reasons[0] ?? '', /evidence/i)
+
+  // Absent is treated the same as zero, not as "one by default".
+  const missing = createSignedAuthorizationCoordinator(key, { now: () => 1_000, ttlMs: 10_000, workflowDigest: 'sha256:wf1', policySnapshot: 'sha256:policy-1' })
+  assert.equal((await missing.authorizeExecution(node, {}, context)).status, 'blocked')
 })
