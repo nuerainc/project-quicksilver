@@ -218,6 +218,10 @@ async function executeNode(
   const withTimeout = <T>(ms: number | undefined, operation: (signal: AbortSignal) => Promise<T>) => withDeadline(ms, runSignal, operation)
   let evaluationForNode: WorkflowEvaluation | undefined
   let executionAuthorization: SupervisorControlResult['authorization'] | undefined
+  const authorizationAudit = () => executionAuthorization ? {
+    authorizationId: executionAuthorization.authorizationId,
+    authorizationFingerprint: executionAuthorization.actionFingerprint,
+  } : {}
   const blocked = (detail: string, safetyDecision?: WorkflowSafetyDecision): WorkflowNodeOutcome => ({
     success: false,
     step: { nodeId: node.id, status: 'blocked', ...(safetyDecision ? { safetyDecision } : {}), detail },
@@ -226,7 +230,7 @@ async function executeNode(
   })
   const failed = (detail: string, retryAfterMs?: number): WorkflowNodeOutcome => ({
     success: false,
-    step: { nodeId: node.id, status: 'failed', detail, ...(retryAfterMs !== undefined ? { retryAfterMs } : {}) },
+    step: { nodeId: node.id, status: 'failed', detail, ...authorizationAudit(), ...(retryAfterMs !== undefined ? { retryAfterMs } : {}) },
     ...(evaluationForNode ? { evaluation: evaluationForNode } : {}),
     terminalStatus: 'failed',
   })
@@ -326,7 +330,7 @@ async function executeNode(
     if (runSignal?.aborted) {
       return {
         success: false,
-        step: { nodeId: node.id, status: 'cancelled', detail: abortReason(runSignal) ?? 'Workflow run was cancelled.' },
+        step: { nodeId: node.id, status: 'cancelled', detail: abortReason(runSignal) ?? 'Workflow run was cancelled.', ...authorizationAudit() },
         ...(evaluationForNode ? { evaluation: evaluationForNode } : {}),
         terminalStatus: 'cancelled',
       }
