@@ -27,16 +27,34 @@ export function computeRisk(
   capability: CapabilityRef | undefined,
   evidence: EvidenceRef[],
 ): RiskLevel {
-  const base = capability?.baseRiskLevel ?? 2
-  const impact = Math.max(
-    financialExposureTier(action.financialExposure ?? 0),
-    operationalImpactTier(action.operationalImpact),
-  )
+  return explainRisk(action, capability, evidence).riskLevel
+}
+
+export interface RiskBreakdown {
+  baseRisk: RiskLevel
+  financialImpact: 0 | 1 | 2 | 3
+  operationalImpact: 0 | 1 | 2
+  impact: 0 | 1 | 2 | 3
+  reversibility: 0 | 1
+  uncertainty: 0 | 1
+  preMultiplierRisk: RiskLevel
+  riskLevel: RiskLevel
+}
+
+/** The exact components used by computeRisk, for audit and UI introspection. */
+export function explainRisk(
+  action: ProposedAction,
+  capability: CapabilityRef | undefined,
+  _evidence: EvidenceRef[],
+): RiskBreakdown {
+  const baseRisk = (capability?.baseRiskLevel ?? 2) as RiskLevel
+  const financialImpact = financialExposureTier(action.financialExposure ?? 0)
+  const operationalImpact = operationalImpactTier(action.operationalImpact)
+  const impact = Math.max(financialImpact, operationalImpact) as RiskBreakdown['impact']
   const reversibility = action.reversible ? 0 : 1
   const uncertainty = action.uncertainty >= 4 ? 1 : 0
-
-  const total = base + impact + reversibility + uncertainty
-  return Math.max(0, Math.min(5, total)) as RiskLevel
+  const preMultiplierRisk = Math.max(0, Math.min(5, baseRisk + impact + reversibility + uncertainty)) as RiskLevel
+  return { baseRisk, financialImpact, operationalImpact, impact, reversibility, uncertainty, preMultiplierRisk, riskLevel: preMultiplierRisk }
 }
 
 /** Operational impact 0-5 → tier 0-2 (0-1 negligible, 2-3 moderate, 4-5 severe). */

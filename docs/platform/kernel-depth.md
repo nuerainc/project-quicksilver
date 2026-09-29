@@ -178,6 +178,22 @@ from rounding an exact product up.
 | 1 | 1.5 × 2 (inherited) | 3 |
 | 4 | 2 | 5 (clamped) |
 
+### Structured authorization explanation
+
+Every `authorize()` result now includes an `explanation` object intended for
+decision records, APIs, dashboards, and evaluators. It contains:
+
+- `appliedPolicies`: the policy IDs considered applicable;
+- `conflictsDetected`: deterministic policy conflicts surfaced by the kernel;
+- `riskComponents`: base risk, financial and operational impact tiers,
+  reversibility, uncertainty, pre-multiplier risk, multiplier, and final risk;
+- `guardEvaluations`: policy check outcomes with stable reason codes.
+
+This is observable governance data, not model reasoning. It deliberately does
+not contain private chain-of-thought, prompts, or hidden evaluator state. The
+explanation is derived from the same values used for authorization, so it
+cannot disagree with the decision shown to the caller.
+
 ### Failing closed on an invalid graph
 
 `validateCapabilityGraph` reports:

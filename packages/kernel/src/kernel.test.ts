@@ -11,7 +11,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
-import { authorize, checkCapability, checkAuthority, computeRisk } from './index.ts'
+import { authorize, checkCapability, checkAuthority, computeRisk, explainRisk } from './index.ts'
 import type { CapabilityRef, EntityRef, EvidenceRef, PolicyRef, ProposedAction } from './types.ts'
 
 // ── Minimal scenario mirroring the seed dataset ───────────────────────────
@@ -178,7 +178,27 @@ test('Authorize: parameter change requires approval (kill-shot demo scenario)', 
   assert.equal(result.requiresApproval, true, 'risk level demands human approval')
   assert.equal(result.recommendation, 'request-approval', 'must route to approval gate')
   assert.ok(result.policyConflicts.length > 0, 'policy conflict must be surfaced')
-  assert.ok(result.riskLevel >= 4, `risk must be >= 4, got ${result.riskLevel}`)
+  assert.ok(result.riskLevel >= 4, `risk level must be >= 4, got ${result.riskLevel}`)
+})
+
+test('Authorize: explanation exposes risk components and policy checks without model reasoning', () => {
+  const action: ProposedAction = {
+    description: 'Adjust controller parameter X', actorId: 'entity-engineering-agent', capabilityId: 'cap-process-param',
+    applicablePolicyIds: ['policy-ops-17', 'policy-emergency-4'], evidenceIds: ['evidence-maint-847'],
+    financialExposure: 5000, reversible: false, operationalImpact: 3, uncertainty: 4,
+  }
+  const actor = entities.find((e) => e.id === 'entity-engineering-agent')!
+  const result = authorize({ action, actor, capabilities, policies, evidence })
+  assert.equal(result.explanation.riskComponents.baseRisk, 4)
+  assert.equal(result.explanation.riskComponents.financialImpact, 1)
+  assert.equal(result.explanation.riskComponents.operationalImpact, 1)
+  assert.equal(result.explanation.riskComponents.reversibility, 1)
+  assert.equal(result.explanation.riskComponents.uncertainty, 1)
+  assert.equal(result.explanation.riskComponents.finalRisk, result.riskLevel)
+  assert.deepEqual(result.explanation.appliedPolicies, result.policyChecks.filter((c) => c.result === 'applies').map((c) => c.policyId))
+  assert.deepEqual(result.explanation.conflictsDetected, result.policyConflicts)
+  assert.equal('chainOfThought' in result.explanation, false)
+  assert.equal(explainRisk(action, capabilities[0], evidence).riskLevel, 5)
 })
 
 test('Authorize: routine machine diagnostics is autonomous', () => {

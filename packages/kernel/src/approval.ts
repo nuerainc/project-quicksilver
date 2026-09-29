@@ -1,7 +1,7 @@
 import type { CapabilityRef, EvidenceRef, EntityRef, PolicyCheck, PolicyRef, ProposedAction, RiskLevel } from './types.ts'
 import { checkCapability } from './capability.ts'
 import { checkAuthority } from './authority.ts'
-import { averageEvidenceConfidence, computeRisk } from './risk.ts'
+import { averageEvidenceConfidence, explainRisk } from './risk.ts'
 import {
   applyRiskMultiplier,
   buildCapabilityGraph,
@@ -78,7 +78,16 @@ export interface AuthorizeResult {
    */
   capabilityGraph?: CapabilityGraphFinding | null
   averageEvidenceConfidence: number
+  /** Machine-readable explanation; contains no private model reasoning. */
+  explanation: AuthorizationExplanation
   recommendation: 'execute-autonomously' | 'request-approval' | 'reject'
+}
+
+export interface AuthorizationExplanation {
+  appliedPolicies: string[]
+  conflictsDetected: string[]
+  riskComponents: ReturnType<typeof explainRisk> & { multiplier: number; finalRisk: RiskLevel }
+  guardEvaluations: Array<{ policyId: string; result: PolicyCheck['result']; reasonCode?: PolicyCheck['reasonCode']; reason: string }>
 }
 
 export function authorize(args: AuthorizeArgs): AuthorizeResult {
@@ -106,12 +115,14 @@ export function authorize(args: AuthorizeArgs): AuthorizeResult {
   const actionEvidence = evidence.filter((e) => action.evidenceIds.includes(e.id))
   // Risk: the capability's effective base risk (inheritance floor), then the
   // graph's risk multiplier, before any policy sees it.
-  const riskBeforeMultiplier = computeRisk(
+  const riskBreakdown = explainRisk(
     action,
     capability && finding ? { ...capability, baseRiskLevel: finding.baseRiskLevel } : capability,
     actionEvidence,
   )
-  const riskLevel = applyRiskMultiplier(riskBeforeMultiplier, finding?.riskMultiplier ?? 1)
+  const riskBeforeMultiplier = riskBreakdown.riskLevel
+  const multiplier = finding?.riskMultiplier ?? 1
+  const riskLevel = applyRiskMultiplier(riskBeforeMultiplier, multiplier)
   if (finding) {
     finding.riskBeforeMultiplier = riskBeforeMultiplier
     finding.riskAfterMultiplier = riskLevel
@@ -191,6 +202,12 @@ export function authorize(args: AuthorizeArgs): AuthorizeResult {
     uncitedPolicyIds: authority.uncitedPolicyIds,
     capabilityGraph: finding,
     averageEvidenceConfidence: evidenceConf,
+    explanation: {
+      appliedPolicies: authority.applicablePolicyIds,
+      conflictsDetected: authority.conflicts,
+      riskComponents: { ...riskBreakdown, multiplier, finalRisk: riskLevel },
+      guardEvaluations: authority.checks.map((check) => ({ policyId: check.policyId, result: check.result, reasonCode: check.reasonCode, reason: check.reason })),
+    },
     recommendation,
   }
 }
