@@ -12,7 +12,7 @@ import type { WorkflowGraph, WorkflowNode, WorkflowRuntimeHandlers, WorkflowExec
 import { InMemoryWorkflowRunStore, WorkflowRunQueue, WorkflowRunWorker, graphDigest, canonicalJson } from './index.ts'
 import { FileWorkflowRunStore } from './file-store.ts'
 
-// ── fixtures ──────────────────────────────────────────────────────────────
+// â”€â”€ fixtures â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function agentGraph(id = 'wf-agent'): WorkflowGraph {
   return {
@@ -59,7 +59,7 @@ function setup(options: Partial<ConstructorParameters<typeof WorkflowRunQueue>[0
 
 const failed = (error = 'boom', extra: Partial<WorkflowExecutionResult> = {}): WorkflowExecutionResult => ({ status: 'failed', outputs: {}, steps: [{ nodeId: 'agent-1', status: 'failed', detail: error }], error, ...extra })
 
-// ── admission ─────────────────────────────────────────────────────────────
+// â”€â”€ admission â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 test('Queue: enqueue validates, snapshots, freezes, and digests the graph', async () => {
   const { queue } = setup()
@@ -104,7 +104,7 @@ test('Worker: protected execution emits durable, replay-safe authorization lifec
           reasons: [],
           authorization: {
             authorizationId: 'auth:run-1:tool-1', keyId: 'kernel-key-1', signature: 'hmac-sha256:test', status: 'issued', tenantId: 'acme', actionFingerprint: 'action:tool-1',
-            policySnapshot: 'policy:1', evidenceDigest: 'evidence:1', workflowDigest: 'sha256:wf1', approvalDigest: 'approval:none', capability: 'sanity.query', issuedAt: 1, expiresAt: 2_000_000,
+            policySnapshot: 'policy:1', evidenceDigest: 'evidence:1', evidenceCount: 2, workflowDigest: 'sha256:wf1', approvalDigest: 'approval:none', capability: 'sanity.query', issuedAt: 1, expiresAt: 2_000_000,
           },
         }
       },
@@ -162,7 +162,7 @@ test('Queue: global and per-tenant backpressure reject new work instead of growi
   assert.equal(!globalFull.accepted && globalFull.code, 'backpressure')
 })
 
-// ── claiming ──────────────────────────────────────────────────────────────
+// â”€â”€ claiming â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 test('Queue: claims by priority, then availability, then age; delayed runs wait', async () => {
   const { queue, advance } = setup()
@@ -198,7 +198,7 @@ test('Queue: two workers can never claim the same run', async () => {
   assert.equal([a, b].filter(Boolean).length, 1)
 })
 
-// ── outcomes ──────────────────────────────────────────────────────────────
+// â”€â”€ outcomes â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 test('Queue: only the lease holder can record an outcome', async () => {
   const { queue } = setup()
@@ -266,7 +266,7 @@ test('Queue: a tool graph that failed before any tool dispatch may still retry',
   assert.equal(run.status, 'queued')
 })
 
-// ── cancellation, leases, redrive ─────────────────────────────────────────
+// â”€â”€ cancellation, leases, redrive â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 test('Queue: cancelling a queued run is immediate; a running run is flagged for its worker', async () => {
   const { queue } = setup()
@@ -342,7 +342,7 @@ test('canonicalJson: key order does not change the digest', () => {
   assert.equal(canonicalJson({ b: 1, a: { d: 2, c: [3, { f: 1, e: 2 }] } }), '{"a":{"c":[3,{"e":2,"f":1}],"d":2},"b":1}')
 })
 
-// ── worker ────────────────────────────────────────────────────────────────
+// â”€â”€ worker â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 test('Worker: drain executes queued runs through the governed runner', async () => {
   const { queue } = setup()
@@ -399,7 +399,7 @@ test('Worker: start/stop polls in the background and shuts down gracefully', asy
   assert.equal((await queue.get('run-1'))?.status, 'completed')
 })
 
-// ── file journal ──────────────────────────────────────────────────────────
+// â”€â”€ file journal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 test('FileStore: runs and events survive a restart', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'qs-runs-'))

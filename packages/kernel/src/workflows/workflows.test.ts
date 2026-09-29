@@ -17,7 +17,7 @@ import {
   type WorkflowRuntimeHandlers,
 } from '../index.ts'
 
-// ── fixtures ──────────────────────────────────────────────────────────────
+// â”€â”€ fixtures â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function linear(extra: Partial<WorkflowNode['config']> = {}): WorkflowGraph {
   return {
@@ -112,7 +112,7 @@ function handlers(overrides: Partial<WorkflowRuntimeHandlers> = {}): WorkflowRun
         reasons: [],
         authorization: {
           authorizationId: `auth:${node.id}`, keyId: 'kernel-key-1', signature: 'hmac-sha256:test', status: 'issued', tenantId: 'test', actionFingerprint: `action:${node.id}`,
-          policySnapshot: 'policy:test', evidenceDigest: 'evidence:test', workflowDigest: 'sha256:wf-test', approvalDigest: 'approval:none', capability: node.config?.toolId ?? node.config?.agentId ?? 'test',
+          policySnapshot: 'policy:test', evidenceDigest: 'evidence:test', evidenceCount: 2, workflowDigest: 'sha256:wf-test', approvalDigest: 'approval:none', capability: node.config?.toolId ?? node.config?.agentId ?? 'test',
           issuedAt: 1, expiresAt: Number.MAX_SAFE_INTEGER,
         },
       }
@@ -122,7 +122,7 @@ function handlers(overrides: Partial<WorkflowRuntimeHandlers> = {}): WorkflowRun
   }
 }
 
-// ── graph validation ──────────────────────────────────────────────────────
+// â”€â”€ graph validation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 test('Graph: well-formed linear and branching graphs validate with a stable topological order', () => {
   const a = validateWorkflowGraph(linear())
@@ -218,7 +218,7 @@ test('Graph: condition references must point to an earlier, connected step; $nqc
   assert.ok(validateWorkflowGraph(invalid).errors.some((e) => e.includes('invalid expression')))
 })
 
-test('Graph: governance config — agents need evaluation + id, side-effect tools need evaluation + approval', () => {
+test('Graph: governance config â€” agents need evaluation + id, side-effect tools need evaluation + approval', () => {
   const noEval = validateWorkflowGraph(linear({ evaluationRequired: false }))
   assert.ok(noEval.errors.includes('Agent node "agent-1" must require Quicksilver Engine evaluation.'))
   const sideEffect = validateWorkflowGraph(toolGraph({ sideEffect: true }))
@@ -237,7 +237,7 @@ test('Graph: retry and timeout settings are bounded; tools can never be retried'
   assert.equal(validateWorkflowGraph(linear({ maxAttempts: 10, timeoutMs: 300_000 })).valid, true)
 })
 
-// ── condition language ────────────────────────────────────────────────────
+// â”€â”€ condition language â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 test('Condition: every operator evaluates data only', () => {
   const ctx = {
@@ -282,7 +282,7 @@ test('Condition: node references are extracted for graph checks', () => {
   assert.equal(workflowConditionNodeReference('nonsense'), null)
 })
 
-// ── runtime ───────────────────────────────────────────────────────────────
+// â”€â”€ runtime â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 test('Runtime: an invalid graph is blocked before any handler runs', async () => {
   const h = handlers()

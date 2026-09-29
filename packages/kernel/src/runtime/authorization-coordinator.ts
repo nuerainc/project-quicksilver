@@ -19,6 +19,13 @@ export interface SignedAuthorizationCoordinatorOptions {
    */
   policySnapshot?: string
   evidenceDigest?: string
+  /**
+   * How many pieces of evidence support the action being authorized. Required
+   * and must be at least one: without a count, an action with no evidence binds
+   * as cleanly as one with evidence, because the digest of an empty set is a
+   * valid digest.
+   */
+  evidenceCount?: number
   /** Digest of the exact workflow content this coordinator admits. Required. */
   workflowDigest?: string
   /**
@@ -47,6 +54,7 @@ export function createSignedAuthorizationCoordinator(
   const consumed = new Set<string>()
   const workflowDigest = options.workflowDigest?.trim() ?? ''
   const policySnapshot = options.policySnapshot?.trim() ?? ''
+  const evidenceCount = options.evidenceCount ?? 0
   const boundApprovalDigest = options.approval ? approvalDigest(options.approval) : NO_APPROVAL_DIGEST
 
   return {
@@ -63,6 +71,9 @@ export function createSignedAuthorizationCoordinator(
       if (!policySnapshot) {
         return { status: 'blocked', reasons: ['Policy snapshot is required to issue authorization; the policy state in force must be known.'] }
       }
+      if (!Number.isInteger(evidenceCount) || evidenceCount < 1) {
+        return { status: 'blocked', reasons: ['At least one piece of evidence is required to issue authorization; an action with no evidence cannot be authorized.'] }
+      }
       if (!Number.isInteger(ttlMs) || ttlMs < 1 || ttlMs > 86_400_000) {
         return { status: 'blocked', reasons: ['Authorization TTL is outside the supported range.'] }
       }
@@ -74,6 +85,7 @@ export function createSignedAuthorizationCoordinator(
         actionFingerprint: actionFingerprint(node, capability),
         policySnapshot,
         evidenceDigest: options.evidenceDigest ?? 'evidence:runtime',
+        evidenceCount,
         workflowDigest,
         approvalDigest: boundApprovalDigest,
         capability,
@@ -95,6 +107,7 @@ export function createSignedAuthorizationCoordinator(
         actionFingerprint: actionFingerprint(node, capability),
         workflowDigest,
         approvalDigest: boundApprovalDigest,
+        evidenceCount,
         now: now(),
       })
       if (!verification.valid) return { consumed: false, reason: verification.reasons.join(' ') }
