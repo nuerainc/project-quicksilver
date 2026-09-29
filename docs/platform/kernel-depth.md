@@ -234,6 +234,36 @@ control plane, and the host currently issues the literal placeholder
 `kernel:current`. A genuine staleness check needs that resolved snapshot
 carried on the grant, which is separate work.
 
+### Supervisor control-plane event log
+
+`@quicksilver/kernel/control-log` records what the Supervisor Agent actually
+did: `authorization-requested`, `awaiting-human-approval`, `approval-timeout`,
+`refused`, `execution-submitted`, `cancelled`, and `rollback-proposed`. This is
+the M8-B requirement that the agent records its wait, timeout, refusal,
+execution, cancellation, and rollback proposals.
+
+It follows the money ledger's discipline: append-only, hash-chained per entry,
+functional, and **re-verified on every append** so a damaged record refuses to
+grow rather than being quietly extended past the damage. Sequence numbers and
+per-entry hashes detect edits, removals, and reordering.
+
+Two properties are deliberate:
+
+- **Observable facts only.** Every field is an identifier, a status, a
+  timestamp, or a reason string the kernel itself produced. No private
+  chain-of-thought is accepted or stored, and the reasons recorded are the same
+  deterministic strings the authorization gate reports to a caller.
+- **A log cannot be written backwards.** Transitions are checked, so
+  `execution-submitted` cannot be the first entry, cannot follow a timeout or a
+  refusal, and cannot follow `awaiting-human-approval` unless it carries the
+  approval that was actually waited on. A clean-looking log therefore has to
+  reflect the real sequence.
+
+`recordSupervisorDecision()` takes a request and the result the kernel just
+produced and derives the event from them, so a caller cannot record a decision
+the gate did not reach. Each log is bound to exactly one tenant, run, and action
+fingerprint, and an append to a different one is refused.
+
 ### Failing closed on an invalid graph
 
 `validateCapabilityGraph` reports:

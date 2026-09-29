@@ -72,6 +72,8 @@ export function approvalDigest(approval: HumanApprovalBinding): string {
 export interface SupervisorControlRequest {
   supervisorAgentId: string
   tenantId: string
+  /** The durable run this decision belongs to. */
+  runId: string
   actionFingerprint: string
   policySnapshot: string
   evidenceDigest: string
@@ -117,6 +119,7 @@ export function coordinateSupervisorControl(
     reasons.push('Only the registered Supervisor Agent may coordinate execution.')
   }
   if (!request.tenantId.trim()) reasons.push('Tenant binding is required.')
+  if (!request.runId.trim()) reasons.push('Durable run binding is required.')
   if (!request.actionFingerprint.trim()) reasons.push('Exact action fingerprint is required.')
   if (!request.policySnapshot.trim()) reasons.push('Policy snapshot binding is required.')
   if (!request.evidenceDigest.trim()) reasons.push('Evidence digest binding is required.')
@@ -154,6 +157,7 @@ export function coordinateSupervisorControl(
   if (!authorization) reasons.push('A current NQC Kernel execution authorization is required.')
   else {
     if (authorization.tenantId !== request.tenantId) reasons.push('Authorization and action belong to different tenants.')
+    if (authorization.runId !== request.runId) reasons.push('Authorization belongs to a different run.')
     if (authorization.actionFingerprint !== request.actionFingerprint) reasons.push('Authorization is not bound to the exact action fingerprint.')
     if (authorization.policySnapshot !== request.policySnapshot) reasons.push('Authorization is bound to a different policy snapshot.')
     if (authorization.evidenceDigest !== request.evidenceDigest) reasons.push('Authorization is bound to a different evidence digest.')
@@ -168,15 +172,15 @@ export function coordinateSupervisorControl(
     if (authorization.capability !== request.capability) reasons.push('Authorization is bound to a different capability.')
     if (authorization.issuedAt > now) reasons.push('Authorization timestamp is in the future.')
     if (authorization.expiresAt <= now) reasons.push('Kernel execution authorization has expired.')
-    // Run and node are self-consistent here (the Supervisor has no independent
-    // source for them), but the signature covers both, so a tampered record is
-    // still rejected here.
+    // Run and node come from the request and the record respectively: the run
+    // is an independent binding the Supervisor already knows, and the signature
+    // covers both, so a tampered record is still rejected here.
     const verification = verifyExecutionAuthorization(
       authorization as Parameters<typeof verifyExecutionAuthorization>[0],
       key,
       {
         tenantId: request.tenantId,
-        runId: authorization.runId ?? '',
+        runId: request.runId,
         nodeId: authorization.nodeId ?? '',
         actionFingerprint: request.actionFingerprint,
         workflowDigest: request.workflowDigest,
