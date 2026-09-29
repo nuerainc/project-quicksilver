@@ -25,6 +25,7 @@ import {
   type GovernedMemoryEntry,
   type ModelPerformanceProfile,
 } from '../index.ts'
+import { issueExecutionAuthorization } from '../runtime/authorization.ts'
 import { buildEvaluationRecord as _buildEvaluationRecord, MAX_EVALUATION_SUBJECT_CHARS as _MAX } from '../index.ts'
 import { applyUpstreamEscalation as _applyUpstream, evaluateNqcRequest as _evaluate } from './index.ts'
 
@@ -183,51 +184,87 @@ test('Supervisor Agent: registered as a review-only control-plane worker', () =>
   assert.equal(registry.authorizeDispatch('nuera-quicksilver:supervisor', 'planning').allowed, false)
 })
 
+const supervisorKey = { keyId: 'kernel-key-1', secret: '0123456789abcdef0123456789abcdef' }
 const supervisorRequest = {
   supervisorAgentId: 'nuera-quicksilver:supervisor',
   tenantId: 'acme',
   actionFingerprint: 'action:abc',
   policySnapshot: 'policy:1',
   evidenceDigest: 'evidence:1',
+  workflowDigest: 'sha256:wf1',
   capability: 'orders.send',
   safetyDecision: 'ALLOW' as const,
   requiresHumanApproval: true,
   now: 1_000,
 }
 
+/** A genuine, kernel-signed authorization for the request above. */
+function issueFor(overrides: Record<string, unknown> = {}, now = 800) {
+  return issueExecutionAuthorization({
+    tenantId: supervisorRequest.tenantId, runId: 'run-1', nodeId: 'tool-1',
+    actionFingerprint: supervisorRequest.actionFingerprint, policySnapshot: supervisorRequest.policySnapshot,
+    evidenceDigest: supervisorRequest.evidenceDigest, workflowDigest: supervisorRequest.workflowDigest,
+    capability: supervisorRequest.capability, expiresAt: 2_000, ...overrides,
+  }, supervisorKey, now)
+}
+
+const supervisorApproval = {
+  approvedBy: 'user:supervisor', approvedByKind: 'human' as const, tenantId: 'acme',
+  actionFingerprint: 'action:abc', policySnapshot: 'policy:1', evidenceDigest: 'evidence:1', approvedAt: 900,
+}
+
 test('Supervisor Agent: waits for a human approval and cannot use an agent approval', () => {
-  assert.equal(coordinateSupervisorControl(supervisorRequest).status, 'awaiting-human-approval')
+  assert.equal(coordinateSupervisorControl(supervisorRequest, supervisorKey).status, 'awaiting-human-approval')
   const result = coordinateSupervisorControl({
     ...supervisorRequest,
     approval: {
       approvedBy: 'agent:reviewer', approvedByKind: 'agent', tenantId: 'acme',
       actionFingerprint: 'action:abc', policySnapshot: 'policy:1', evidenceDigest: 'evidence:1', approvedAt: 900,
     },
-  })
+  }, supervisorKey)
   assert.equal(result.status, 'blocked')
   assert.ok(result.reasons.some((reason) => reason.includes('human principal')))
 })
 
 test('Supervisor Agent: only a matching, current kernel authorization reaches execution', () => {
-  const approval = {
-    approvedBy: 'user:supervisor', approvedByKind: 'human' as const, tenantId: 'acme',
-    actionFingerprint: 'action:abc', policySnapshot: 'policy:1', evidenceDigest: 'evidence:1', approvedAt: 900,
-  }
-  const authorization = {
-    authorizationId: 'auth:1', tenantId: 'acme', actionFingerprint: 'action:abc', policySnapshot: 'policy:1',
-    evidenceDigest: 'evidence:1', capability: 'orders.send', issuedAt: 800, expiresAt: 2_000,
-  }
-  const ready = coordinateSupervisorControl({ ...supervisorRequest, approval, authorization })
+  const authorization = issueFor()
+  const ready = coordinateSupervisorControl({ ...supervisorRequest, approval: supervisorApproval, authorization }, supervisorKey)
   assert.equal(ready.status, 'ready-to-execute')
-  assert.equal(ready.authorization?.authorizationId, 'auth:1')
+  assert.equal(ready.authorization?.authorizationId, authorization.authorizationId)
 
-  const stale = coordinateSupervisorControl({ ...supervisorRequest, approval, authorization: { ...authorization, expiresAt: 1_000 } })
+  const stale = coordinateSupervisorControl({ ...supervisorRequest, approval: supervisorApproval, authorization: { ...authorization, expiresAt: 1_000 } }, supervisorKey)
   assert.equal(stale.status, 'blocked')
   assert.ok(stale.reasons.some((reason) => reason.includes('expired')))
 
-  const mismatched = coordinateSupervisorControl({ ...supervisorRequest, approval, authorization: { ...authorization, actionFingerprint: 'action:other' } })
+  const mismatched = coordinateSupervisorControl({ ...supervisorRequest, approval: supervisorApproval, authorization: { ...authorization, actionFingerprint: 'action:other' } }, supervisorKey)
   assert.equal(mismatched.status, 'blocked')
   assert.ok(mismatched.reasons.some((reason) => reason.includes('exact action fingerprint')))
+})
+
+test('Supervisor Agent: a forged or unsigned authorization never reaches execution', () => {
+  const genuine = issueFor()
+  // Same identity bindings, but the signature is not the kernel's. Comparing
+  // caller-supplied fields alone would have accepted this.
+  const forged = { ...genuine, keyId: 'attacker-key', signature: `hmac-sha256:${'f'.repeat(64)}` }
+  const forgedResult = coordinateSupervisorControl(
+    { ...supervisorRequest, approval: supervisorApproval, authorization: forged }, supervisorKey,
+  )
+  assert.equal(forgedResult.status, 'blocked')
+  assert.ok(forgedResult.reasons.some((reason) => /signing key|signature/.test(reason)), forgedResult.reasons.join(' '))
+
+  const unsigned = { ...genuine, signature: '' }
+  const unsignedResult = coordinateSupervisorControl(
+    { ...supervisorRequest, approval: supervisorApproval, authorization: unsigned }, supervisorKey,
+  )
+  assert.equal(unsignedResult.status, 'blocked')
+  assert.ok(unsignedResult.reasons.some((reason) => /not signed/.test(reason)), unsignedResult.reasons.join(' '))
+
+  // A grant issued for one workflow's content is refused for another's.
+  const otherWorkflow = coordinateSupervisorControl(
+    { ...supervisorRequest, workflowDigest: 'sha256:other', approval: supervisorApproval, authorization: genuine }, supervisorKey,
+  )
+  assert.equal(otherWorkflow.status, 'blocked')
+  assert.ok(otherWorkflow.reasons.some((reason) => /workflow content/.test(reason)), otherWorkflow.reasons.join(' '))
 })
 
 test('Supervisor Agent: kernel BLOCK is never overridden by approval or authorization', () => {
@@ -235,11 +272,8 @@ test('Supervisor Agent: kernel BLOCK is never overridden by approval or authoriz
     ...supervisorRequest,
     safetyDecision: 'BLOCK',
     requiresHumanApproval: false,
-    authorization: {
-      authorizationId: 'auth:blocked', tenantId: 'acme', actionFingerprint: 'action:abc', policySnapshot: 'policy:1',
-      evidenceDigest: 'evidence:1', capability: 'orders.send', issuedAt: 900, expiresAt: 2_000,
-    },
-  })
+    authorization: issueFor({ authorizationId: 'auth:blocked' }, 900),
+  }, supervisorKey)
   assert.equal(result.status, 'blocked')
   assert.ok(result.reasons.some((reason) => reason.includes('cannot override')))
 })

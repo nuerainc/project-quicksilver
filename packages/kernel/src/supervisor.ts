@@ -1,3 +1,4 @@
+import { verifyExecutionAuthorization, type AuthorizationSigningKey } from './runtime/authorization.ts'
 import type { SafetyDecision } from './nqc/index.ts'
 
 /** The Supervisor Agent coordinates these phases; it never grants authority. */
@@ -9,8 +10,8 @@ export type SupervisorControlStatus =
 export interface KernelExecutionAuthorization {
   authorizationId: string
   /** Signed durable-record metadata verified by the executor before dispatch. */
-  keyId?: string
-  signature?: string
+  keyId: string
+  signature: string
   status?: 'issued' | 'consumed' | 'revoked'
   tenantId: string
   runId?: string
@@ -18,6 +19,7 @@ export interface KernelExecutionAuthorization {
   actionFingerprint: string
   policySnapshot: string
   evidenceDigest: string
+  workflowDigest: string
   capability: string
   issuedAt: number
   expiresAt: number
@@ -39,6 +41,7 @@ export interface SupervisorControlRequest {
   actionFingerprint: string
   policySnapshot: string
   evidenceDigest: string
+  workflowDigest: string
   capability: string
   safetyDecision: SafetyDecision
   requiresHumanApproval: boolean
@@ -61,8 +64,18 @@ export interface SupervisorControlResult {
  * it does not mint one. A Supervisor Agent can coordinate approval and submit
  * an execution request, but only the NQC Kernel can produce the authorization
  * that makes execution eligible.
+ *
+ * The signing key is required and the record is verified cryptographically
+ * here. Comparing the fields a caller supplies would not prove the record came
+ * from the kernel: a hand-built object carrying the right tenant, fingerprint,
+ * policy, evidence and capability would otherwise pass on its face alone. A
+ * `ready-to-execute` result therefore always means a live kernel signature over
+ * exactly these bindings.
  */
-export function coordinateSupervisorControl(request: SupervisorControlRequest): SupervisorControlResult {
+export function coordinateSupervisorControl(
+  request: SupervisorControlRequest,
+  key: AuthorizationSigningKey,
+): SupervisorControlResult {
   const reasons: string[] = []
   const now = request.now ?? Date.now()
 
@@ -73,6 +86,7 @@ export function coordinateSupervisorControl(request: SupervisorControlRequest): 
   if (!request.actionFingerprint.trim()) reasons.push('Exact action fingerprint is required.')
   if (!request.policySnapshot.trim()) reasons.push('Policy snapshot binding is required.')
   if (!request.evidenceDigest.trim()) reasons.push('Evidence digest binding is required.')
+  if (!request.workflowDigest.trim()) reasons.push('Workflow content digest is required.')
   if (!request.capability.trim()) reasons.push('Capability binding is required.')
 
   if (request.safetyDecision === 'BLOCK') {
@@ -107,9 +121,26 @@ export function coordinateSupervisorControl(request: SupervisorControlRequest): 
     if (authorization.actionFingerprint !== request.actionFingerprint) reasons.push('Authorization is not bound to the exact action fingerprint.')
     if (authorization.policySnapshot !== request.policySnapshot) reasons.push('Authorization is bound to a different policy snapshot.')
     if (authorization.evidenceDigest !== request.evidenceDigest) reasons.push('Authorization is bound to a different evidence digest.')
+    if (authorization.workflowDigest !== request.workflowDigest) reasons.push('Authorization is bound to different workflow content.')
     if (authorization.capability !== request.capability) reasons.push('Authorization is bound to a different capability.')
     if (authorization.issuedAt > now) reasons.push('Authorization timestamp is in the future.')
     if (authorization.expiresAt <= now) reasons.push('Kernel execution authorization has expired.')
+    // Run and node are self-consistent here (the Supervisor has no independent
+    // source for them), but the signature covers both, so a tampered record is
+    // still rejected here.
+    const verification = verifyExecutionAuthorization(
+      authorization as Parameters<typeof verifyExecutionAuthorization>[0],
+      key,
+      {
+        tenantId: request.tenantId,
+        runId: authorization.runId ?? '',
+        nodeId: authorization.nodeId ?? '',
+        actionFingerprint: request.actionFingerprint,
+        workflowDigest: request.workflowDigest,
+        now,
+      },
+    )
+    if (!verification.valid) reasons.push(...verification.reasons)
   }
 
   if (reasons.length > 0) return { status: 'blocked', reasons }

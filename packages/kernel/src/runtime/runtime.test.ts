@@ -104,7 +104,7 @@ test('Worker: protected execution emits durable, replay-safe authorization lifec
           reasons: [],
           authorization: {
             authorizationId: 'auth:run-1:tool-1', keyId: 'kernel-key-1', signature: 'hmac-sha256:test', status: 'issued', tenantId: 'acme', actionFingerprint: 'action:tool-1',
-            policySnapshot: 'policy:1', evidenceDigest: 'evidence:1', capability: 'sanity.query', issuedAt: 1, expiresAt: 2_000_000,
+            policySnapshot: 'policy:1', evidenceDigest: 'evidence:1', workflowDigest: 'sha256:wf1', capability: 'sanity.query', issuedAt: 1, expiresAt: 2_000_000,
           },
         }
       },

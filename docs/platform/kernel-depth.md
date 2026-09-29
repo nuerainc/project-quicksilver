@@ -194,6 +194,32 @@ not contain private chain-of-thought, prompts, or hidden evaluator state. The
 explanation is derived from the same values used for authorization, so it
 cannot disagree with the decision shown to the caller.
 
+### Kernel-signed execution authorization
+
+Protected steps do not run on a boolean. The kernel issues a signed execution
+authorization (`@quicksilver/kernel/runtime/authorization`), and that record is
+what makes a step eligible to execute.
+
+**Contract version 2 binds the workflow content.** Every record carries a
+`workflowDigest` alongside tenant, run, node, action fingerprint, policy
+snapshot, evidence digest, and capability. A grant issued for one workflow is
+refused for another, so published content and the authority to act on it cannot
+drift apart. `createSignedAuthorizationCoordinator` requires the digest and
+stops rather than issuing an unbound grant.
+
+**An unsigned record is never acceptable.** Verification checks the signature
+whenever one is present *and* refuses a record that has none, so a hand-built
+object carrying the right tenant, fingerprint, policy, evidence, and capability
+cannot pass on its face alone.
+
+**The Supervisor gate verifies cryptographically.**
+`coordinateSupervisorControl(request, key)` requires the signing key and calls
+`verifyExecutionAuthorization` before it can return `ready-to-execute`. Field
+comparison is kept as defense in depth, but a `ready-to-execute` result now
+means a live kernel signature over exactly the bindings in the request. This
+closes the M8-B requirement that the Supervisor Agent stops on an invalid
+signature.
+
 ### Failing closed on an invalid graph
 
 `validateCapabilityGraph` reports:
