@@ -22,6 +22,16 @@ const cli = join(here, 'operate-cli.ts')
 const RUN = 'operate-nuera'
 const founder = { id: 'entity-founder', kind: 'human' as const }
 
+/**
+ * Assert a written file is owner-only. Windows has no POSIX mode bits, so
+ * `chmod` is a no-op and access there is governed by ACLs instead; the 0o600
+ * contract is therefore only assertable on POSIX platforms.
+ */
+async function assertOwnerOnly(path: string): Promise<void> {
+  if (process.platform === 'win32') return
+  assert.equal((await stat(path)).mode & 0o777, 0o600)
+}
+
 async function operate(dir: string, args: string[], env: Record<string, string> = {}): Promise<{ code: number; out: string }> {
   try {
     const r = await run(process.execPath, ['--experimental-strip-types', '--no-warnings', cli, ...args], {
@@ -57,7 +67,7 @@ test('store: plans are append-only and written atomically with mode 0600', async
     await assert.rejects(store.appendPlan(rec(1)), /does not follow/)
     await store.appendPlan(rec(2))
     assert.deepEqual((await store.plans()).map((p) => p.seq), [1, 2])
-    assert.equal((await stat(join(dir, RUN, 'plans.json'))).mode & 0o777, 0o600)
+    await assertOwnerOnly(join(dir, RUN, 'plans.json'))
     // The money ledger may only be appended to.
     let l: MoneyLedger = { runId: RUN, budgetUsd: 0, entries: [] }
     const r = appendMoney(l, { kind: 'revenue', amountUsd: 10, category: 'sales', description: 'x', source: { type: 'bank', ref: 'a' } }, founder, new Date())
@@ -131,7 +141,7 @@ test('plan and approve-plan: a proposal, then the founder\'s append-only approva
     assert.equal(plans[0]!.plan.experimentPoolUsd, 187.5)
     assert.equal(plans[0]!.approvedBy, 'entity-founder')
     assert.equal(plans[0]!.note, 'first cycle')
-    assert.equal((await stat(plansPath)).mode & 0o777, 0o600)
+    await assertOwnerOnly(plansPath)
 
     // The next period starts where the approved one ended: its money is not counted again.
     const again = await operate(dir, ['plan', '--cash', '600'])

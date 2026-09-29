@@ -17,10 +17,18 @@ for (const [script, label] of commands) {
   process.stdout.write(`\n==> ${label} (npm run ${script})\n`)
   const result = spawnSync('npm', ['run', script], {
     encoding: 'utf8',
+    // On Windows `npm` is a .cmd shim, which spawnSync cannot exec without a
+    // shell; without this the spawn fails with ENOENT and `status` stays null.
+    shell: process.platform === 'win32',
     env: { ...process.env, FORCE_COLOR: '0' },
   })
   process.stdout.write(result.stdout ?? '')
   process.stderr.write(result.stderr ?? '')
+
+  if (result.error) {
+    console.error(`\nVERIFY FAILED: ${script} could not be started (${result.error.code ?? result.error.message})`)
+    process.exit(1)
+  }
 
   const output = `${result.stdout ?? ''}\n${result.stderr ?? ''}`
   for (const match of output.matchAll(/(?:ℹ|#) tests (\d+)/g)) totalTests += Number(match[1])

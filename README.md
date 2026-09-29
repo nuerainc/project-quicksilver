@@ -12,8 +12,8 @@
 ![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript&logoColor=white)
 ![Sanity](https://img.shields.io/badge/Sanity-Content_Lake_%2B_Context_MCP-F03E2F?logo=sanity&logoColor=white)
 ![AI SDK 6](https://img.shields.io/badge/AI_SDK-6-000000?logo=vercel&logoColor=white)
-![Kernel tests](https://img.shields.io/badge/kernel_tests-185%2F185-2EA043)
-![Agent tests](https://img.shields.io/badge/agent_tests-13%2F13-2EA043)
+![Kernel tests](https://img.shields.io/badge/kernel_tests-334%2F334-2EA043)
+![Agent tests](https://img.shields.io/badge/agent_tests-32%2F32-2EA043)
 ![License: MIT](https://img.shields.io/badge/license-MIT-blue)
 
 [**Docs**](./docs/README.md) ·
