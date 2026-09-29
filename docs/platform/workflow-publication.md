@@ -72,5 +72,10 @@ next to the configured run store; memory-backed hosts use an in-memory adapter.
 host-config workflow. The queue receives the immutable published graph, so the
 durable run record contains its version and graph digest. The admission response
 also returns `{ publication: { version, digest } }` for published runs. A later
-publication cannot mutate an already-admitted run; it only changes which
+published version cannot mutate an already-admitted run; it only changes which
 published version a subsequent admission resolves.
+
+The same precedence applies to host-managed schedules and the governed task
+interface. When a published version exists, those triggers enqueue that graph
+and carry the same immutable version/digest provenance. Static host
+configuration remains the fallback only when no published version exists.

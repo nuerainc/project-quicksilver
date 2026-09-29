@@ -1,6 +1,7 @@
 import type { WorkflowGraph } from '../workflows/graph.ts'
 import type { Principal } from '../identity/rbac.ts'
 import type { WorkflowRunQueue, EnqueueResult } from '../runtime/queue.ts'
+import type { WorkflowRunPublication } from '../runtime/store.ts'
 
 /**
  * Five-field cron (minute hour day-of-month month day-of-week), evaluated in UTC.
@@ -140,6 +141,7 @@ export interface ScheduledWorkflow {
   tenantId: string
   cron: string
   graph: WorkflowGraph
+  publication?: WorkflowRunPublication
   /** Static input; the slot time is added as `scheduledFor`. */
   input?: unknown
   /** Service principal holding `run:enqueue` (e.g. the `trigger` role). */
@@ -223,6 +225,7 @@ export class CronScheduler {
       try {
         result = await this.queue.enqueue({
           graph: entry.config.graph,
+          ...(entry.config.publication ? { publication: entry.config.publication } : {}),
           input: { ...(isRecord(entry.config.input) ? entry.config.input : entry.config.input === undefined ? {} : { value: entry.config.input }), scheduledFor: new Date(slot).toISOString() },
           tenantId: entry.config.tenantId,
           trigger: { kind: 'schedule', source: entry.config.id },

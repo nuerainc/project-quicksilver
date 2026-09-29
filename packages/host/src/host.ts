@@ -187,7 +187,8 @@ export class QuicksilverHost {
         id: sc.id,
         tenantId: config.tenantId,
         cron: sc.cron,
-        graph: config.workflows[sc.workflow]!,
+        graph: this.publications.getPublished(sc.workflow)?.graph ?? config.workflows[sc.workflow]!,
+        ...(this.publications.getPublished(sc.workflow) ? { publication: { version: this.publications.getPublished(sc.workflow)!.version, digest: this.publications.getPublished(sc.workflow)!.digest } } : {}),
         ...(sc.input !== undefined ? { input: sc.input } : {}),
         principal: services.get(sc.principal)!,
         ...(sc.priority !== undefined ? { priority: sc.priority } : {}),
@@ -199,11 +200,12 @@ export class QuicksilverHost {
       const taskPrincipal: Principal = { id: TASK_PRINCIPAL_ID, kind: 'service', tenantId: config.tenantId, roles: ['task-runtime'] }
       const runs: TaskRunBackend = {
         enqueue: async ({ workflow, input, idempotencyKey }) => {
-          const graph = config.workflows[workflow]
+          const publication = this.publications.getPublished(workflow)
+          const graph = publication?.graph ?? config.workflows[workflow]
           if (!graph) return { ok: false, reason: `workflow "${workflow}" is not configured on this host` }
           const issues = checkWorkflow(graph, config.execution)
           if (issues.length) return { ok: false, reason: issues.join(' ') }
-          const r = await this.queue.enqueue({ graph, input, tenantId: config.tenantId, trigger: { kind: 'event', source: `task:${idempotencyKey.slice(5)}` }, principal: taskPrincipal, idempotencyKey, maxAttempts: 1 })
+          const r = await this.queue.enqueue({ graph, ...(publication ? { publication: { version: publication.version, digest: publication.digest } } : {}), input, tenantId: config.tenantId, trigger: { kind: 'event', source: `task:${idempotencyKey.slice(5)}` }, principal: taskPrincipal, idempotencyKey, maxAttempts: 1 })
           return r.accepted ? { ok: true, runId: r.run.runId } : { ok: false, reason: `${r.code}: ${r.reasons.join(' ')}` }
         },
         get: async (runId) => {
