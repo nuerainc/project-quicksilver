@@ -12,6 +12,11 @@ import {
 export interface SignedAuthorizationCoordinatorOptions {
   ttlMs?: number
   now?: () => number
+  /**
+   * Digest of the policy state in force, from `policySnapshot()`. Required: the
+   * previous default was the literal `kernel:current`, which made every grant
+   * look current no matter how the policy had moved.
+   */
   policySnapshot?: string
   evidenceDigest?: string
   /** Digest of the exact workflow content this coordinator admits. Required. */
@@ -41,6 +46,7 @@ export function createSignedAuthorizationCoordinator(
   const ttlMs = options.ttlMs ?? 60_000
   const consumed = new Set<string>()
   const workflowDigest = options.workflowDigest?.trim() ?? ''
+  const policySnapshot = options.policySnapshot?.trim() ?? ''
   const boundApprovalDigest = options.approval ? approvalDigest(options.approval) : NO_APPROVAL_DIGEST
 
   return {
@@ -54,6 +60,9 @@ export function createSignedAuthorizationCoordinator(
       if (!workflowDigest) {
         return { status: 'blocked', reasons: ['Workflow content digest is required to issue authorization.'] }
       }
+      if (!policySnapshot) {
+        return { status: 'blocked', reasons: ['Policy snapshot is required to issue authorization; the policy state in force must be known.'] }
+      }
       if (!Number.isInteger(ttlMs) || ttlMs < 1 || ttlMs > 86_400_000) {
         return { status: 'blocked', reasons: ['Authorization TTL is outside the supported range.'] }
       }
@@ -63,7 +72,7 @@ export function createSignedAuthorizationCoordinator(
         runId: context.runId,
         nodeId: node.id,
         actionFingerprint: actionFingerprint(node, capability),
-        policySnapshot: options.policySnapshot ?? 'kernel:current',
+        policySnapshot,
         evidenceDigest: options.evidenceDigest ?? 'evidence:runtime',
         workflowDigest,
         approvalDigest: boundApprovalDigest,

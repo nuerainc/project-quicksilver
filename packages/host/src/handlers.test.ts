@@ -1,6 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
+import type { PolicyRef } from '@quicksilver/kernel'
 import type { WorkflowGraph } from '@quicksilver/kernel/workflows/graph'
 import { createHandlerFactory } from './handlers.ts'
 import { Logger } from './log.ts'
@@ -24,23 +25,51 @@ function run() {
   }
 }
 
-function factory(authorizationKey?: { keyId: string; secret: string }) {
+function factory(authorizationKey?: { keyId: string; secret: string }, policies?: PolicyRef[]) {
   return createHandlerFactory({
     execution: { maxAgentSteps: 3, allowedAgents: ['query'] },
     log: new Logger({ level: 'error', sink: { write: () => {} } }),
     metrics: createHostMetrics(),
     ...(authorizationKey ? { authorizationKey } : {}),
+    ...(policies ? { policies } : {}),
   })(run())
 }
 
+const hostPolicies: PolicyRef[] = [{
+  id: 'acme.max-risk', name: 'Max risk', scope: 'acme', priority: 10,
+  supersedesIds: [], approvalRequirementIds: [], version: 1, lineageId: 'lin.max-risk',
+}]
+
 test('Host handlers: configured signing key issues and consumes a protected authorization', async () => {
-  const handlers = factory({ keyId: 'acme:host-1', secret: '0123456789abcdef0123456789abcdef' })
+  const handlers = factory({ keyId: 'acme:host-1', secret: '0123456789abcdef0123456789abcdef' }, hostPolicies)
   const node = graph.nodes[1]!
   const context = { input: null, runId: 'run-1', tenantId: 'acme', outputs: {}, evaluations: {} }
   const decision = await handlers.authorizeExecution!(node, null, context)
   assert.equal(decision.status, 'ready-to-execute')
   const consumed = await handlers.consumeExecutionAuthorization!(node, decision.authorization!, context)
   assert.deepEqual(consumed, { consumed: true })
+})
+
+test('Host handlers: a signing key without a known policy state cannot issue a grant', async () => {
+  // Without a policy set the host cannot know whether the policy in force is
+  // the one the decision was made under, so protected execution stops.
+  const handlers = factory({ keyId: 'acme:host-1', secret: '0123456789abcdef0123456789abcdef' })
+  const node = graph.nodes[1]!
+  const context = { input: null, runId: 'run-1', tenantId: 'acme', outputs: {}, evaluations: {} }
+  const decision = await handlers.authorizeExecution!(node, null, context)
+  assert.equal(decision.status, 'blocked')
+  assert.match(decision.reasons.join(' '), /policy snapshot/i)
+})
+
+test('Host handlers: a changed policy produces a different snapshot on the grant', async () => {
+  const key = { keyId: 'acme:host-1', secret: '0123456789abcdef0123456789abcdef' }
+  const node = graph.nodes[1]!
+  const context = { input: null, runId: 'run-1', tenantId: 'acme', outputs: {}, evaluations: {} }
+  const before = await factory(key, hostPolicies).authorizeExecution!(node, null, context)
+  const after = await factory(key, [{ ...hostPolicies[0]!, version: 2 }]).authorizeExecution!(node, null, context)
+  assert.equal(before.status, 'ready-to-execute')
+  assert.equal(after.status, 'ready-to-execute')
+  assert.notEqual(before.authorization?.policySnapshot, after.authorization?.policySnapshot)
 })
 
 test('Host handlers: missing signing key fails closed before protected execution', async () => {

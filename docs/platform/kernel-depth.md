@@ -226,13 +226,31 @@ means a live kernel signature over exactly the bindings in the request. This
 closes the M8-B requirements that the Supervisor Agent stops on an invalid
 signature, on a changed workflow, and on an expired approval.
 
-**Known gap — stale policy.** `policySnapshot` is carried and compared for
-equality, but the kernel does not yet resolve whether a snapshot is still the
-live one. Policy currency is computed inside `authorize()` in `authority.ts`
-(lineage, supersession, effective windows) and is not plumbed through to the
-control plane, and the host currently issues the literal placeholder
-`kernel:current`. A genuine staleness check needs that resolved snapshot
-carried on the grant, which is separate work.
+**The policy in force is bound and checked for staleness.** Every record
+already carried a `policySnapshot`, but it was an unconstrained string defaulting
+to the placeholder `kernel:current`. It is now a canonical digest of the policy
+state the decision was governed under, computed by `policySnapshot()` in
+`@quicksilver/kernel/policy-snapshot`. It covers the fields that change what a
+policy *does* — version, lineage, scope, priority, effect, risk ceiling,
+effective window, supersession, approval requirements, and applicability —
+sorted by id so supply order is irrelevant. Cosmetic fields such as a display
+name are excluded deliberately: renaming a policy does not change its meaning
+and should not invalidate a grant.
+
+`authorize()` returns the snapshot of the policies it actually applied, so the
+snapshot travels with the decision. At execution the gate compares it against
+`currentPolicySnapshot`, the digest of the policy in force *now*, and refuses a
+decision whose policy has since moved. A caller that cannot establish the live
+policy state is refused rather than assumed current.
+
+The host supplies its policy set through `HandlerFactoryOptions.policies`.
+Leaving it unset while a signing key is configured means the host cannot
+establish the live policy, so protected execution stops; that is a deliberate
+refusal, not a configuration error to paper over.
+
+The signed payload shape is unchanged, so the record stays at contract version
+3. What changed is the meaning of the value: no longer a free string that could
+be anything, but a digest the gate can actually check.
 
 ### Supervisor control-plane event log
 

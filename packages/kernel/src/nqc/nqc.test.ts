@@ -192,6 +192,7 @@ const supervisorRequest = {
   runId: 'run-1',
   actionFingerprint: 'action:abc',
   policySnapshot: 'policy:1',
+  currentPolicySnapshot: 'policy:1',
   evidenceDigest: 'evidence:1',
   workflowDigest: 'sha256:wf1',
   capability: 'orders.send',
@@ -316,8 +317,39 @@ test('Supervisor Agent: a grant issued with no approval cannot satisfy a human-a
   assert.equal(mismatched.status, 'blocked')
 })
 
-test('Supervisor Agent: kernel BLOCK is never overridden by approval or authorization', () => {
-  const result = coordinateSupervisorControl({
+test('Supervisor Agent: a decision made under a policy that has since changed is refused', () => {
+  const authorization = issueFor()
+  // Same action, same grant, same approval — but a policy version landed in
+  // between. The decision was never evaluated under the policy now in force.
+  const stale = coordinateSupervisorControl(
+    { ...supervisorRequest, currentPolicySnapshot: 'policy:2', approval: supervisorApproval, authorization },
+    supervisorKey,
+  )
+  assert.equal(stale.status, 'blocked')
+  assert.ok(stale.reasons.some((reason) => /policy has changed/.test(reason)), stale.reasons.join(' '))
+
+  // Under the same policy it is current, and the gate agrees.
+  const current = coordinateSupervisorControl(
+    { ...supervisorRequest, approval: supervisorApproval, authorization },
+    supervisorKey,
+  )
+  assert.equal(current.status, 'ready-to-execute')
+})
+
+test('Supervisor Agent: a policy state that cannot be established is refused, not assumed', () => {
+  const authorization = issueFor()
+  const unknown = coordinateSupervisorControl(
+    { ...supervisorRequest, currentPolicySnapshot: '', approval: supervisorApproval, authorization },
+    supervisorKey,
+  )
+  assert.equal(unknown.status, 'blocked')
+  assert.ok(
+    unknown.reasons.some((reason) => /policy state in force now could not be established/.test(reason)),
+    unknown.reasons.join(' '),
+  )
+})
+
+test('Supervisor Agent: kernel BLOCK is never overridden by approval or authorization', () => {  const result = coordinateSupervisorControl({
     ...supervisorRequest,
     safetyDecision: 'BLOCK',
     requiresHumanApproval: false,
