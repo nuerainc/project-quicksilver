@@ -11,9 +11,10 @@ import {
 const key = { keyId: 'kernel-key-1', secret: '0123456789abcdef0123456789abcdef' }
 const input = {
   tenantId: 'acme', runId: 'run-1', nodeId: 'tool-1', actionFingerprint: 'action:abc',
-  policySnapshot: 'policy:1', evidenceDigest: 'evidence:1', workflowDigest: 'sha256:wf1', capability: 'orders.send', expiresAt: 2_000,
+  policySnapshot: 'policy:1', evidenceDigest: 'evidence:1', workflowDigest: 'sha256:wf1',
+  approvalDigest: 'sha256:ap1', capability: 'orders.send', expiresAt: 2_000,
 }
-const expected = { tenantId: 'acme', runId: 'run-1', nodeId: 'tool-1', actionFingerprint: 'action:abc', workflowDigest: 'sha256:wf1' }
+const expected = { tenantId: 'acme', runId: 'run-1', nodeId: 'tool-1', actionFingerprint: 'action:abc', workflowDigest: 'sha256:wf1', approvalDigest: 'sha256:ap1' }
 
 test('Authorization: issued records verify against tenant, run, node, and exact action', () => {
   const record = issueExecutionAuthorization(input, key, 1_000)
@@ -65,5 +66,13 @@ test('Authorization: a grant is bound to the workflow content it was issued for'
   assert.equal(other.valid, false)
   assert.ok(other.reasons.some((reason) => /workflow content/.test(reason)), other.reasons.join(' '))
   // The same record still verifies for the workflow it was actually issued for.
+  assert.equal(verifyExecutionAuthorization(record, key, { ...expected, now: 1_500 }).valid, true)
+})
+
+test('Authorization: a grant is bound to the approval it rests on', () => {
+  const record = issueExecutionAuthorization(input, key, 1_000)
+  const other = verifyExecutionAuthorization(record, key, { ...expected, approvalDigest: 'sha256:ap2', now: 1_500 })
+  assert.equal(other.valid, false)
+  assert.ok(other.reasons.some((reason) => /this approval/.test(reason)), other.reasons.join(' '))
   assert.equal(verifyExecutionAuthorization(record, key, { ...expected, now: 1_500 }).valid, true)
 })

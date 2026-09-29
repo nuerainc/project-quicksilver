@@ -200,12 +200,18 @@ Protected steps do not run on a boolean. The kernel issues a signed execution
 authorization (`@quicksilver/kernel/runtime/authorization`), and that record is
 what makes a step eligible to execute.
 
-**Contract version 2 binds the workflow content.** Every record carries a
-`workflowDigest` alongside tenant, run, node, action fingerprint, policy
-snapshot, evidence digest, and capability. A grant issued for one workflow is
-refused for another, so published content and the authority to act on it cannot
-drift apart. `createSignedAuthorizationCoordinator` requires the digest and
-stops rather than issuing an unbound grant.
+**Contract version 3 binds the workflow content and the approval.** Every
+record carries a `workflowDigest` and an `approvalDigest` alongside tenant, run,
+node, action fingerprint, policy snapshot, evidence digest, and capability. A
+grant issued for one workflow is refused for another, so published content and
+the authority to act on it cannot drift apart. The approval digest is taken over
+the human approval binding with `approvalDigest()`, so the authority to execute
+is tied to one specific approval rather than to the fact that somebody
+approved something similar.
+
+**A human approval expires.** `HumanApprovalBinding` carries `expiresAt` and the
+Supervisor refuses a lapsed approval. Without it an approval granted once would
+authorize the same action indefinitely.
 
 **An unsigned record is never acceptable.** Verification checks the signature
 whenever one is present *and* refuses a record that has none, so a hand-built
@@ -217,8 +223,16 @@ cannot pass on its face alone.
 `verifyExecutionAuthorization` before it can return `ready-to-execute`. Field
 comparison is kept as defense in depth, but a `ready-to-execute` result now
 means a live kernel signature over exactly the bindings in the request. This
-closes the M8-B requirement that the Supervisor Agent stops on an invalid
-signature.
+closes the M8-B requirements that the Supervisor Agent stops on an invalid
+signature, on a changed workflow, and on an expired approval.
+
+**Known gap — stale policy.** `policySnapshot` is carried and compared for
+equality, but the kernel does not yet resolve whether a snapshot is still the
+live one. Policy currency is computed inside `authorize()` in `authority.ts`
+(lineage, supersession, effective windows) and is not plumbed through to the
+control plane, and the host currently issues the literal placeholder
+`kernel:current`. A genuine staleness check needs that resolved snapshot
+carried on the grant, which is separate work.
 
 ### Failing closed on an invalid graph
 

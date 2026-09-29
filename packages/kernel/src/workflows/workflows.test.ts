@@ -112,7 +112,7 @@ function handlers(overrides: Partial<WorkflowRuntimeHandlers> = {}): WorkflowRun
         reasons: [],
         authorization: {
           authorizationId: `auth:${node.id}`, keyId: 'kernel-key-1', signature: 'hmac-sha256:test', status: 'issued', tenantId: 'test', actionFingerprint: `action:${node.id}`,
-          policySnapshot: 'policy:test', evidenceDigest: 'evidence:test', workflowDigest: 'sha256:wf-test', capability: node.config?.toolId ?? node.config?.agentId ?? 'test',
+          policySnapshot: 'policy:test', evidenceDigest: 'evidence:test', workflowDigest: 'sha256:wf-test', approvalDigest: 'approval:none', capability: node.config?.toolId ?? node.config?.agentId ?? 'test',
           issuedAt: 1, expiresAt: Number.MAX_SAFE_INTEGER,
         },
       }

@@ -12,13 +12,15 @@ export interface ExecutionAuthorizationPayload {
   evidenceDigest: string
   /** Binds the grant to the exact workflow content it was issued for. */
   workflowDigest: string
+  /** Digest of the human approval this grant rests on, if any. */
+  approvalDigest: string
   capability: string
   issuedAt: number
   expiresAt: number
 }
 
 export interface ExecutionAuthorizationRecord extends ExecutionAuthorizationPayload {
-  contractVersion: 2
+  contractVersion: 3
   status: ExecutionAuthorizationStatus
   keyId: string
   signature: string
@@ -55,13 +57,14 @@ export function issueExecutionAuthorization(
     policySnapshot: payload.policySnapshot,
     evidenceDigest: payload.evidenceDigest,
     workflowDigest: payload.workflowDigest,
+    approvalDigest: payload.approvalDigest,
     capability: payload.capability,
     issuedAt,
     expiresAt: payload.expiresAt,
   }
   const record: ExecutionAuthorizationRecord = {
     ...base,
-    contractVersion: 2,
+    contractVersion: 3,
     status: 'issued',
     keyId: key.keyId,
     signature: signAuthorization(base, key),
@@ -74,12 +77,12 @@ export function issueExecutionAuthorization(
 export function verifyExecutionAuthorization(
   record: ExecutionAuthorizationRecord,
   key: AuthorizationSigningKey,
-  expected: { tenantId: string; runId: string; nodeId: string; actionFingerprint: string; workflowDigest: string; now?: number },
+  expected: { tenantId: string; runId: string; nodeId: string; actionFingerprint: string; workflowDigest: string; approvalDigest: string; now?: number },
 ): AuthorizationVerification {
   const reasons: string[] = []
   const now = expected.now ?? Date.now()
   try { validateSigningKey(key) } catch (error) { reasons.push((error as Error).message) }
-  if (!record || record.contractVersion !== 2) reasons.push('Authorization record contract version is invalid.')
+  if (!record || record.contractVersion !== 3) reasons.push('Authorization record contract version is invalid.')
   if (!record?.authorizationId?.trim()) reasons.push('Authorization id is required.')
   if (record?.keyId !== key?.keyId) reasons.push('Authorization signing key does not match.')
   if (record?.status !== 'issued') reasons.push(`Authorization record is not issued (status: ${record?.status ?? 'unknown'}).`)
@@ -88,6 +91,7 @@ export function verifyExecutionAuthorization(
   if (record?.nodeId !== expected.nodeId) reasons.push('Authorization node does not match the execution step.')
   if (record?.actionFingerprint !== expected.actionFingerprint) reasons.push('Authorization action fingerprint does not match.')
   if (record?.workflowDigest !== expected.workflowDigest) reasons.push('Authorization is not bound to this workflow content.')
+  if (record?.approvalDigest !== expected.approvalDigest) reasons.push('Authorization is not bound to this approval.')
   if (record?.issuedAt > now) reasons.push('Authorization was issued in the future.')
   if (record?.expiresAt <= now) reasons.push('Authorization has expired.')
   if (record?.expiresAt <= record?.issuedAt) reasons.push('Authorization expiry must be after issue time.')
@@ -106,7 +110,7 @@ export function verifyExecutionAuthorization(
 export function consumeExecutionAuthorization(record: ExecutionAuthorizationRecord, key: AuthorizationSigningKey, now = Date.now()): ExecutionAuthorizationRecord {
   const verification = verifyExecutionAuthorization(record, key, {
     tenantId: record.tenantId, runId: record.runId, nodeId: record.nodeId, actionFingerprint: record.actionFingerprint,
-    workflowDigest: record.workflowDigest, now,
+    workflowDigest: record.workflowDigest, approvalDigest: record.approvalDigest, now,
   })
   if (!verification.valid) throw new Error(`Cannot consume execution authorization: ${verification.reasons.join(' ')}`)
   return Object.freeze({ ...record, status: 'consumed', consumedAt: now })
@@ -117,7 +121,7 @@ export function revokeExecutionAuthorization(record: ExecutionAuthorizationRecor
   if (!reason.trim()) throw new Error('A revocation reason is required.')
   const verification = verifyExecutionAuthorization(record, key, {
     tenantId: record.tenantId, runId: record.runId, nodeId: record.nodeId, actionFingerprint: record.actionFingerprint,
-    workflowDigest: record.workflowDigest, now,
+    workflowDigest: record.workflowDigest, approvalDigest: record.approvalDigest, now,
   })
   if (!verification.valid) throw new Error(`Cannot revoke execution authorization: ${verification.reasons.join(' ')}`)
   return Object.freeze({ ...record, status: 'revoked', revokedAt: now, revokeReason: reason })
@@ -127,7 +131,7 @@ function payloadOf(record: ExecutionAuthorizationRecord): ExecutionAuthorization
   return {
     authorizationId: record.authorizationId, tenantId: record.tenantId, runId: record.runId, nodeId: record.nodeId,
     actionFingerprint: record.actionFingerprint, policySnapshot: record.policySnapshot, evidenceDigest: record.evidenceDigest,
-    workflowDigest: record.workflowDigest, capability: record.capability, issuedAt: record.issuedAt, expiresAt: record.expiresAt,
+    workflowDigest: record.workflowDigest, approvalDigest: record.approvalDigest, capability: record.capability, issuedAt: record.issuedAt, expiresAt: record.expiresAt,
   }
 }
 
@@ -156,7 +160,7 @@ function validateSigningKey(key: AuthorizationSigningKey): void {
 function verifyOrThrow(record: ExecutionAuthorizationRecord, key: AuthorizationSigningKey, now: number): void {
   const result = verifyExecutionAuthorization(record, key, {
     tenantId: record.tenantId, runId: record.runId, nodeId: record.nodeId, actionFingerprint: record.actionFingerprint,
-    workflowDigest: record.workflowDigest, now,
+    workflowDigest: record.workflowDigest, approvalDigest: record.approvalDigest, now,
   })
   if (!result.valid) throw new Error(`Invalid execution authorization: ${result.reasons.join(' ')}`)
 }

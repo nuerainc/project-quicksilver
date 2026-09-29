@@ -26,6 +26,7 @@ import {
   type ModelPerformanceProfile,
 } from '../index.ts'
 import { issueExecutionAuthorization } from '../runtime/authorization.ts'
+import { approvalDigest } from '../supervisor.ts'
 import { buildEvaluationRecord as _buildEvaluationRecord, MAX_EVALUATION_SUBJECT_CHARS as _MAX } from '../index.ts'
 import { applyUpstreamEscalation as _applyUpstream, evaluateNqcRequest as _evaluate } from './index.ts'
 
@@ -198,19 +199,21 @@ const supervisorRequest = {
   now: 1_000,
 }
 
+const supervisorApproval = {
+  approvedBy: 'user:supervisor', approvedByKind: 'human' as const, tenantId: 'acme',
+  actionFingerprint: 'action:abc', policySnapshot: 'policy:1', evidenceDigest: 'evidence:1',
+  approvedAt: 900, expiresAt: 1_800,
+}
+
 /** A genuine, kernel-signed authorization for the request above. */
 function issueFor(overrides: Record<string, unknown> = {}, now = 800) {
   return issueExecutionAuthorization({
     tenantId: supervisorRequest.tenantId, runId: 'run-1', nodeId: 'tool-1',
     actionFingerprint: supervisorRequest.actionFingerprint, policySnapshot: supervisorRequest.policySnapshot,
     evidenceDigest: supervisorRequest.evidenceDigest, workflowDigest: supervisorRequest.workflowDigest,
-    capability: supervisorRequest.capability, expiresAt: 2_000, ...overrides,
+    approvalDigest: approvalDigest(supervisorApproval), capability: supervisorRequest.capability,
+    expiresAt: 2_000, ...overrides,
   }, supervisorKey, now)
-}
-
-const supervisorApproval = {
-  approvedBy: 'user:supervisor', approvedByKind: 'human' as const, tenantId: 'acme',
-  actionFingerprint: 'action:abc', policySnapshot: 'policy:1', evidenceDigest: 'evidence:1', approvedAt: 900,
 }
 
 test('Supervisor Agent: waits for a human approval and cannot use an agent approval', () => {
@@ -219,7 +222,8 @@ test('Supervisor Agent: waits for a human approval and cannot use an agent appro
     ...supervisorRequest,
     approval: {
       approvedBy: 'agent:reviewer', approvedByKind: 'agent', tenantId: 'acme',
-      actionFingerprint: 'action:abc', policySnapshot: 'policy:1', evidenceDigest: 'evidence:1', approvedAt: 900,
+      actionFingerprint: 'action:abc', policySnapshot: 'policy:1', evidenceDigest: 'evidence:1',
+      approvedAt: 900, expiresAt: 1_800,
     },
   }, supervisorKey)
   assert.equal(result.status, 'blocked')
@@ -265,6 +269,50 @@ test('Supervisor Agent: a forged or unsigned authorization never reaches executi
   )
   assert.equal(otherWorkflow.status, 'blocked')
   assert.ok(otherWorkflow.reasons.some((reason) => /workflow content/.test(reason)), otherWorkflow.reasons.join(' '))
+})
+
+test('Supervisor Agent: an expired human approval stops execution', () => {
+  const authorization = issueFor()
+  // The same approval, evaluated after it lapsed. A human approval is not a
+  // permanent grant to run the same action later.
+  const later = coordinateSupervisorControl(
+    { ...supervisorRequest, now: 1_900, approval: supervisorApproval, authorization }, supervisorKey,
+  )
+  assert.equal(later.status, 'blocked')
+  assert.ok(later.reasons.some((reason) => /expired/.test(reason)), later.reasons.join(' '))
+
+  // Before it lapses, the same pair is fine.
+  const inTime = coordinateSupervisorControl(
+    { ...supervisorRequest, now: 1_000, approval: supervisorApproval, authorization }, supervisorKey,
+  )
+  assert.equal(inTime.status, 'ready-to-execute')
+})
+
+test('Supervisor Agent: a grant cannot be paired with a different approval', () => {
+  const authorization = issueFor()
+  // Same human, same action, but a different approval record. The grant is
+  // bound to one specific approval, so a substituted one does not match.
+  const substituted = { ...supervisorApproval, approvedAt: 850 }
+  const result = coordinateSupervisorControl(
+    { ...supervisorRequest, approval: substituted, authorization }, supervisorKey,
+  )
+  assert.equal(result.status, 'blocked')
+  assert.ok(result.reasons.some((reason) => /not bound to this human approval/.test(reason)), result.reasons.join(' '))
+})
+
+test('Supervisor Agent: a grant issued with no approval cannot satisfy a human-approval requirement', () => {
+  const noApprovalGrant = issueFor({ approvalDigest: 'approval:none' })
+  const result = coordinateSupervisorControl(
+    { ...supervisorRequest, requiresHumanApproval: false, authorization: noApprovalGrant }, supervisorKey,
+  )
+  // Recorded honestly as a no-approval grant, it still verifies on its own.
+  assert.equal(result.status, 'ready-to-execute')
+  // But presenting that same grant while an approval is required is refused:
+  // the request has an approval the grant was never bound to.
+  const mismatched = coordinateSupervisorControl(
+    { ...supervisorRequest, requiresHumanApproval: true, approval: supervisorApproval, authorization: noApprovalGrant }, supervisorKey,
+  )
+  assert.equal(mismatched.status, 'blocked')
 })
 
 test('Supervisor Agent: kernel BLOCK is never overridden by approval or authorization', () => {

@@ -1,4 +1,4 @@
-import type { SupervisorControlResult } from '../supervisor.ts'
+import { approvalDigest, NO_APPROVAL_DIGEST, type HumanApprovalBinding, type SupervisorControlResult } from '../supervisor.ts'
 import type { WorkflowNode } from '../workflows/graph.ts'
 import type { WorkflowRuntimeContext } from '../workflows/runtime.ts'
 import {
@@ -16,6 +16,14 @@ export interface SignedAuthorizationCoordinatorOptions {
   evidenceDigest?: string
   /** Digest of the exact workflow content this coordinator admits. Required. */
   workflowDigest?: string
+  /**
+   * The human approval this grant rests on. When supplied, its digest is bound
+   * into the signed record, so the grant cannot later be paired with a
+   * different or expired approval. Omitting it records an explicit
+   * no-approval grant, which the Supervisor gate will not accept for an action
+   * that required human approval.
+   */
+  approval?: HumanApprovalBinding
 }
 
 /**
@@ -33,6 +41,7 @@ export function createSignedAuthorizationCoordinator(
   const ttlMs = options.ttlMs ?? 60_000
   const consumed = new Set<string>()
   const workflowDigest = options.workflowDigest?.trim() ?? ''
+  const boundApprovalDigest = options.approval ? approvalDigest(options.approval) : NO_APPROVAL_DIGEST
 
   return {
     async authorizeExecution(node, _output, context) {
@@ -57,6 +66,7 @@ export function createSignedAuthorizationCoordinator(
         policySnapshot: options.policySnapshot ?? 'kernel:current',
         evidenceDigest: options.evidenceDigest ?? 'evidence:runtime',
         workflowDigest,
+        approvalDigest: boundApprovalDigest,
         capability,
         expiresAt: timestamp + ttlMs,
       }, key, timestamp)
@@ -75,6 +85,7 @@ export function createSignedAuthorizationCoordinator(
         nodeId: node.id,
         actionFingerprint: actionFingerprint(node, capability),
         workflowDigest,
+        approvalDigest: boundApprovalDigest,
         now: now(),
       })
       if (!verification.valid) return { consumed: false, reason: verification.reasons.join(' ') }
