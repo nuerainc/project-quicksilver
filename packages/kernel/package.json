@@ -26,6 +26,7 @@
     "./workflows/publication": "./src/workflows/publication.ts",
     "./workflows/condition": "./src/workflows/condition.ts",
     "./agents": "./src/agents/registry.ts",
+    "./control-log": "./src/control-log.ts",
     "./runtime": "./src/runtime/index.ts",
     "./runtime/authorization": "./src/runtime/authorization.ts",
     "./runtime/authorization-coordinator": "./src/runtime/authorization-coordinator.ts",

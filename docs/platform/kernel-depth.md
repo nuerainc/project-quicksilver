@@ -194,6 +194,76 @@ not contain private chain-of-thought, prompts, or hidden evaluator state. The
 explanation is derived from the same values used for authorization, so it
 cannot disagree with the decision shown to the caller.
 
+### Kernel-signed execution authorization
+
+Protected steps do not run on a boolean. The kernel issues a signed execution
+authorization (`@quicksilver/kernel/runtime/authorization`), and that record is
+what makes a step eligible to execute.
+
+**Contract version 3 binds the workflow content and the approval.** Every
+record carries a `workflowDigest` and an `approvalDigest` alongside tenant, run,
+node, action fingerprint, policy snapshot, evidence digest, and capability. A
+grant issued for one workflow is refused for another, so published content and
+the authority to act on it cannot drift apart. The approval digest is taken over
+the human approval binding with `approvalDigest()`, so the authority to execute
+is tied to one specific approval rather than to the fact that somebody
+approved something similar.
+
+**A human approval expires.** `HumanApprovalBinding` carries `expiresAt` and the
+Supervisor refuses a lapsed approval. Without it an approval granted once would
+authorize the same action indefinitely.
+
+**An unsigned record is never acceptable.** Verification checks the signature
+whenever one is present *and* refuses a record that has none, so a hand-built
+object carrying the right tenant, fingerprint, policy, evidence, and capability
+cannot pass on its face alone.
+
+**The Supervisor gate verifies cryptographically.**
+`coordinateSupervisorControl(request, key)` requires the signing key and calls
+`verifyExecutionAuthorization` before it can return `ready-to-execute`. Field
+comparison is kept as defense in depth, but a `ready-to-execute` result now
+means a live kernel signature over exactly the bindings in the request. This
+closes the M8-B requirements that the Supervisor Agent stops on an invalid
+signature, on a changed workflow, and on an expired approval.
+
+**Known gap — stale policy.** `policySnapshot` is carried and compared for
+equality, but the kernel does not yet resolve whether a snapshot is still the
+live one. Policy currency is computed inside `authorize()` in `authority.ts`
+(lineage, supersession, effective windows) and is not plumbed through to the
+control plane, and the host currently issues the literal placeholder
+`kernel:current`. A genuine staleness check needs that resolved snapshot
+carried on the grant, which is separate work.
+
+### Supervisor control-plane event log
+
+`@quicksilver/kernel/control-log` records what the Supervisor Agent actually
+did: `authorization-requested`, `awaiting-human-approval`, `approval-timeout`,
+`refused`, `execution-submitted`, `cancelled`, and `rollback-proposed`. This is
+the M8-B requirement that the agent records its wait, timeout, refusal,
+execution, cancellation, and rollback proposals.
+
+It follows the money ledger's discipline: append-only, hash-chained per entry,
+functional, and **re-verified on every append** so a damaged record refuses to
+grow rather than being quietly extended past the damage. Sequence numbers and
+per-entry hashes detect edits, removals, and reordering.
+
+Two properties are deliberate:
+
+- **Observable facts only.** Every field is an identifier, a status, a
+  timestamp, or a reason string the kernel itself produced. No private
+  chain-of-thought is accepted or stored, and the reasons recorded are the same
+  deterministic strings the authorization gate reports to a caller.
+- **A log cannot be written backwards.** Transitions are checked, so
+  `execution-submitted` cannot be the first entry, cannot follow a timeout or a
+  refusal, and cannot follow `awaiting-human-approval` unless it carries the
+  approval that was actually waited on. A clean-looking log therefore has to
+  reflect the real sequence.
+
+`recordSupervisorDecision()` takes a request and the result the kernel just
+produced and derives the event from them, so a caller cannot record a decision
+the gate did not reach. Each log is bound to exactly one tenant, run, and action
+fingerprint, and an append to a different one is refused.
+
 ### Failing closed on an invalid graph
 
 `validateCapabilityGraph` reports:

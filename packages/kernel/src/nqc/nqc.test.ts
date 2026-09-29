@@ -25,14 +25,16 @@ import {
   type GovernedMemoryEntry,
   type ModelPerformanceProfile,
 } from '../index.ts'
+import { issueExecutionAuthorization } from '../runtime/authorization.ts'
+import { approvalDigest } from '../supervisor.ts'
 import { buildEvaluationRecord as _buildEvaluationRecord, MAX_EVALUATION_SUBJECT_CHARS as _MAX } from '../index.ts'
 import { applyUpstreamEscalation as _applyUpstream, evaluateNqcRequest as _evaluate } from './index.ts'
 
-// ── Quicksilver Engine ────────────────────────────────────────────────────
+// â”€â”€ Quicksilver Engine â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 const grounded = {
   agentOutput: 'Line 3 pressure is within tolerance per SOP-12.',
-  context: ['SOP-12: tolerance 40–60 psi', 'Sensor: 52 psi'],
+  context: ['SOP-12: tolerance 40â€“60 psi', 'Sensor: 52 psi'],
   citedReferences: ['SOP-12'],
   availableReferences: ['SOP-12'],
 }
@@ -86,7 +88,7 @@ test('Engine: critical work without grounding is penalised further', () => {
   assert.equal(normal - critical, 15)
 })
 
-// ── tool validation ───────────────────────────────────────────────────────
+// â”€â”€ tool validation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 test('Tool validation: unknown tools, sequence mismatches, and missing args fail closed', () => {
   const r = validateToolRequest({ name: 'ghost', arguments: undefined, sequence: 2 }, [], 1)
@@ -127,7 +129,7 @@ test('Tool validation: approval must be verified and dependencies completed', ()
   assert.equal(ok.requiresApproval, true)
 })
 
-// ── registries ────────────────────────────────────────────────────────────
+// â”€â”€ registries â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 test('ToolRegistry: invalid, duplicate, and unsafe manifests are refused', () => {
   const registry = new ToolRegistry()
@@ -183,51 +185,135 @@ test('Supervisor Agent: registered as a review-only control-plane worker', () =>
   assert.equal(registry.authorizeDispatch('nuera-quicksilver:supervisor', 'planning').allowed, false)
 })
 
+const supervisorKey = { keyId: 'kernel-key-1', secret: '0123456789abcdef0123456789abcdef' }
 const supervisorRequest = {
   supervisorAgentId: 'nuera-quicksilver:supervisor',
   tenantId: 'acme',
+  runId: 'run-1',
   actionFingerprint: 'action:abc',
   policySnapshot: 'policy:1',
   evidenceDigest: 'evidence:1',
+  workflowDigest: 'sha256:wf1',
   capability: 'orders.send',
   safetyDecision: 'ALLOW' as const,
   requiresHumanApproval: true,
   now: 1_000,
 }
 
+const supervisorApproval = {
+  approvedBy: 'user:supervisor', approvedByKind: 'human' as const, tenantId: 'acme',
+  actionFingerprint: 'action:abc', policySnapshot: 'policy:1', evidenceDigest: 'evidence:1',
+  approvedAt: 900, expiresAt: 1_800,
+}
+
+/** A genuine, kernel-signed authorization for the request above. */
+function issueFor(overrides: Record<string, unknown> = {}, now = 800) {
+  return issueExecutionAuthorization({
+    tenantId: supervisorRequest.tenantId, runId: 'run-1', nodeId: 'tool-1',
+    actionFingerprint: supervisorRequest.actionFingerprint, policySnapshot: supervisorRequest.policySnapshot,
+    evidenceDigest: supervisorRequest.evidenceDigest, workflowDigest: supervisorRequest.workflowDigest,
+    approvalDigest: approvalDigest(supervisorApproval), capability: supervisorRequest.capability,
+    expiresAt: 2_000, ...overrides,
+  }, supervisorKey, now)
+}
+
 test('Supervisor Agent: waits for a human approval and cannot use an agent approval', () => {
-  assert.equal(coordinateSupervisorControl(supervisorRequest).status, 'awaiting-human-approval')
+  assert.equal(coordinateSupervisorControl(supervisorRequest, supervisorKey).status, 'awaiting-human-approval')
   const result = coordinateSupervisorControl({
     ...supervisorRequest,
     approval: {
       approvedBy: 'agent:reviewer', approvedByKind: 'agent', tenantId: 'acme',
-      actionFingerprint: 'action:abc', policySnapshot: 'policy:1', evidenceDigest: 'evidence:1', approvedAt: 900,
+      actionFingerprint: 'action:abc', policySnapshot: 'policy:1', evidenceDigest: 'evidence:1',
+      approvedAt: 900, expiresAt: 1_800,
     },
-  })
+  }, supervisorKey)
   assert.equal(result.status, 'blocked')
   assert.ok(result.reasons.some((reason) => reason.includes('human principal')))
 })
 
 test('Supervisor Agent: only a matching, current kernel authorization reaches execution', () => {
-  const approval = {
-    approvedBy: 'user:supervisor', approvedByKind: 'human' as const, tenantId: 'acme',
-    actionFingerprint: 'action:abc', policySnapshot: 'policy:1', evidenceDigest: 'evidence:1', approvedAt: 900,
-  }
-  const authorization = {
-    authorizationId: 'auth:1', tenantId: 'acme', actionFingerprint: 'action:abc', policySnapshot: 'policy:1',
-    evidenceDigest: 'evidence:1', capability: 'orders.send', issuedAt: 800, expiresAt: 2_000,
-  }
-  const ready = coordinateSupervisorControl({ ...supervisorRequest, approval, authorization })
+  const authorization = issueFor()
+  const ready = coordinateSupervisorControl({ ...supervisorRequest, approval: supervisorApproval, authorization }, supervisorKey)
   assert.equal(ready.status, 'ready-to-execute')
-  assert.equal(ready.authorization?.authorizationId, 'auth:1')
+  assert.equal(ready.authorization?.authorizationId, authorization.authorizationId)
 
-  const stale = coordinateSupervisorControl({ ...supervisorRequest, approval, authorization: { ...authorization, expiresAt: 1_000 } })
+  const stale = coordinateSupervisorControl({ ...supervisorRequest, approval: supervisorApproval, authorization: { ...authorization, expiresAt: 1_000 } }, supervisorKey)
   assert.equal(stale.status, 'blocked')
   assert.ok(stale.reasons.some((reason) => reason.includes('expired')))
 
-  const mismatched = coordinateSupervisorControl({ ...supervisorRequest, approval, authorization: { ...authorization, actionFingerprint: 'action:other' } })
+  const mismatched = coordinateSupervisorControl({ ...supervisorRequest, approval: supervisorApproval, authorization: { ...authorization, actionFingerprint: 'action:other' } }, supervisorKey)
   assert.equal(mismatched.status, 'blocked')
   assert.ok(mismatched.reasons.some((reason) => reason.includes('exact action fingerprint')))
+})
+
+test('Supervisor Agent: a forged or unsigned authorization never reaches execution', () => {
+  const genuine = issueFor()
+  // Same identity bindings, but the signature is not the kernel's. Comparing
+  // caller-supplied fields alone would have accepted this.
+  const forged = { ...genuine, keyId: 'attacker-key', signature: `hmac-sha256:${'f'.repeat(64)}` }
+  const forgedResult = coordinateSupervisorControl(
+    { ...supervisorRequest, approval: supervisorApproval, authorization: forged }, supervisorKey,
+  )
+  assert.equal(forgedResult.status, 'blocked')
+  assert.ok(forgedResult.reasons.some((reason) => /signing key|signature/.test(reason)), forgedResult.reasons.join(' '))
+
+  const unsigned = { ...genuine, signature: '' }
+  const unsignedResult = coordinateSupervisorControl(
+    { ...supervisorRequest, approval: supervisorApproval, authorization: unsigned }, supervisorKey,
+  )
+  assert.equal(unsignedResult.status, 'blocked')
+  assert.ok(unsignedResult.reasons.some((reason) => /not signed/.test(reason)), unsignedResult.reasons.join(' '))
+
+  // A grant issued for one workflow's content is refused for another's.
+  const otherWorkflow = coordinateSupervisorControl(
+    { ...supervisorRequest, workflowDigest: 'sha256:other', approval: supervisorApproval, authorization: genuine }, supervisorKey,
+  )
+  assert.equal(otherWorkflow.status, 'blocked')
+  assert.ok(otherWorkflow.reasons.some((reason) => /workflow content/.test(reason)), otherWorkflow.reasons.join(' '))
+})
+
+test('Supervisor Agent: an expired human approval stops execution', () => {
+  const authorization = issueFor()
+  // The same approval, evaluated after it lapsed. A human approval is not a
+  // permanent grant to run the same action later.
+  const later = coordinateSupervisorControl(
+    { ...supervisorRequest, now: 1_900, approval: supervisorApproval, authorization }, supervisorKey,
+  )
+  assert.equal(later.status, 'blocked')
+  assert.ok(later.reasons.some((reason) => /expired/.test(reason)), later.reasons.join(' '))
+
+  // Before it lapses, the same pair is fine.
+  const inTime = coordinateSupervisorControl(
+    { ...supervisorRequest, now: 1_000, approval: supervisorApproval, authorization }, supervisorKey,
+  )
+  assert.equal(inTime.status, 'ready-to-execute')
+})
+
+test('Supervisor Agent: a grant cannot be paired with a different approval', () => {
+  const authorization = issueFor()
+  // Same human, same action, but a different approval record. The grant is
+  // bound to one specific approval, so a substituted one does not match.
+  const substituted = { ...supervisorApproval, approvedAt: 850 }
+  const result = coordinateSupervisorControl(
+    { ...supervisorRequest, approval: substituted, authorization }, supervisorKey,
+  )
+  assert.equal(result.status, 'blocked')
+  assert.ok(result.reasons.some((reason) => /not bound to this human approval/.test(reason)), result.reasons.join(' '))
+})
+
+test('Supervisor Agent: a grant issued with no approval cannot satisfy a human-approval requirement', () => {
+  const noApprovalGrant = issueFor({ approvalDigest: 'approval:none' })
+  const result = coordinateSupervisorControl(
+    { ...supervisorRequest, requiresHumanApproval: false, authorization: noApprovalGrant }, supervisorKey,
+  )
+  // Recorded honestly as a no-approval grant, it still verifies on its own.
+  assert.equal(result.status, 'ready-to-execute')
+  // But presenting that same grant while an approval is required is refused:
+  // the request has an approval the grant was never bound to.
+  const mismatched = coordinateSupervisorControl(
+    { ...supervisorRequest, requiresHumanApproval: true, approval: supervisorApproval, authorization: noApprovalGrant }, supervisorKey,
+  )
+  assert.equal(mismatched.status, 'blocked')
 })
 
 test('Supervisor Agent: kernel BLOCK is never overridden by approval or authorization', () => {
@@ -235,16 +321,13 @@ test('Supervisor Agent: kernel BLOCK is never overridden by approval or authoriz
     ...supervisorRequest,
     safetyDecision: 'BLOCK',
     requiresHumanApproval: false,
-    authorization: {
-      authorizationId: 'auth:blocked', tenantId: 'acme', actionFingerprint: 'action:abc', policySnapshot: 'policy:1',
-      evidenceDigest: 'evidence:1', capability: 'orders.send', issuedAt: 900, expiresAt: 2_000,
-    },
-  })
+    authorization: issueFor({ authorizationId: 'auth:blocked' }, 900),
+  }, supervisorKey)
   assert.equal(result.status, 'blocked')
   assert.ok(result.reasons.some((reason) => reason.includes('cannot override')))
 })
 
-// ── NQC contract ──────────────────────────────────────────────────────────
+// â”€â”€ NQC contract â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 test('NQC: clean moderate-impact work is allowed with no memory proposals', () => {
   const r = evaluateNqcRequest({ ...grounded, agentId: 'nuera-quicksilver:query', impactLevel: 'moderate' })
@@ -279,7 +362,7 @@ test('NQC: a credential inside a failure exemplar is blocked from memory', () =>
   assert.ok(r.memoryUpdates.some((u) => u.status === 'blocked'))
 })
 
-// ── memory governance ─────────────────────────────────────────────────────
+// â”€â”€ memory governance â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 const memory: GovernedMemoryEntry = { id: 'm-1', kind: 'failure-exemplar', domain: 'reasoning', content: 'Empty output.', source: 'engine', confidence: 0.8, retentionDays: 30 }
 
@@ -322,7 +405,7 @@ test('Memory: the persistence callback runs only for governed writes', async () 
   assert.equal(writes, 1)
 })
 
-// ── routing ───────────────────────────────────────────────────────────────
+// â”€â”€ routing â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 const profile = (id: string, extra: Partial<ModelPerformanceProfile> = {}): ModelPerformanceProfile => ({
   modelId: id, supportedTasks: ['reasoning', 'code'], taskAccuracy: { reasoning: 0.8, code: 0.7 },
@@ -384,7 +467,7 @@ test('Routing: performance updates are bounded moving averages and ignore other 
   assert.equal(clamped.p95LatencyMs, 0)
 })
 
-// ── reasoning stress ──────────────────────────────────────────────────────
+// â”€â”€ reasoning stress â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 test('Stress: challenges are deterministic and cycle through all four categories', () => {
   assert.deepEqual(generateReasoningStressChallenge(42), generateReasoningStressChallenge(42))
@@ -399,7 +482,7 @@ test('Stress: rubrics accept correct final answers and reject traps', () => {
   const [groups, perGroup, removed] = arithmetic.prompt.match(/\d+/g)!.map(Number)
   assert.equal(scoreReasoningStressAnswer(arithmetic.id, String(groups! * perGroup! - removed!)).passed, true)
   assert.equal(scoreReasoningStressAnswer(arithmetic.id, String(groups! * perGroup!)).passed, removed === 0)
-  assert.equal(scoreReasoningStressAnswer('qs-reasoning-v1-1', 'No — affirming the consequent.').passed, true)
+  assert.equal(scoreReasoningStressAnswer('qs-reasoning-v1-1', 'No â€” affirming the consequent.').passed, true)
   assert.equal(scoreReasoningStressAnswer('qs-reasoning-v1-1', 'Yes.').passed, false)
   assert.equal(scoreReasoningStressAnswer('qs-reasoning-v1-2', 'It cannot be determined.').passed, true)
   assert.equal(scoreReasoningStressAnswer('qs-reasoning-v1-2', '42 liters').passed, false)
@@ -421,7 +504,7 @@ test('Stress: suite scores provider answers, counts provider failures, and honou
   await assert.rejects(runReasoningStressSuite(async () => 'x', { seed: 0, count: 51 }))
 })
 
-// ── M1 item 5: durable evaluation records ─────────────────────────────────
+// â”€â”€ M1 item 5: durable evaluation records â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 test('Evaluation record: captures scores and safety decision without private reasoning', () => {
   const evaluation = _evaluate({ agentId: 'nuera-quicksilver:query', taskType: 'reasoning', agentOutput: 'answer', context: ['doc-1'], impactLevel: 'low' })
@@ -439,7 +522,7 @@ test('Evaluation record: long subjects are truncated and odd ids refused', () =>
   assert.throws(() => _buildEvaluationRecord({ id: 'bad id/../x', now: 'n', source: 'query', agentId: 'a', taskType: 't', subject: 's', requestedBy: 'r', evaluation }))
 })
 
-// ── M1 item 6: planner escalation tightens per-action decisions ───────────
+// â”€â”€ M1 item 6: planner escalation tightens per-action decisions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 test('Upstream escalation: an escalated planner turns ALLOW into human review', () => {
   const allow = { decision: { authorized: true, riskLevel: 1, requiresApproval: false, blockingReasons: [], concerns: [], policyConflicts: [], policyChecks: [], policyResolutions: [], uncitedPolicyIds: [], averageEvidenceConfidence: 1, recommendation: 'execute-autonomously' }, evaluation: {} as never, escalationReasons: [], safetyDecision: 'ALLOW' } as never

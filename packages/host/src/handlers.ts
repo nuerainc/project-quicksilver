@@ -70,7 +70,7 @@ export function createHandlerFactory(options: HandlerFactoryOptions) {
         ? input.question
         : JSON.stringify(input ?? null)
     const authorization = options.authorizationKey
-      ? createSignedAuthorizationCoordinator(options.authorizationKey)
+      ? createSignedAuthorizationCoordinator(options.authorizationKey, { workflowDigest: run.graphDigest })
       : undefined
 
     return {

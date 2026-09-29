@@ -11,9 +11,10 @@ import {
 const key = { keyId: 'kernel-key-1', secret: '0123456789abcdef0123456789abcdef' }
 const input = {
   tenantId: 'acme', runId: 'run-1', nodeId: 'tool-1', actionFingerprint: 'action:abc',
-  policySnapshot: 'policy:1', evidenceDigest: 'evidence:1', capability: 'orders.send', expiresAt: 2_000,
+  policySnapshot: 'policy:1', evidenceDigest: 'evidence:1', workflowDigest: 'sha256:wf1',
+  approvalDigest: 'sha256:ap1', capability: 'orders.send', expiresAt: 2_000,
 }
-const expected = { tenantId: 'acme', runId: 'run-1', nodeId: 'tool-1', actionFingerprint: 'action:abc' }
+const expected = { tenantId: 'acme', runId: 'run-1', nodeId: 'tool-1', actionFingerprint: 'action:abc', workflowDigest: 'sha256:wf1', approvalDigest: 'sha256:ap1' }
 
 test('Authorization: issued records verify against tenant, run, node, and exact action', () => {
   const record = issueExecutionAuthorization(input, key, 1_000)
@@ -47,4 +48,31 @@ test('Authorization: consumption is one-way and revocation is auditable', () => 
 
 test('Authorization: signing keys must be strong enough for production use', () => {
   assert.throws(() => issueExecutionAuthorization(input, { keyId: 'weak', secret: 'short' }, 1_000), /at least 32 characters/)
+})
+
+test('Authorization: a record with no signature is refused even when every field matches', () => {
+  const record = issueExecutionAuthorization(input, key, 1_000)
+  // Every identity binding is correct; only the signature is absent. Verifying
+  // the signature only when one is present would let this through.
+  const unsigned = { ...record, signature: '' }
+  const result = verifyExecutionAuthorization(unsigned, key, { ...expected, now: 1_500 })
+  assert.equal(result.valid, false)
+  assert.ok(result.reasons.some((reason) => /not signed/.test(reason)), result.reasons.join(' '))
+})
+
+test('Authorization: a grant is bound to the workflow content it was issued for', () => {
+  const record = issueExecutionAuthorization(input, key, 1_000)
+  const other = verifyExecutionAuthorization(record, key, { ...expected, workflowDigest: 'sha256:other', now: 1_500 })
+  assert.equal(other.valid, false)
+  assert.ok(other.reasons.some((reason) => /workflow content/.test(reason)), other.reasons.join(' '))
+  // The same record still verifies for the workflow it was actually issued for.
+  assert.equal(verifyExecutionAuthorization(record, key, { ...expected, now: 1_500 }).valid, true)
+})
+
+test('Authorization: a grant is bound to the approval it rests on', () => {
+  const record = issueExecutionAuthorization(input, key, 1_000)
+  const other = verifyExecutionAuthorization(record, key, { ...expected, approvalDigest: 'sha256:ap2', now: 1_500 })
+  assert.equal(other.valid, false)
+  assert.ok(other.reasons.some((reason) => /this approval/.test(reason)), other.reasons.join(' '))
+  assert.equal(verifyExecutionAuthorization(record, key, { ...expected, now: 1_500 }).valid, true)
 })
