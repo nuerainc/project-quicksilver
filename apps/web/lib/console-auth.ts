@@ -63,6 +63,12 @@ const TOKEN_PATHS: ReadonlySet<string> = new Set([
   '/api/plan',
   '/api/query',
   '/api/monitoring/workflows',
+  '/api/agents/catalog',
+  '/api/agents/definitions',
+  '/api/agents/drafts',
+  '/api/agents/drafts/submit',
+  '/api/agents/review',
+  '/api/agents/publish',
   '/api/workflows/validate',
   '/api/workflows/simulate',
   '/api/workflows/run',
@@ -78,6 +84,7 @@ const TOKEN_PATHS: ReadonlySet<string> = new Set([
 
 /** The only paths the console token is ever sent to: this app's own API routes, listed exactly. */
 export function mayCarryConsoleToken(url: string): boolean {
+  if (/^\/api\/agents\/definitions\?agentId=nuera-quicksilver(?:%3A|:)[a-z][a-z0-9-]{0,62}$/i.test(url)) return true
   if (/^\/api\/workflows\/publications\?workflowId=[a-zA-Z0-9._:%-]{1,256}$/.test(url)) return true
   if (/^\/api\/workflows\/executions\?workflowId=[a-zA-Z0-9._:%-]{1,256}(?:&limit=[0-9]{1,3})?$/.test(url)) return true
   if (/^\/api\/workflows\/diff\?workflowId=[a-zA-Z0-9._:%-]{1,256}&from=[0-9]{1,9}&to=[0-9]{1,9}$/.test(url)) return true
@@ -98,6 +105,7 @@ export type ConsoleDecisionRoute = 'action' | 'execute' | 'observe' | 'resume' |
 /** Every console call that can be refused for auth: the decision routes plus plan, query and the workflow builder. */
 export type ConsoleRoute = ConsoleDecisionRoute | 'plan' | 'query'
   | 'monitoring/workflows'
+  | 'agents/catalog' | 'agents/definitions' | 'agents/drafts' | 'agents/drafts/submit' | 'agents/review' | 'agents/publish'
   | 'workflows/validate' | 'workflows/simulate' | 'workflows/run'
   | 'workflows/publications' | 'workflows/executions' | 'workflows/diff' | 'workflows/drafts' | 'workflows/drafts/submit'
   | 'workflows/review' | 'workflows/publish' | 'workflows/rollback'
@@ -112,6 +120,12 @@ export const CONSOLE_ROUTE_PERMISSION: Readonly<Record<ConsoleRoute, string>> = 
   plan: 'decision:propose',
   query: 'decision:read',
   'monitoring/workflows': 'workflow:read',
+  'agents/catalog': 'workflow:read',
+  'agents/definitions': 'workflow:read',
+  'agents/drafts': 'workflow:write',
+  'agents/drafts/submit': 'workflow:write',
+  'agents/review': 'workflow:publish',
+  'agents/publish': 'workflow:publish',
   'workflows/validate': 'workflow:read',
   'workflows/simulate': 'workflow:read',
   'workflows/run': 'run:enqueue',

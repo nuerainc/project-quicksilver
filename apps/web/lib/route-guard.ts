@@ -40,6 +40,7 @@ const RATE_LIMIT_ENV: Readonly<Record<WebRateLimitClass, string>> = Object.freez
 export type WebRoute =
   | 'plan' | 'query'
   | 'monitoring/workflows'
+  | 'agents/catalog' | 'agents/definitions' | 'agents/drafts' | 'agents/drafts/submit' | 'agents/review' | 'agents/publish'
   | 'workflows/validate' | 'workflows/simulate' | 'workflows/run' | 'workflows/diff'
   | 'workflows/publications' | 'workflows/executions' | 'workflows/drafts' | 'workflows/drafts/submit'
   | 'workflows/review' | 'workflows/publish' | 'workflows/rollback'
@@ -50,6 +51,14 @@ export const WEB_ROUTE_ACCESS: Readonly<Record<WebRoute, { permissions: readonly
   // A question to the query agent (a model) that writes an evaluation record.
   query: { permissions: Object.freeze<Permission[]>(['decision:read']), rateLimit: 'model' },
   'monitoring/workflows': { permissions: Object.freeze<Permission[]>(['workflow:read']) },
+  // Agent definitions are governed declarative contracts, not executable plugins.
+  // Reuse the existing workflow lifecycle grants until dedicated agent grants ship.
+  'agents/catalog': { permissions: Object.freeze<Permission[]>(['workflow:read']) },
+  'agents/definitions': { permissions: Object.freeze<Permission[]>(['workflow:read']) },
+  'agents/drafts': { permissions: Object.freeze<Permission[]>(['workflow:write']), rateLimit: 'write' },
+  'agents/drafts/submit': { permissions: Object.freeze<Permission[]>(['workflow:write']), rateLimit: 'write' },
+  'agents/review': { permissions: Object.freeze<Permission[]>(['workflow:publish']), rateLimit: 'write' },
+  'agents/publish': { permissions: Object.freeze<Permission[]>(['workflow:publish']), rateLimit: 'write' },
   // Stateless checks of a graph the caller sends: no model, no write.
   'workflows/validate': { permissions: Object.freeze<Permission[]>(['workflow:read']) },
   'workflows/simulate': { permissions: Object.freeze<Permission[]>(['workflow:read']) },

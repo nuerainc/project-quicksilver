@@ -154,6 +154,16 @@ test('console token: sent only as a bearer header to this app\'s own API routes 
   assert.deepEqual(consoleHeaders('/api/whoami', null), {})
 })
 
+test('agent catalog token access is limited to the declared same-origin routes', () => {
+  for (const url of ['/api/agents/catalog', '/api/agents/definitions?agentId=nuera-quicksilver%3Acompliance', '/api/agents/drafts', '/api/agents/drafts/submit', '/api/agents/review', '/api/agents/publish']) {
+    assert.equal(mayCarryConsoleToken(url), true, url)
+    assert.equal(consoleHeaders(url, 'agent-token').authorization, 'Bearer agent-token')
+  }
+  for (const url of ['/api/agents/definitions?agentId=../../secrets', '/api/agents/catalog?other=1', '/api/agents/unknown', 'https://evil.example/api/agents/catalog']) {
+    assert.equal(mayCarryConsoleToken(url), false, url)
+  }
+})
+
 test('console messages: 401 asks to sign in, 403 names the permission, anything else is left to the caller', () => {
   assert.equal(authFailureMessage(401, 'execute'), 'Sign in to do this')
   assert.equal(authFailureMessage(403, 'action'), "Your account can't do this (needs decision:approve)")

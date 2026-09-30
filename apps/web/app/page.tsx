@@ -401,6 +401,7 @@ export default function HomePage() {
           <h1 className="qs-glow font-mono text-2xl tracking-[0.18em] text-quicksilver-quicksilver sm:text-3xl">NUERA QUICKSILVER</h1>
           <nav aria-label="Main navigation" className="flex gap-4 font-mono text-xs uppercase tracking-widest text-quicksilver-accent">
             <a href="/monitoring" className="transition hover:text-quicksilver-signal">Monitoring →</a>
+            <a href="/agents" className="transition hover:text-quicksilver-signal">Agents →</a>
             <a href="/workflows" className="transition hover:text-quicksilver-signal">Workflow builder →</a>
             <a href="/decisions" className="transition hover:text-quicksilver-signal">Decision log →</a>
           </nav>

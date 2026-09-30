@@ -96,6 +96,9 @@ test('web API routes (A-3, A-9): every handler refuses no credential (401), an u
   for (const expected of ['POST /api/plan', 'POST /api/query', 'POST /api/workflows/run', 'POST /api/workflows/simulate', 'POST /api/workflows/validate', 'POST /api/decisions/[id]/action', 'GET /api/whoami']) {
     assert.ok(routes.some((r) => r.key === expected), `${expected} was enumerated`)
   }
+  for (const expected of ['GET /api/agents/catalog', 'GET /api/agents/definitions', 'POST /api/agents/drafts', 'POST /api/agents/drafts/submit', 'POST /api/agents/review', 'POST /api/agents/publish']) {
+    assert.ok(routes.some((r) => r.key === expected), `${expected} was enumerated`)
+  }
   for (const route of routes) {
     const none = await call(route)
     assert.equal(none.status, 401, `${route.key} without Authorization: ${none.status} ${await none.clone().text()}`)
@@ -123,7 +126,7 @@ test('web API routes (A-3): with no principals and no shared token nothing is an
   for (const route of routes) assert.equal((await call(route)).status, 401, `${route.key} without the shared token`)
 })
 
-test('web route permissions (A-3): plan needs decision:propose, query decision:read, workflows workflow:read or run:enqueue', async () => {
+test('web route permissions (A-3): plan/query/workflows and agent lifecycle use reviewed least-privilege grants', async () => {
   const { checkWebRoute, WEB_ROUTE_ACCESS } = await import('./route-guard.ts')
   const env = { ...principalEnv }
   assert.deepEqual(WEB_ROUTE_ACCESS.plan.permissions, ['decision:propose'])
@@ -131,6 +134,10 @@ test('web route permissions (A-3): plan needs decision:propose, query decision:r
   assert.deepEqual(WEB_ROUTE_ACCESS['workflows/validate'].permissions, ['workflow:read'])
   assert.deepEqual(WEB_ROUTE_ACCESS['workflows/simulate'].permissions, ['workflow:read'])
   assert.deepEqual(WEB_ROUTE_ACCESS['workflows/run'].permissions, ['run:enqueue'])
+  assert.deepEqual(WEB_ROUTE_ACCESS['agents/catalog'].permissions, ['workflow:read'])
+  assert.deepEqual(WEB_ROUTE_ACCESS['agents/drafts'].permissions, ['workflow:write'])
+  assert.deepEqual(WEB_ROUTE_ACCESS['agents/review'].permissions, ['workflow:publish'])
+  assert.deepEqual(WEB_ROUTE_ACCESS['agents/publish'].permissions, ['workflow:publish'])
   // The principal authenticated from the header is the requester; nothing else is consulted.
   const plan = checkWebRoute('plan', `Bearer ${TOKENS.proposer}`, env)
   assert.deepEqual(plan, { ok: true, principalId: 'entity-pat' })
@@ -146,6 +153,21 @@ test('web route permissions (A-3): plan needs decision:propose, query decision:r
   const sharedEnv = { NQC_SUPERVISOR_TOKEN: shared, NQC_SUPERVISOR_ID: 'entity-sole' }
   assert.deepEqual(checkWebRoute('plan', `Bearer ${shared}`, sharedEnv), { ok: true, principalId: 'entity-sole' })
   assert.equal(checkWebRoute('workflows/run', `Bearer ${shared}`, sharedEnv).ok, false)
+})
+
+test('agent catalog routes validate bodies before any Sanity access', async () => {
+  setEnv(principalEnv)
+  const routes = await loadHandlers()
+  const supervisor = `Bearer ${TOKENS.supervisor}`
+  for (const key of ['POST /api/agents/drafts', 'POST /api/agents/drafts/submit', 'POST /api/agents/review', 'POST /api/agents/publish']) {
+    const route = routes.find((item) => item.key === key)!
+    assert.equal((await call(route, supervisor, '{}')).status, 400, key)
+  }
+  const definitions = routes.find((item) => item.key === 'GET /api/agents/definitions')!
+  const response = await definitions.handler(new Request(`http://localhost:3000${definitions.path}`, { headers: { authorization: supervisor } }), { params: Promise.resolve({}) })
+  assert.equal(response.status, 400)
+  const draft = routes.find((item) => item.key === 'POST /api/agents/drafts')!
+  assert.equal((await call(draft, supervisor, JSON.stringify({ displayName: 'Compliance', description: 'A definition that is structurally invalid.', manifest: { id: 'wrong', version: 1, authority: 'admin', tasks: [], maximumImpact: 'critical', requiresEvaluation: false } }))).status, 400)
 })
 
 test('web rate limits (A-5): model and write routes return 429 with Retry-After per principal; the default and bad settings', async () => {
