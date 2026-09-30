@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import type { WorkflowEdge, WorkflowGraph, WorkflowNode, WorkflowNodeKind } from '@quicksilver/kernel'
+import { validateWorkflowGraph } from '@quicksilver/kernel/workflows/graph'
 import { authFailureMessage, consoleHeaders, readConsoleToken, type ConsoleRoute } from '@/lib/console-auth'
 import { graphLayout } from '@/lib/workflow-layout'
 
@@ -23,7 +24,7 @@ const initialEdges: WorkflowEdge[] = [
   { id: 'edge-1', from: 'trigger-1', to: 'agent-1' },
   { id: 'edge-2', from: 'agent-1', to: 'output-1' },
 ]
-const nodeTitles: Record<WorkflowNodeKind, string> = { trigger: 'Trigger', agent: 'Agent', tool: 'Tool', condition: 'Condition', output: 'Output' }
+const nodeTitles: Record<WorkflowNodeKind, string> = { trigger: 'Trigger', agent: 'Agent', tool: 'Tool', condition: 'Condition', loop: 'Bounded loop', output: 'Output' }
 const DRAFT_STORAGE_KEY = 'nuera-quicksilver/workflow-draft/v1'
 
 /**
@@ -93,6 +94,30 @@ function nextSequence(graphNodes: WorkflowNode[], graphEdges: WorkflowEdge[]) {
     const match = item.id.match(/-(\d+)$/)
     return match ? Math.max(max, Number(match[1])) : max
   }, 0)
+}
+
+function LoopBodyEditor({ body, onApply }: { body: WorkflowGraph; onApply: (body: WorkflowGraph) => void }) {
+  const [draft, setDraft] = useState(() => JSON.stringify(body, null, 2))
+  const [error, setError] = useState<string | null>(null)
+  function apply() {
+    try {
+      const candidate: unknown = JSON.parse(draft)
+      if (!isWorkflowGraph(candidate)) throw new Error('Provide a workflow graph with schemaVersion, id, version, entryNodeId, nodes, and edges.')
+      const result = validateWorkflowGraph(candidate)
+      if (!result.valid) throw new Error(result.errors.join(' '))
+      if (candidate.nodes.some((node) => node.kind === 'loop')) throw new Error('Loop bodies cannot contain another loop.')
+      if (candidate.nodes.length > 50) throw new Error('Loop bodies are limited to 50 steps.')
+      onApply(candidate)
+      setError(null)
+    } catch (cause) {
+      setError((cause as Error).message || 'Could not apply this loop body.')
+    }
+  }
+  return <div className="mt-3 rounded-lg border border-quicksilver-border p-3">
+    <label className="block text-xs font-medium text-quicksilver-signal">Loop body graph (JSON)<textarea aria-label="Loop body graph JSON" value={draft} onChange={(event) => setDraft(event.target.value)} spellCheck={false} rows={12} className="qs-field mt-2 font-mono text-xs" /></label>
+    <div className="mt-2 flex flex-wrap items-center gap-3"><button type="button" onClick={apply} className="qs-action-secondary min-h-9 px-3 py-1 text-xs">Apply loop body</button><span className="text-[11px] text-quicksilver-accent">Validated DAG · max 50 steps · no nested loops</span></div>
+    {error && <p role="alert" className="mt-2 text-xs text-red-300">{error}</p>}
+  </div>
 }
 
 export default function WorkflowBuilderPage() {
@@ -333,12 +358,25 @@ export default function WorkflowBuilderPage() {
 
   function addNode(kind: WorkflowNodeKind) {
     const id = `${kind}-${sequence + 1}`
+    const loopBody: WorkflowGraph = {
+      schemaVersion: 1,
+      id: `workflow-draft-${id}-body`,
+      version: 1,
+      entryNodeId: `${id}-start`,
+      nodes: [
+        { id: `${id}-start`, kind: 'trigger', label: 'Iteration input' },
+        { id: `${id}-agent`, kind: 'agent', label: 'Work this iteration', config: { agentId: 'query', impact: 'low', evaluationRequired: true } },
+        { id: `${id}-output`, kind: 'output', label: 'Iteration result' },
+      ],
+      edges: [{ id: `${id}-in`, from: `${id}-start`, to: `${id}-agent` }, { id: `${id}-out`, from: `${id}-agent`, to: `${id}-output` }],
+    }
     const node: WorkflowNode = {
       id,
       kind,
       label: `${nodeTitles[kind]} ${sequence + 1}`,
       ...(kind === 'agent' ? { config: { agentId: 'query', impact: 'low' as const, evaluationRequired: true } } : {}),
       ...(kind === 'tool' ? { config: { toolId: '', impact: 'low' as const } } : {}),
+      ...(kind === 'loop' ? { config: { loop: { maxIterations: 5, maxDurationMs: 60_000, continueWhile: '$input.iteration < 2', body: loopBody } } } : {}),
     }
     setNodes((current) => [...current, node])
     setSequence((current) => current + 1)
@@ -477,7 +515,7 @@ export default function WorkflowBuilderPage() {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div><h2 className="text-sm font-semibold text-quicksilver-signal">Add to your flow</h2><p className="qs-helper mt-1">Choose a step. It will be added to the end of the canvas.</p></div>
           <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto">
-            {(['agent', 'tool', 'condition', 'output'] as WorkflowNodeKind[]).map((kind) => <button key={kind} onClick={() => addNode(kind)} className="qs-action-secondary w-full sm:w-auto">＋ {nodeTitles[kind]}</button>)}
+            {(['agent', 'tool', 'condition', 'loop', 'output'] as WorkflowNodeKind[]).map((kind) => <button key={kind} onClick={() => addNode(kind)} className="qs-action-secondary w-full sm:w-auto">＋ {nodeTitles[kind]}</button>)}
           </div>
         </div>
       </section>
@@ -519,6 +557,7 @@ export default function WorkflowBuilderPage() {
                 <div className="mb-3 flex flex-wrap items-center gap-3"><span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-quicksilver-accent/10 text-sm font-semibold text-quicksilver-signal">{index + 1}</span><span className="text-sm font-semibold text-quicksilver-signal">{nodeTitles[node.kind]}</span><span className="min-w-0 break-all rounded-full border border-quicksilver-border px-2 py-1 text-[11px] text-quicksilver-accent">{node.id}</span>{node.kind !== 'trigger' && <button onClick={() => removeNode(node.id)} aria-label={`Remove ${node.label}`} className="qs-action-secondary ml-auto min-h-9 px-3 py-1 text-xs">Remove step</button>}</div>
                 <label className="block text-sm font-medium text-quicksilver-signal">Step name<input value={node.label} onChange={(event) => updateNode(node.id, { label: event.target.value })} className="qs-field mt-2 text-sm focus:border-quicksilver-accent focus:outline-none" /></label>
                 {node.kind === 'condition' && <label className="mt-3 block text-xs text-quicksilver-accent">Condition<input value={node.config?.conditionExpression ?? ''} onChange={(event) => updateConfig(node.id, { conditionExpression: event.target.value })} placeholder={'$nqc.agent-1.reasoningScore >= 70'} className="qs-field mt-1" /><span className="mt-1 block text-[10px]">Use $input, $steps.&lt;node-id&gt;.&lt;field&gt;, or $nqc.&lt;agent-node-id&gt;.reasoningScore with comparisons or exists.</span></label>}
+                {node.kind === 'loop' && node.config?.loop && <div className="mt-3 rounded-lg border border-quicksilver-border bg-quicksilver-panel p-3 sm:p-4"><p className="text-xs font-semibold text-quicksilver-signal">Bounded repeat</p><p className="mt-1 text-xs text-quicksilver-accent">Run an isolated, safety-governed workflow body until the condition becomes false. Iteration and wall-clock limits are mandatory; every tool approval is checked again each iteration.</p><div className="mt-3 grid gap-3 sm:grid-cols-2"><label className="text-xs text-quicksilver-accent">Maximum iterations<input type="number" min={1} max={100} value={node.config.loop.maxIterations} onChange={(event) => updateConfig(node.id, { loop: { ...node.config!.loop!, maxIterations: Number(event.target.value) } })} className="qs-field mt-1" /></label><label className="text-xs text-quicksilver-accent">Time budget (milliseconds)<input type="number" min={1} max={300000} value={node.config.loop.maxDurationMs} onChange={(event) => updateConfig(node.id, { loop: { ...node.config!.loop!, maxDurationMs: Number(event.target.value) } })} className="qs-field mt-1" /></label></div><label className="mt-3 block text-xs text-quicksilver-accent">Continue while<input value={node.config.loop.continueWhile} onChange={(event) => updateConfig(node.id, { loop: { ...node.config!.loop!, continueWhile: event.target.value } })} placeholder="$input.iteration < 3" className="qs-field mt-1 font-mono" /><span className="mt-1 block text-[10px]">Use the data-only condition language with $input or $steps.&lt;body-node-id&gt;.&lt;field&gt;. A still-true condition at the iteration limit fails safely.</span></label><LoopBodyEditor key={`${node.id}:${node.config.loop.body.id}`} body={node.config.loop.body} onApply={(body) => updateConfig(node.id, { loop: { ...node.config!.loop!, body } })} /></div>}
                 {node.kind === 'agent' && <div className="mt-3 grid gap-3 sm:grid-cols-2"><label className="text-xs text-quicksilver-accent">Agent configuration key<input value={node.config?.agentId ?? ''} onChange={(event) => updateConfig(node.id, { agentId: event.target.value })} className="mt-1 w-full rounded border border-quicksilver-border bg-quicksilver-panel px-3 py-2 text-sm text-quicksilver-signal" /></label><ImpactField value={node.config?.impact ?? 'low'} onChange={(impact) => updateConfig(node.id, { impact })} /><ExecutionPolicyFields config={node.config ?? {}} onChange={(patch) => updateConfig(node.id, patch)} allowRetries />{(node.config?.impact === 'high' || node.config?.impact === 'critical') && <SafetyGates config={node.config} onChange={(patch) => updateConfig(node.id, patch)} />}</div>}
                 {node.kind === 'tool' && <div className="mt-3 grid gap-3 sm:grid-cols-2"><label className="text-xs text-quicksilver-accent">Tool contract key<input value={node.config?.toolId ?? ''} onChange={(event) => updateConfig(node.id, { toolId: event.target.value })} className="mt-1 w-full rounded border border-quicksilver-border bg-quicksilver-panel px-3 py-2 text-sm text-quicksilver-signal" /></label><ImpactField value={node.config?.impact ?? 'low'} onChange={(impact) => updateConfig(node.id, { impact })} /><ExecutionPolicyFields config={node.config ?? {}} onChange={(patch) => updateConfig(node.id, patch)} /> <label className="flex items-center gap-2 text-xs text-quicksilver-accent"><input type="checkbox" checked={node.config?.sideEffect ?? false} onChange={(event) => updateConfig(node.id, { sideEffect: event.target.checked, evaluationRequired: event.target.checked || node.config?.evaluationRequired, supervisorApprovalRequired: event.target.checked || node.config?.supervisorApprovalRequired })} /> Tool changes external state</label>{(node.config?.sideEffect || node.config?.impact === 'high' || node.config?.impact === 'critical') && <SafetyGates config={node.config} onChange={(patch) => updateConfig(node.id, patch)} />}</div>}
               </div>

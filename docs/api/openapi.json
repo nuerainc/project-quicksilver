@@ -487,6 +487,44 @@
         }
       }
     },
+    "/api/monitoring/traces": {
+      "get": {
+        "operationId": "getTelemetryTraces",
+        "tags": [
+          "Monitoring"
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 500,
+              "default": 200
+            }
+          }
+        ],
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "401": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "403": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "503": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "2XX": {
+            "$ref": "#/components/responses/JsonResponse"
+          }
+        }
+      }
+    },
     "/api/dashboard/finance": {
       "get": {
         "operationId": "getDashboardFinance",

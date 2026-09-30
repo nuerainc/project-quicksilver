@@ -1,12 +1,44 @@
 import { defineArrayMember, defineField, defineType } from 'sanity'
 import { validateWorkflowGraph, type WorkflowGraph } from '../../../packages/kernel/src/workflows/graph.ts'
 
+// Loop bodies are deliberately a non-recursive node schema. The kernel also
+// rejects nested loops, keeping authoring and execution depth bounded.
+const loopBodyNode = defineArrayMember({
+  name: 'automationLoopBodyNode',
+  type: 'object',
+  fields: [
+    defineField({ name: 'id', type: 'string', validation: (rule) => rule.required() }),
+    defineField({ name: 'kind', type: 'string', options: { list: ['trigger', 'agent', 'tool', 'condition', 'output'] }, validation: (rule) => rule.required() }),
+    defineField({ name: 'label', type: 'string', validation: (rule) => rule.required() }),
+    defineField({
+      name: 'config', type: 'object', fields: [
+        { name: 'agentId', type: 'string' }, { name: 'toolId', type: 'string' },
+        { name: 'conditionExpression', type: 'text', rows: 2 },
+        { name: 'impact', type: 'string', options: { list: ['low', 'moderate', 'high', 'critical'] } },
+        { name: 'evaluationRequired', type: 'boolean' }, { name: 'sideEffect', type: 'boolean' },
+        { name: 'supervisorApprovalRequired', type: 'boolean' },
+        { name: 'maxAttempts', type: 'number', validation: (rule) => rule.integer().min(1).max(10) },
+        { name: 'timeoutMs', type: 'number', validation: (rule) => rule.integer().min(1).max(300000) },
+      ],
+    }),
+  ],
+})
+
+const loopBodyEdge = defineArrayMember({
+  name: 'automationLoopBodyEdge', type: 'object', fields: [
+    defineField({ name: 'id', type: 'string', validation: (rule) => rule.required() }),
+    defineField({ name: 'from', type: 'string', validation: (rule) => rule.required() }),
+    defineField({ name: 'to', type: 'string', validation: (rule) => rule.required() }),
+    defineField({ name: 'branch', type: 'string', options: { list: ['true', 'false'] } }),
+  ],
+})
+
 const graphNode = defineArrayMember({
   name: 'automationNode',
   type: 'object',
   fields: [
     defineField({ name: 'id', type: 'string', validation: (rule) => rule.required() }),
-    defineField({ name: 'kind', type: 'string', options: { list: ['trigger', 'agent', 'tool', 'condition', 'output'] }, validation: (rule) => rule.required() }),
+    defineField({ name: 'kind', type: 'string', options: { list: ['trigger', 'agent', 'tool', 'condition', 'loop', 'output'] }, validation: (rule) => rule.required() }),
     defineField({ name: 'label', type: 'string', validation: (rule) => rule.required() }),
     defineField({
       name: 'config',
@@ -21,6 +53,23 @@ const graphNode = defineArrayMember({
         { name: 'supervisorApprovalRequired', type: 'boolean' },
         { name: 'maxAttempts', type: 'number', validation: (rule) => rule.integer().min(1).max(10) },
         { name: 'timeoutMs', type: 'number', validation: (rule) => rule.integer().min(1).max(300000) },
+        {
+          name: 'loop', type: 'object', fields: [
+            { name: 'maxIterations', type: 'number', validation: (rule) => rule.required().integer().min(1).max(100) },
+            { name: 'maxDurationMs', type: 'number', validation: (rule) => rule.required().integer().min(1).max(300000) },
+            { name: 'continueWhile', type: 'text', rows: 2, validation: (rule) => rule.required() },
+            {
+              name: 'body', type: 'object', fields: [
+                { name: 'schemaVersion', type: 'number', validation: (rule) => rule.required().integer().min(1).max(1) },
+                { name: 'id', type: 'string', validation: (rule) => rule.required() },
+                { name: 'version', type: 'number', validation: (rule) => rule.required().integer().min(1) },
+                { name: 'entryNodeId', type: 'string', validation: (rule) => rule.required() },
+                { name: 'nodes', type: 'array', of: [loopBodyNode], validation: (rule) => rule.required().min(1).max(50) },
+                { name: 'edges', type: 'array', of: [loopBodyEdge], validation: (rule) => rule.required().max(1000) },
+              ],
+            },
+          ],
+        },
       ],
     }),
   ],

@@ -47,6 +47,13 @@ export interface WorkflowStepRecord {
   /** Durable reference to the kernel authorization used for a protected step. */
   authorizationId?: string
   authorizationFingerprint?: string
+  loopIterations?: number
+  loopTrace?: WorkflowLoopIterationTrace[]
+}
+
+export interface WorkflowLoopIterationTrace {
+  iteration: number
+  steps: Array<Pick<WorkflowStepRecord, 'nodeId' | 'status' | 'safetyDecision' | 'detail' | 'retryAfterMs' | 'authorizationId' | 'authorizationFingerprint'>>
 }
 
 export interface WorkflowExecutionResult {
@@ -218,6 +225,8 @@ async function executeNode(
   const withTimeout = <T>(ms: number | undefined, operation: (signal: AbortSignal) => Promise<T>) => withDeadline(ms, runSignal, operation)
   let evaluationForNode: WorkflowEvaluation | undefined
   let executionAuthorization: SupervisorControlResult['authorization'] | undefined
+  let loopTrace: WorkflowLoopIterationTrace[] | undefined
+  let loopIterations: number | undefined
   const authorizationAudit = () => executionAuthorization ? {
     authorizationId: executionAuthorization.authorizationId,
     authorizationFingerprint: executionAuthorization.actionFingerprint,
@@ -271,6 +280,27 @@ async function executeNode(
     if (node.kind === 'trigger') output = input
     else if (node.kind === 'agent') output = await runAgentWithRetry(node, context, handlers.runAgent, timeoutMs, withTimeout)
     else if (node.kind === 'tool') output = await withTimeout(timeoutMs, (signal) => handlers.runTool(node, { ...context, signal }))
+    else if (node.kind === 'loop') {
+      const loopResult = await executeBoundedLoop(node, context, input, outputs, incomingEdges, handlers, runSignal)
+      loopTrace = loopResult.trace
+      loopIterations = loopResult.iterations
+      if (loopResult.status !== 'completed') {
+        const status = loopResult.status
+        return {
+          success: false,
+          step: {
+            nodeId: node.id,
+            status,
+            detail: loopResult.error,
+            loopIterations,
+            ...(loopTrace ? { loopTrace } : {}),
+          },
+          ...(evaluationForNode ? { evaluation: evaluationForNode } : {}),
+          terminalStatus: status,
+        }
+      }
+      output = loopResult.output
+    }
     else if (node.kind === 'condition') {
       const expression = node.config?.conditionExpression
       if (!expression?.trim()) return blocked('Condition expression is missing; the workflow stopped safely.')
@@ -319,6 +349,8 @@ async function executeNode(
         nodeId: node.id,
         status: 'completed',
         ...(displaySafetyDecision ? { safetyDecision: displaySafetyDecision } : {}),
+        ...(loopIterations !== undefined ? { loopIterations } : {}),
+        ...(loopTrace ? { loopTrace } : {}),
         ...(executionAuthorization ? {
           authorizationId: executionAuthorization.authorizationId,
           authorizationFingerprint: executionAuthorization.actionFingerprint,
@@ -336,6 +368,74 @@ async function executeNode(
       }
     }
     return failed((cause as Error)?.message || 'Workflow step failed.', retryHint(cause))
+  }
+}
+
+type BoundedLoopResult =
+  | { status: 'completed'; output: { iterations: number; value: unknown }; iterations: number; trace: WorkflowLoopIterationTrace[] }
+  | { status: 'blocked' | 'failed' | 'cancelled'; error: string; iterations: number; trace: WorkflowLoopIterationTrace[] }
+
+async function executeBoundedLoop(
+  node: WorkflowNode,
+  context: WorkflowRuntimeContext,
+  input: unknown,
+  outputs: Record<string, unknown>,
+  incomingEdges: Map<string, WorkflowGraph['edges']>,
+  handlers: WorkflowRuntimeHandlers,
+  runSignal?: AbortSignal,
+): Promise<BoundedLoopResult> {
+  const definition = node.config?.loop
+  if (!definition) return { status: 'blocked', error: 'Bounded-loop configuration is missing.', iterations: 0, trace: [] }
+  const prior = (incomingEdges.get(node.id) ?? []).map((edge) => outputs[edge.from]).filter((value) => value !== undefined)
+  const initialInput = prior.length === 1 ? prior[0] : prior.length > 1 ? prior : input
+  let state: unknown = initialInput
+  let iterations = 0
+  const trace: WorkflowLoopIterationTrace[] = []
+  const controller = new AbortController()
+  if (runSignal?.aborted) return { status: 'cancelled', error: abortReason(runSignal) ?? 'Workflow run was cancelled.', iterations, trace }
+  const onRunAbort = () => controller.abort(runSignal?.reason)
+  runSignal?.addEventListener('abort', onRunAbort, { once: true })
+  const timer = setTimeout(() => controller.abort(new Error(`Loop exceeded its ${definition.maxDurationMs} ms time budget.`)), definition.maxDurationMs)
+
+  try {
+    const outputNodes = definition.body.nodes.filter((bodyNode) => bodyNode.kind === 'output')
+    for (let iteration = 1; iteration <= definition.maxIterations; iteration += 1) {
+      if (runSignal?.aborted) return { status: 'cancelled', error: abortReason(runSignal) ?? 'Workflow run was cancelled.', iterations, trace }
+      if (controller.signal.aborted) return { status: 'failed', error: `Loop exceeded its ${definition.maxDurationMs} ms time budget.`, iterations, trace }
+      const iterationInput = { initialInput, state, iteration }
+      const result = await executeWorkflowGraph(definition.body, iterationInput, handlers, {
+        ...(context.runId ? { runId: `${context.runId}:${node.id}:${iteration}` } : {}),
+        ...(context.tenantId ? { tenantId: context.tenantId } : {}),
+        signal: controller.signal,
+      })
+      iterations = iteration
+      trace.push({ iteration, steps: result.steps.map(({ nodeId, status, safetyDecision, detail, retryAfterMs, authorizationId, authorizationFingerprint }) => ({
+        nodeId, status, ...(safetyDecision ? { safetyDecision } : {}), ...(detail ? { detail } : {}),
+        ...(retryAfterMs !== undefined ? { retryAfterMs } : {}), ...(authorizationId ? { authorizationId } : {}),
+        ...(authorizationFingerprint ? { authorizationFingerprint } : {}),
+      })) })
+      if (runSignal?.aborted) return { status: 'cancelled', error: abortReason(runSignal) ?? 'Workflow run was cancelled.', iterations, trace }
+      if (controller.signal.aborted) return { status: 'failed', error: `Loop exceeded its ${definition.maxDurationMs} ms time budget.`, iterations, trace }
+      if (result.status !== 'completed') return { status: result.status, error: result.error ?? `Loop body ${result.status} during iteration ${iteration}.`, iterations, trace }
+      const outputValues = outputNodes.map((outputNode) => result.outputs[outputNode.id]).filter((value) => value !== undefined)
+      state = outputValues.length === 1 ? outputValues[0] : Object.fromEntries(outputNodes.map((outputNode) => [outputNode.id, result.outputs[outputNode.id]]))
+      let shouldContinue: boolean
+      try {
+        shouldContinue = evaluateWorkflowConditionExpression(definition.continueWhile, { input: iterationInput, outputs: result.outputs })
+      } catch (cause) {
+        return { status: 'failed', error: `Loop condition failed: ${(cause as Error).message}`, iterations, trace }
+      }
+      if (!shouldContinue) return { status: 'completed', output: { iterations, value: state }, iterations, trace }
+      if (iteration === definition.maxIterations) return { status: 'failed', error: `Loop still requested another iteration after reaching its ${definition.maxIterations} iteration limit.`, iterations, trace }
+    }
+    return { status: 'failed', error: 'Loop stopped without reaching a terminating condition.', iterations, trace }
+  } catch (cause) {
+    if (runSignal?.aborted) return { status: 'cancelled', error: abortReason(runSignal) ?? 'Workflow run was cancelled.', iterations, trace }
+    if (controller.signal.aborted) return { status: 'failed', error: `Loop exceeded its ${definition.maxDurationMs} ms time budget.`, iterations, trace }
+    return { status: 'failed', error: (cause as Error)?.message || 'Loop execution failed.', iterations, trace }
+  } finally {
+    clearTimeout(timer)
+    runSignal?.removeEventListener('abort', onRunAbort)
   }
 }
 

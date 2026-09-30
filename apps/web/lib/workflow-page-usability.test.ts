@@ -55,3 +55,14 @@ test('workflow authoring and release routes keep their established contracts', (
   }
   assert.match(page, /externalEffectsEnabled: false/)
 })
+
+test('workflow editor provides bounded-loop authoring with validated non-recursive body graphs', () => {
+  assert.match(page, /loop: \{ maxIterations: 5, maxDurationMs: 60_000, continueWhile: '\$input\.iteration < 2'/)
+  assert.match(page, /\['agent', 'tool', 'condition', 'loop', 'output'\]/)
+  assert.match(page, /Continue while/)
+  assert.match(page, /Maximum iterations/)
+  assert.match(page, /Time budget \(milliseconds\)/)
+  assert.match(page, /Apply loop body/)
+  assert.match(page, /candidate\.nodes\.some\(\(node\) => node\.kind === 'loop'\)/)
+  assert.match(page, /validateWorkflowGraph\(candidate\)/)
+})

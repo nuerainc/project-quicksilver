@@ -9,6 +9,7 @@ import assert from 'node:assert/strict'
 
 import {
   AZURE_DEPLOYMENTS,
+  estimateModelCostUsd,
   getMode,
   isLlmConfigured,
   languageModelForId,
@@ -151,6 +152,18 @@ test('Measured routing: per-role override remains authoritative over profiles', 
   withEnv({ OPENAI_API_KEY: 'test', QUICKSILVER_PLANNER_MODEL: 'gpt-5.6-sol' }, () => {
     const model = modelForRole('planner', 'cloud', config) as { modelId?: string }
     assert.equal(model.modelId, 'gpt-5.6-sol')
+  })
+})
+
+test('model cost telemetry uses only configured measured rates and rejects unknown or invalid rates', () => {
+  const profile = { modelId: 'gpt-5.6-sol', supportedTasks: ['planning'], taskAccuracy: { planning: 0.9 }, successRate: 1, averageCostPer1kTokens: 0.0125, p95LatencyMs: 1, available: true }
+  withEnv({ QUICKSILVER_ROUTING_CONFIG: JSON.stringify({ profiles: [profile] }) }, () => {
+    assert.equal(estimateModelCostUsd('gpt-5.6-sol', 1200), 0.015)
+    assert.equal(estimateModelCostUsd('unknown-model', 1200), null)
+    assert.equal(estimateModelCostUsd('gpt-5.6-sol', null), null)
+  })
+  withEnv({ QUICKSILVER_ROUTING_CONFIG: JSON.stringify({ profiles: [{ ...profile, averageCostPer1kTokens: -1 }] }) }, () => {
+    assert.equal(estimateModelCostUsd('gpt-5.6-sol', 1200), null)
   })
 })
 

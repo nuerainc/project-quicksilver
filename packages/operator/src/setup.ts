@@ -14,6 +14,7 @@ import { loadProjectContext, MemoryBook, memoryTools, SessionArchive } from './m
 import { SkillLibrary, skillTools } from './skills.ts'
 import { EXEC_TOOLS } from './tools/exec.ts'
 import { FILE_TOOLS } from './tools/files.ts'
+import { webSearchTool, type WebSearchProvider } from './web-search.ts'
 import type { ApprovalMode, CheckpointStore, OperatorTool, Sandbox } from './types.ts'
 
 export interface OperatorEnvironment {
@@ -23,6 +24,8 @@ export interface OperatorEnvironment {
   audit: AuditSink
   skills: SkillLibrary
   model: ModelDriver
+  /** Optional public web search; page opening and browser actions are not included. */
+  webSearch?: WebSearchProvider
   /** Extra tools (for example delivery tools for automations). */
   extraTools?: OperatorTool<any>[]
 }
@@ -98,7 +101,7 @@ export async function runForPerson(envr: OperatorEnvironment, run: PersonRun): P
   const project = await loadProjectContext(envr.workspace)
   try {
     await book.purgeExpired()
-    const gate = new Gate([...FILE_TOOLS, ...EXEC_TOOLS, ...memoryTools(book, archive), ...skillTools(envr.skills, used), ...(envr.extraTools ?? [])], { mode: run.mode, workspace: envr.workspace, audit: envr.audit })
+    const gate = new Gate([...FILE_TOOLS, ...EXEC_TOOLS, ...memoryTools(book, archive), ...skillTools(envr.skills, used), ...(envr.webSearch ? [webSearchTool(envr.webSearch)] : []), ...(envr.extraTools ?? [])], { mode: run.mode, workspace: envr.workspace, audit: envr.audit })
     const result = await runOperator(
       { gate, sandbox: envr.sandbox, checkpoints: envr.checkpoints, audit: envr.audit, workspace: envr.workspace, model: envr.model, approver: run.approver },
       { ...run.options, goal: run.goal, instructions: [...(run.preamble ?? []), await book.snapshot(), await envr.skills.listing(), project.text].filter(Boolean).join('\n\n') },

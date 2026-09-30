@@ -72,6 +72,14 @@ export function routeForRole(
   })
 }
 
+/** Estimated blended cost from an explicitly configured measured model profile. */
+export function estimateModelCostUsd(modelId: string, totalTokens: number | null): number | null {
+  if (totalTokens === null || !Number.isFinite(totalTokens) || totalTokens < 0) return null
+  const profile = readMeasuredRoutingConfig()?.profiles.find((item) => item.modelId === modelId)
+  if (!profile || !Number.isFinite(profile.averageCostPer1kTokens) || profile.averageCostPer1kTokens < 0) return null
+  return Number((profile.averageCostPer1kTokens * totalTokens / 1000).toFixed(6))
+}
+
 /** Parse and minimally validate the host-provided measured model profiles. */
 export function readMeasuredRoutingConfig(): MeasuredRoutingConfig | null {
   const raw = process.env.QUICKSILVER_ROUTING_CONFIG

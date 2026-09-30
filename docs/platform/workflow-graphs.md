@@ -2,10 +2,11 @@
 
 `packages/kernel/src/workflows/graph.ts` defines the version 1 graph contract
 for visual workflow authoring. Its validator checks unique identities, trigger
-and output structure, branch completeness, reachability, acyclicity, retry and
-time limits, condition-expression syntax and references, mandatory evaluation
-for agent nodes, evaluator gates, and supervisor approval for high impact or
-side-effect steps.
+and output structure, branch completeness, reachability, acyclic execution
+graphs, bounded retry and time limits, condition-expression syntax and
+references, mandatory evaluation for agent nodes, evaluator gates, and
+supervisor approval for high impact or side-effect steps. Repeated work uses an
+explicit bounded-loop node; arbitrary graph back-edges remain invalid.
 
 The graph is available through the stateless POST `/api/workflows/validate` endpoint. The browser builder autosaves a versioned draft to local browser storage and supports JSON import/export. Imported drafts are validated before replacing the open draft. Invalid stored drafts are preserved and are not silently replaced. This storage is device- and browser-local; it is not shared, backed up, or server-persisted.
 
@@ -48,6 +49,29 @@ evaluator decision and verified supervisor approval through its injected
 handlers. Every tool also needs a positive NQC validation result before it can
 reach its execution handler. Missing handlers, invalid decisions, a BLOCK
 verdict, or denied approval stop the run before that tool is dispatched.
+
+## Bounded loop nodes
+
+A `loop` node contains an isolated body graph and requires `maxIterations`
+(1–100), `maxDurationMs` (1–300,000), and a data-only `continueWhile`
+expression. The body is a separately validated DAG of at most 50 nodes with
+exactly one trigger and at least one output; nested loops are rejected. The
+condition can read `$input.iteration`, `$input.state...`, or body results such
+as `$steps.review.count`. The body receives `{ initialInput, state, iteration }`;
+its output node value becomes the next state. The outer loop node returns
+`{ iterations, value }` and records an inspectable trace of each iteration's
+step status and safety/authorization references.
+
+The runner enforces both ceilings, aborts in-flight handler signals when its
+time budget expires, fails if the condition still requests work at the
+iteration limit, and propagates caller cancellation. The body runs through the
+ordinary workflow executor, so agent evaluation and tool validation, approval,
+signed authorization, and one-time authorization consumption are repeated on
+every iteration. Studio stores the body graph in the workflow document; the web
+builder creates a starter body and offers validated JSON editing for advanced
+body composition. This provides in-process loop execution and safe simulation;
+durable checkpoints/resume and hosted worker scheduling are separate runtime
+capabilities.
 
 
 The Studio now defines a separate `automationWorkflow` document type for versioned graphs. It does not reuse the existing workflow process-definition records.

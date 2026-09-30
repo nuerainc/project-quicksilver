@@ -1,6 +1,6 @@
 import { validateWorkflowConditionExpression, workflowConditionNodeReference } from './condition.ts'
 
-export type WorkflowNodeKind = 'trigger' | 'agent' | 'tool' | 'condition' | 'output'
+export type WorkflowNodeKind = 'trigger' | 'agent' | 'tool' | 'condition' | 'loop' | 'output'
 export type WorkflowImpact = 'low' | 'moderate' | 'high' | 'critical'
 
 export interface WorkflowNode {
@@ -17,7 +17,16 @@ export interface WorkflowNode {
     supervisorApprovalRequired?: boolean
     maxAttempts?: number
     timeoutMs?: number
+    loop?: WorkflowLoopDefinition
   }
+}
+
+/** An isolated subgraph run repeatedly under deterministic condition and resource ceilings. Nested loops are not supported. */
+export interface WorkflowLoopDefinition {
+  maxIterations: number
+  maxDurationMs: number
+  continueWhile: string
+  body: WorkflowGraph
 }
 
 export interface WorkflowEdge {
@@ -47,6 +56,10 @@ const ID_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/
 
 /** Validate the stored graph before a workflow can be published or run. */
 export function validateWorkflowGraph(graph: WorkflowGraph): WorkflowGraphValidation {
+  return validateWorkflowGraphAtDepth(graph, 0)
+}
+
+function validateWorkflowGraphAtDepth(graph: WorkflowGraph, loopDepth: number): WorkflowGraphValidation {
   const errors: string[] = []
   if (!graph || typeof graph !== 'object') {
     return { valid: false, errors: ['Workflow graph must be an object.'], topologicalOrder: [] }
@@ -69,9 +82,9 @@ export function validateWorkflowGraph(graph: WorkflowGraph): WorkflowGraphValida
     }
     if (nodes.has(node.id)) errors.push(`Duplicate workflow node id "${node.id}".`)
     else nodes.set(node.id, node)
-    if (!['trigger', 'agent', 'tool', 'condition', 'output'].includes(node.kind)) errors.push(`Node "${node.id}" has an unsupported kind.`)
+    if (!['trigger', 'agent', 'tool', 'condition', 'loop', 'output'].includes(node.kind)) errors.push(`Node "${node.id}" has an unsupported kind.`)
     if (typeof node.label !== 'string' || !node.label.trim()) errors.push(`Node "${node.id}" needs a label.`)
-    validateNodeConfig(node, errors)
+    validateNodeConfig(node, errors, loopDepth)
   }
 
   const entry = nodes.get(graph.entryNodeId)
@@ -117,7 +130,7 @@ export function validateWorkflowGraph(graph: WorkflowGraph): WorkflowGraphValida
   }
 
   const topologicalOrder = topologicalSort(nodes, outgoing, incoming)
-  if (topologicalOrder.length !== nodes.size) errors.push('Workflow graph contains a cycle; loops require a future bounded-loop node.')
+  if (topologicalOrder.length !== nodes.size) errors.push('Workflow graph contains a cycle; use a bounded-loop node with an isolated body instead of graph back-edges.')
   for (const node of nodes.values()) {
     if (node.kind !== 'condition' || !node.config?.conditionExpression) continue
     const reference = workflowConditionNodeReference(node.config.conditionExpression)
@@ -134,8 +147,37 @@ export function validateWorkflowGraph(graph: WorkflowGraph): WorkflowGraphValida
   return { valid: errors.length === 0, errors, topologicalOrder }
 }
 
-function validateNodeConfig(node: WorkflowNode, errors: string[]) {
+function validateNodeConfig(node: WorkflowNode, errors: string[], loopDepth: number) {
   const config = node.config ?? {}
+  if (node.kind === 'loop') {
+    const loop = config.loop
+    if (!loop || typeof loop !== 'object') {
+      errors.push(`Loop node "${node.id}" must define bounded-loop configuration.`)
+    } else {
+      if (loopDepth > 0) errors.push(`Loop node "${node.id}" cannot be nested inside another bounded loop.`)
+      if (!Number.isInteger(loop.maxIterations) || loop.maxIterations < 1 || loop.maxIterations > 100) errors.push(`Loop node "${node.id}" maxIterations must be an integer from 1 to 100.`)
+      if (!Number.isInteger(loop.maxDurationMs) || loop.maxDurationMs < 1 || loop.maxDurationMs > 300_000) errors.push(`Loop node "${node.id}" maxDurationMs must be an integer from 1 to 300000.`)
+      if (typeof loop.continueWhile !== 'string' || !loop.continueWhile.trim()) errors.push(`Loop node "${node.id}" must define a continueWhile condition.`)
+      else {
+        const error = validateWorkflowConditionExpression(loop.continueWhile)
+        if (error) errors.push(`Loop node "${node.id}" has an invalid continueWhile condition: ${error}`)
+        const reference = workflowConditionNodeReference(loop.continueWhile)
+        if (reference?.source === 'nqc') errors.push(`Loop node "${node.id}" continueWhile must use $input or $steps; NQC paths are not available in the loop controller.`)
+        if (reference?.source === 'steps' && !loop.body?.nodes?.some((bodyNode) => bodyNode.id === reference.nodeId)) {
+          errors.push(`Loop node "${node.id}" continueWhile references missing body node "${reference.nodeId}".`)
+        }
+      }
+      if (!loop.body || !Array.isArray(loop.body.nodes) || loop.body.nodes.length > 50) errors.push(`Loop node "${node.id}" body must contain at most 50 workflow nodes.`)
+      else if (loopDepth === 0) {
+        if (loop.body.nodes.some((bodyNode) => bodyNode?.kind === 'loop')) errors.push(`Loop node "${node.id}" body cannot contain another loop.`)
+        if (!loop.body.nodes.some((bodyNode) => bodyNode?.kind === 'output')) errors.push(`Loop node "${node.id}" body must include an output node.`)
+        const bodyValidation = validateWorkflowGraphAtDepth(loop.body, loopDepth + 1)
+        errors.push(...bodyValidation.errors.map((error) => `Loop node "${node.id}" body: ${error}`))
+      }
+    }
+  } else if (config.loop !== undefined) {
+    errors.push(`Only loop nodes may define bounded-loop configuration (node "${node.id}").`)
+  }
   if (node.kind === 'agent' && config.evaluationRequired !== true) {
     errors.push(`Agent node "${node.id}" must require Quicksilver Engine evaluation.`)
   }

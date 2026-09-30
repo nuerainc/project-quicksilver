@@ -7,7 +7,7 @@ export interface WorkflowConditionContext {
 type Operator = '==' | '!=' | '>' | '>=' | '<' | '<=' | 'contains' | 'exists'
 interface ParsedCondition { path: string; operator: Operator; value?: string | number | boolean | null }
 
-const PATH_PATTERN = /^(?:\$input|\$steps\.[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+|\.\d+)*|\$nqc\.[A-Za-z0-9_-]+\.(?:reasoningScore|hallucinationRisk|brittleness|safetyDecision))$/
+const PATH_PATTERN = /^(?:\$input(?:\.[A-Za-z0-9_-]+|\.\d+)*|\$steps\.[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+|\.\d+)*|\$nqc\.[A-Za-z0-9_-]+\.(?:reasoningScore|hallucinationRisk|brittleness|safetyDecision))$/
 const EXPRESSION_PATTERN = /^\s*(\S+)\s+(>=|<=|==|!=|>|<|contains|exists)(?:\s+(.+?))?\s*$/
 
 /** Small data-only expression language. It never evaluates JavaScript. */
@@ -23,7 +23,7 @@ export function validateWorkflowConditionExpression(expression: string): string 
 export function workflowConditionNodeReference(expression: string): { source: 'steps' | 'nqc'; nodeId: string } | null {
   try {
     const path = parseCondition(expression).path
-    if (path === '$input') return null
+    if (path === '$input' || path.startsWith('$input.')) return null
     const [source, nodeId] = path.slice(1).split('.')
     return { source: source === 'steps' ? 'steps' : 'nqc', nodeId: nodeId! }
   } catch {
@@ -83,8 +83,8 @@ function resolvePath(path: string, context: WorkflowConditionContext): unknown {
   const parts = path.split('.')
   const root = parts[0]
   const id = parts[1]
-  let value: unknown = root === '$steps' ? context.outputs[id] : context.evaluations?.[id]
-  for (const part of parts.slice(2)) {
+  let value: unknown = root === '$input' ? context.input : root === '$steps' ? context.outputs[id] : context.evaluations?.[id]
+  for (const part of parts.slice(root === '$input' ? 1 : 2)) {
     if (Array.isArray(value) && /^\d+$/.test(part)) {
       value = value[Number(part)]
     } else if (value && typeof value === 'object' && Object.hasOwn(value, part)) {

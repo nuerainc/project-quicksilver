@@ -1,5 +1,6 @@
 import organization from './organization'
 import department from './department'
+import departmentExecutionAudit from './department-execution-audit'
 import entity from './entity'
 import capability from './capability'
 import policy from './policy'
@@ -25,10 +26,12 @@ import agentDefinition from './agent-definition'
 import agentPublicationAudit from './agent-publication-audit'
 import agentPublicationHead from './agent-publication-head'
 import authorizationDecisionAudit from './authorization-decision-audit'
+import telemetryTraceSpan from './telemetry-trace-span'
 
 export const schemaTypes = [
   organization,
   department,
+  departmentExecutionAudit,
   entity,
   capability,
   policy,
@@ -54,4 +57,5 @@ export const schemaTypes = [
   agentPublicationAudit,
   agentPublicationHead,
   authorizationDecisionAudit,
+  telemetryTraceSpan,
 ]

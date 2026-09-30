@@ -23,9 +23,17 @@ export interface NueraAgentRequest<Input = unknown> {
 export interface NueraAgentResult<Output = unknown> {
   output: Output
   modelId: string
+  usage?: ModelTokenUsage
   toolCalls?: EvaluatorToolCall[]
   /** Evidence/context used for grounding checks; never private chain-of-thought. */
   evaluationContext?: string[]
+}
+
+/** Provider-reported token counts only; missing fields remain null, never guessed. */
+export interface ModelTokenUsage {
+  inputTokens: number | null
+  outputTokens: number | null
+  totalTokens: number | null
 }
 
 /** A versioned worker contract. Agent authority is always bounded by the NQC manifest. */

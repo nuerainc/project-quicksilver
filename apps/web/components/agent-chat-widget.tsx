@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
 
 import { authFailureMessage, consoleHeaders, readConsoleToken } from '@/lib/console-auth'
+import { chatRequest, type ChatMode } from '@/lib/chat-request'
 import styles from './agent-chat-widget.module.css'
 
 type QueryResponse = {
@@ -20,13 +21,29 @@ type QueryResponse = {
 type ChatMessage = {
   id: string
   question: string
+  mode: ChatMode
   response?: QueryResponse
+  plan?: PlanChatResponse
+}
+
+type PlanChatResponse = {
+  decomposition: { objective: string; constraints: string[]; successMetrics: string[]; candidateWorkstreams: string[] }
+  reasoning: string
+  decisions: Array<{
+    action: { description: string; financialExposure: number; reversible: boolean }
+    safetyDecision: 'ALLOW' | 'BLOCK' | 'ESCALATE' | null
+    decisionDocId: string | null
+    status: string | null
+    decision: { recommendation: string; riskLevel: number; requiresApproval: boolean } | null
+    review: { missingEvidence: string[]; riskConcerns: string[]; suggestions: string[] } | null
+  }>
 }
 
 export function AgentChatWidget() {
   const [open, setOpen] = useState(false)
   const [tokenPresent, setTokenPresent] = useState(false)
   const [question, setQuestion] = useState('')
+  const [mode, setMode] = useState<ChatMode>('ask')
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -64,32 +81,39 @@ export function AgentChatWidget() {
     const token = readConsoleToken()
     if (!token) {
       setTokenPresent(false)
-      setError('Sign in with a principal that has decision:read to ask company questions.')
+      setError(mode === 'plan'
+        ? 'Sign in with a principal allowed to propose decisions before asking Quicksilver to plan work.'
+        : 'Sign in with a principal that has decision:read to ask company questions.')
       return
     }
 
     const id = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`
-    setMessages((current) => [...current, { id, question: text }])
+    const submittedMode = mode
+    setMessages((current) => [...current, { id, question: text, mode: submittedMode }])
     setQuestion('')
     setError(null)
     setBusy(true)
     try {
-      const response = await fetch('/api/query', {
+      const chat = chatRequest(submittedMode, text)
+      const path = chat.path
+      const response = await fetch(path, {
         method: 'POST',
-        headers: consoleHeaders('/api/query', token, { 'content-type': 'application/json' }),
-        body: JSON.stringify({ question: text }),
+        headers: consoleHeaders(path, token, { 'content-type': 'application/json' }),
+        body: JSON.stringify(chat.body),
         cache: 'no-store',
       })
       const payload = await response.json().catch(() => ({}))
       if (!response.ok) {
         if (response.status === 401) setTokenPresent(false)
-        const message = authFailureMessage(response.status, 'query', payload.error, payload.retryAfterSeconds)
+        const message = authFailureMessage(response.status, submittedMode === 'plan' ? 'plan' : 'query', payload.error, payload.retryAfterSeconds)
           ?? payload.error
           ?? payload.detail
           ?? 'Quicksilver could not answer that question.'
         throw new Error(message)
       }
-      setMessages((current) => current.map((item) => item.id === id ? { ...item, response: payload as QueryResponse } : item))
+      setMessages((current) => current.map((item) => item.id !== id ? item : submittedMode === 'plan'
+        ? { ...item, plan: payload as PlanChatResponse }
+        : { ...item, response: payload as QueryResponse }))
     } catch (cause) {
       setError((cause as Error).message || 'Quicksilver could not answer that question.')
     } finally {
@@ -106,24 +130,30 @@ export function AgentChatWidget() {
               <span className={styles.avatar} aria-hidden="true">NQ</span>
               <div>
                 <h2 id="qs-chat-title">Ask Quicksilver</h2>
-                <p>Company knowledge · read only</p>
+                <p>Ask about your business or plan governed work</p>
               </div>
             </div>
             <button type="button" className={styles.close} onClick={close} aria-label="Close Quicksilver chat">×</button>
           </header>
 
           <div className={styles.safetyNote}>
-            Answers use the company model and NQC evaluation. Chat cannot approve or execute actions.
+            {mode === 'ask'
+              ? 'Answers use company context and NQC evaluation. Ask mode is read-only.'
+              : 'Plan mode creates evaluated proposals for review. It never approves or executes actions.'}
           </div>
 
           <div className={styles.thread} ref={threadRef} aria-label="Conversation" aria-live="polite">
             {messages.length === 0 ? (
               <div className={styles.welcome}>
                 <span aria-hidden="true">✦</span>
-                <h3>What would you like to know?</h3>
-                <p>Ask about company entities, capabilities, policies, or the evidence behind them.</p>
-                <div className={styles.suggestions} aria-label="Example questions">
-                  {['Which policies apply to an action?', 'What evidence supports this capability?'].map((example) => (
+                <h3>{mode === 'ask' ? 'What would you like to know?' : 'What outcome should the business pursue?'}</h3>
+                <p>{mode === 'ask'
+                  ? 'Ask about company entities, capabilities, policies, or the evidence behind them.'
+                  : 'Describe a goal in plain language. Quicksilver will propose actions, evaluate them, and save decisions for review.'}</p>
+                <div className={styles.suggestions} aria-label={mode === 'ask' ? 'Example questions' : 'Example objectives'}>
+                  {(mode === 'ask'
+                    ? ['Which policies apply to an action?', 'What evidence supports this capability?']
+                    : ['Reduce operating costs without lowering service quality.', 'Improve on-time delivery over the next quarter.']).map((example) => (
                     <button key={example} type="button" onClick={() => setQuestion(example)}>{example}</button>
                   ))}
                 </div>
@@ -133,6 +163,7 @@ export function AgentChatWidget() {
                 <article className={styles.exchange} key={message.id}>
                   <p className={styles.userMessage}>{message.question}</p>
                   {message.response && <QueryAnswer result={message.response} />}
+                  {message.plan && <PlanAnswer result={message.plan} />}
                 </article>
               ))
             )}
@@ -143,14 +174,18 @@ export function AgentChatWidget() {
           <footer className={styles.footer}>
             {tokenPresent ? (
               <form className={styles.form} onSubmit={ask}>
-                <label className={styles.srOnly} htmlFor="qs-chat-question">Ask a company question</label>
+                <div className={styles.modeSwitch} role="group" aria-label="Chat mode">
+                  <button type="button" aria-pressed={mode === 'ask'} disabled={busy} onClick={() => setMode('ask')}>Ask</button>
+                  <button type="button" aria-pressed={mode === 'plan'} disabled={busy} onClick={() => setMode('plan')}>Plan</button>
+                </div>
+                <label className={styles.srOnly} htmlFor="qs-chat-question">{mode === 'plan' ? 'Describe a business objective' : 'Ask a company question'}</label>
                 <input
                   id="qs-chat-question"
                   ref={inputRef}
                   value={question}
                   onChange={(event) => setQuestion(event.currentTarget.value)}
                   maxLength={2000}
-                  placeholder="Ask Quicksilver…"
+                  placeholder={mode === 'plan' ? 'Describe an outcome to work toward…' : 'Ask Quicksilver…'}
                   autoComplete="off"
                   disabled={busy}
                 />
@@ -162,7 +197,7 @@ export function AgentChatWidget() {
                 <Link href="/planning#console-token" onClick={() => setOpen(false)}>Go to sign in</Link>
               </div>
             )}
-            <p className={styles.footerHint}>Read-only · NQC-evaluated · Not a substitute for an approval</p>
+            <p className={styles.footerHint}>{mode === 'ask' ? 'Ask · read-only · NQC-evaluated' : 'Plan · proposals require review and approval'}</p>
           </footer>
         </section>
       )}
@@ -182,6 +217,30 @@ export function AgentChatWidget() {
         {!open && <span className={styles.launcherSpark} aria-hidden="true">✦</span>}
       </button>
     </>
+  )
+}
+
+function PlanAnswer({ result }: { result: PlanChatResponse }) {
+  const proposed = result.decisions.filter((item) => item.decisionDocId)
+  return (
+    <div className={styles.answer}>
+      <p><strong>Plan prepared</strong> · {result.decomposition.objective}</p>
+      {result.decomposition.successMetrics.length > 0 && <p className={styles.planMeta}>Success measures: {result.decomposition.successMetrics.join(' · ')}</p>}
+      <ol className={styles.planActions}>
+        {result.decisions.map((item, index) => (
+          <li key={item.decisionDocId ?? `${index}-${item.action.description}`}>
+            <strong>{item.action.description}</strong>
+            <span>{item.safetyDecision ?? 'UNRESOLVED'} · {item.status ?? 'Not saved for review'}</span>
+            {item.review?.missingEvidence?.length ? <small>Evidence to add: {item.review.missingEvidence.join('; ')}</small> : null}
+          </li>
+        ))}
+      </ol>
+      {result.decomposition.constraints.length > 0 && <details className={styles.references}><summary>Constraints used</summary><ul>{result.decomposition.constraints.map((item) => <li key={item}>{item}</li>)}</ul></details>}
+      {proposed.length > 0
+        ? <Link className={styles.reviewPlan} href="/decisions">Review {proposed.length} saved {proposed.length === 1 ? 'decision' : 'decisions'} <span aria-hidden="true">→</span></Link>
+        : <p>No decision was saved. Review the plan details and clarify the objective before trying again.</p>}
+      <div className={styles.evaluation}><span>NQC-governed</span><span>Approval remains a separate human decision</span></div>
+    </div>
   )
 }
 

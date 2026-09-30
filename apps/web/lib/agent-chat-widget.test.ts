@@ -6,13 +6,15 @@ const widget = readFileSync(new URL('../components/agent-chat-widget.tsx', impor
 const styles = readFileSync(new URL('../components/agent-chat-widget.module.css', import.meta.url), 'utf8')
 const layout = readFileSync(new URL('../app/layout.tsx', import.meta.url), 'utf8')
 
-test('read-only agent chat is available across every app page', () => {
+test('business chat is available across every app page and separates asking from planning', () => {
   assert.match(layout, /<AgentChatWidget\s*\/>/)
-  assert.match(widget, /fetch\('\/api\/query'/)
-  assert.match(widget, /consoleHeaders\('\/api\/query', token/)
-  assert.match(widget, /JSON\.stringify\(\{ question: text \}\)/)
-  assert.match(widget, /Read-only · NQC-evaluated/)
-  assert.match(widget, /Chat cannot approve or execute actions/)
+  assert.match(widget, /chatRequest\(submittedMode, text\)/)
+  assert.match(widget, /aria-label="Chat mode"/)
+  assert.match(widget, />Ask<\/button>/)
+  assert.match(widget, />Plan<\/button>/)
+  assert.match(widget, /Plan mode creates evaluated proposals for review/)
+  assert.match(widget, /never approves or executes actions/)
+  assert.match(widget, /Review \{proposed\.length\} saved/)
   assert.match(widget, /\/planning#console-token/)
 })
 

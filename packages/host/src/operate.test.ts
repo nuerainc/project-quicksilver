@@ -152,3 +152,52 @@ test('plan and approve-plan: a proposal, then the founder\'s append-only approva
     await rm(dir, { recursive: true, force: true })
   }
 })
+
+test('departments: Operate derives a unit-economics proposal from verified evidence and records founder approval without executing it', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'qs-operate-departments-'))
+  try {
+    await seedLedger(dir)
+    const approvedPlan = await operate(dir, ['approve-plan', '--cash', '5000'])
+    assert.equal(approvedPlan.code, 0, approvedPlan.out)
+    const inputPath = join(dir, 'department-economics.json')
+    const policy = {
+      schemaVersion: 1, playbookId: 'operate', version: 1, owner: 'entity-founder',
+      minimumPeriodsForSpawn: 2, minimumPeriodsForFund: 2, minimumPeriodsForRetirement: 3,
+      spawnReturnMultiple: 1.5, fundReturnMultiple: 1.25, shrinkBelowReturnMultiple: 0.8, retireBelowReturnMultiple: 0.2,
+    }
+    const candidate = {
+      departmentId: 'market-intelligence', status: 'candidate', qualifyingPeriods: 3,
+      netContributionUsd: 180, capitalUsedUsd: 100, currentBudgetUsd: 0, proposedBudgetUsd: 50,
+      evidenceRefs: ['ledger:1', 'ledger:2', 'ledger:3'],
+    }
+    await writeFile(inputPath, JSON.stringify({ policy, candidates: [candidate] }))
+    const proposalRun = await operate(dir, ['departments', 'propose', inputPath])
+    assert.equal(proposalRun.code, 0, proposalRun.out)
+    assert.match(proposalRun.out, /spawn proposed/i)
+    assert.match(proposalRun.out, /No department was changed and no money moved/)
+    const store = new OperateStore(join(dir, 'operate'), RUN)
+    const [stored] = await store.departmentProposals()
+    assert.ok(stored)
+    assert.equal(stored!.decisions.length, 0)
+    const actionId = stored!.portfolio.proposals[0]!.proposalId
+    const decisionRun = await operate(dir, ['departments', 'decide', stored!.portfolio.proposalId, '--approve', actionId, '--note', 'Approved using the verified ledger evidence.'])
+    assert.equal(decisionRun.code, 0, decisionRun.out)
+    assert.match(decisionRun.out, /Approval records intent only; apply it with: npm run operate -- departments apply/)
+    const reviewed = await store.departmentProposals()
+    assert.deepEqual(reviewed[0]!.decisions[0]!.approvedActionIds, [actionId])
+    assert.equal(reviewed[0]!.portfolio.digest, stored!.portfolio.digest)
+
+    const unavailableSanity = await operate(dir, ['departments', 'apply', stored!.portfolio.proposalId], {
+      NEXT_PUBLIC_SANITY_PROJECT_ID: '', SANITY_WRITE_TOKEN: '', SANITY_AUTH_TOKEN: '',
+    })
+    assert.notEqual(unavailableSanity.code, 0)
+    assert.match(unavailableSanity.out, /No dedicated Nuera Sanity write client is configured/)
+    assert.equal((await store.departmentProposals())[0]!.decisions[0]!.digest, stored!.portfolio.digest, 'credential failure must preserve the exact approval record')
+
+    const agentDecision = await operate(dir, ['departments', 'decide', stored!.portfolio.proposalId, '--approve', actionId, '--note', 'Agents may not approve.'], { QUICKSILVER_OPERATE_ACTOR_KIND: 'agent' })
+    assert.notEqual(agentDecision.code, 0)
+    assert.match(agentDecision.out, /Only a human founder/)
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})

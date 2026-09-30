@@ -96,6 +96,39 @@ function toolGraph(config: WorkflowNode['config']): WorkflowGraph {
   }
 }
 
+function boundedLoopGraph(overrides: Partial<NonNullable<WorkflowNode['config']>['loop']> = {}): WorkflowGraph {
+  const body: WorkflowGraph = {
+    schemaVersion: 1,
+    id: 'wf-loop-body',
+    version: 1,
+    entryNodeId: 'body-start',
+    nodes: [
+      { id: 'body-start', kind: 'trigger', label: 'Iteration input' },
+      { id: 'increment', kind: 'agent', label: 'Increment state', config: { agentId: 'counter', evaluationRequired: true } },
+      { id: 'body-done', kind: 'output', label: 'Iteration output' },
+    ],
+    edges: [
+      { id: 'body-in', from: 'body-start', to: 'increment' },
+      { id: 'body-out', from: 'increment', to: 'body-done' },
+    ],
+  }
+  return {
+    schemaVersion: 1,
+    id: 'wf-bounded-loop',
+    version: 1,
+    entryNodeId: 'start',
+    nodes: [
+      { id: 'start', kind: 'trigger', label: 'Start' },
+      { id: 'loop', kind: 'loop', label: 'Bounded loop', config: { loop: { maxIterations: 5, maxDurationMs: 2_000, continueWhile: '$steps.increment.count < 3', body, ...overrides } } },
+      { id: 'done', kind: 'output', label: 'Done' },
+    ],
+    edges: [
+      { id: 'in', from: 'start', to: 'loop' },
+      { id: 'out', from: 'loop', to: 'done' },
+    ],
+  }
+}
+
 function handlers(overrides: Partial<WorkflowRuntimeHandlers> = {}): WorkflowRuntimeHandlers & { calls: string[] } {
   const calls: string[] = []
   return {
@@ -170,7 +203,7 @@ test('Graph: exactly one trigger, it must be the entry, and it cannot have input
   assert.ok(validateWorkflowGraph({ ...linear(), entryNodeId: 'agent-1' }).errors.includes('entryNodeId must identify a trigger node.'))
 })
 
-test('Graph: cycles are rejected until a bounded-loop node exists', () => {
+test('Graph: arbitrary graph back-edges are rejected; repeated work uses an isolated bounded-loop node', () => {
   const g = linear()
   g.nodes.splice(2, 0, { id: 'agent-2', kind: 'agent', label: 'Loop', config: { agentId: 'x', evaluationRequired: true } })
   g.edges = [
@@ -180,6 +213,18 @@ test('Graph: cycles are rejected until a bounded-loop node exists', () => {
     { id: 'e4', from: 'agent-2', to: 'done' },
   ]
   assert.ok(validateWorkflowGraph(g).errors.some((e) => e.includes('contains a cycle')))
+})
+
+test('Graph: bounded loops require bounded time, iterations, safe conditions, and a valid isolated body graph', () => {
+  const valid = validateWorkflowGraph(boundedLoopGraph())
+  assert.equal(valid.valid, true, valid.errors.join(' '))
+  assert.deepEqual(valid.topologicalOrder, ['start', 'loop', 'done'])
+  assert.ok(validateWorkflowGraph(boundedLoopGraph({ maxIterations: 101 })).errors.some((error) => /maxIterations/.test(error)))
+  assert.ok(validateWorkflowGraph(boundedLoopGraph({ maxDurationMs: 300_001 })).errors.some((error) => /maxDurationMs/.test(error)))
+  assert.ok(validateWorkflowGraph(boundedLoopGraph({ continueWhile: 'process.exit(1)' })).errors.some((error) => /invalid continueWhile/.test(error)))
+  assert.ok(validateWorkflowGraph(boundedLoopGraph({ continueWhile: '$steps.missing.count < 3' })).errors.some((error) => /missing body node/.test(error)))
+  assert.ok(validateWorkflowGraph(boundedLoopGraph({ continueWhile: '$nqc.increment.reasoningScore > 50' })).errors.some((error) => /NQC paths are not available/.test(error)))
+  assert.ok(validateWorkflowGraph(boundedLoopGraph({ body: { ...boundedLoopGraph().nodes[1]!.config!.loop!.body, edges: [] } })).errors.some((error) => /body: Non-output node/.test(error)))
 })
 
 test('Graph: dead ends, outputs with exits, and unreachable nodes are rejected', () => {
@@ -301,6 +346,97 @@ test('Runtime: linear run executes the agent, evaluates the result, and passes o
   assert.deepEqual(result.outputs.done, { value: 'agent-1' })
   assert.deepEqual(result.steps.map((s) => [s.nodeId, s.status]), [['start', 'completed'], ['agent-1', 'completed'], ['done', 'completed']])
   assert.equal(result.steps[1]!.safetyDecision, 'ALLOW')
+})
+
+test('Runtime: bounded loop carries state across iterations and records an inspectable trace', async () => {
+  let agentCalls = 0
+  const h = handlers({
+    async runAgent(_node, context) {
+      agentCalls += 1
+      const current = context.input as { state: { count: number } }
+      return { count: current.state.count + 1 }
+    },
+  })
+  const result = await executeWorkflowGraph(boundedLoopGraph(), { count: 0 }, h, { runId: 'run-loop' })
+  assert.equal(result.status, 'completed')
+  assert.deepEqual(result.outputs.loop, { iterations: 3, value: { count: 3 } })
+  assert.deepEqual(result.outputs.done, result.outputs.loop)
+  const loop = result.steps.find((step) => step.nodeId === 'loop')!
+  assert.equal(loop.status, 'completed')
+  assert.equal(loop.loopIterations, 3)
+  assert.deepEqual(loop.loopTrace?.map((iteration) => iteration.iteration), [1, 2, 3])
+  assert.equal(agentCalls, 3)
+  assert.ok(h.calls.filter((call) => call === 'eval:increment:result').length === 3)
+})
+
+test('Runtime: bounded loop fails closed when its condition still requests work at the iteration limit', async () => {
+  const graph = boundedLoopGraph({ maxIterations: 2, continueWhile: '$steps.increment.count < 100' })
+  const result = await executeWorkflowGraph(graph, { count: 0 }, handlers({
+    async runAgent(_node, context) {
+      const current = context.input as { state: { count: number } }
+      return { count: current.state.count + 1 }
+    },
+  }))
+  assert.equal(result.status, 'failed')
+  assert.match(result.error ?? '', /reaching its 2 iteration limit/)
+  assert.equal(result.steps.find((step) => step.nodeId === 'loop')?.loopIterations, 2)
+  assert.equal(result.steps.find((step) => step.nodeId === 'done')?.status, undefined)
+})
+
+test('Runtime: bounded loop enforces its wall-clock budget and aborts the running iteration', async () => {
+  const graph = boundedLoopGraph({ maxDurationMs: 20 })
+  let handlerSignal: AbortSignal | undefined
+  const result = await executeWorkflowGraph(graph, { count: 0 }, handlers({
+    async runAgent(_node, context) {
+      handlerSignal = context.signal
+      await new Promise((resolve) => setTimeout(resolve, 100))
+      return { count: 1 }
+    },
+  }))
+  assert.equal(result.status, 'failed')
+  assert.match(result.error ?? '', /exceeded its 20 ms time budget/)
+  assert.equal(handlerSignal?.aborted, true)
+})
+
+test('Runtime: caller cancellation aborts an active bounded-loop iteration and stays cancelled', async () => {
+  const controller = new AbortController()
+  let handlerSignal: AbortSignal | undefined
+  const cancel = setTimeout(() => controller.abort('operator cancelled the run'), 10)
+  const result = await executeWorkflowGraph(boundedLoopGraph(), { count: 0 }, handlers({
+    async runAgent(_node, context) {
+      handlerSignal = context.signal
+      await new Promise((resolve) => setTimeout(resolve, 100))
+      return { count: 1 }
+    },
+  }), { signal: controller.signal })
+  clearTimeout(cancel)
+  assert.equal(result.status, 'cancelled')
+  assert.match(result.error ?? '', /operator cancelled/)
+  assert.equal(handlerSignal?.aborted, true)
+})
+
+test('Runtime: every bounded-loop side-effect iteration repeats kernel authorization before dispatch', async () => {
+  const graph = boundedLoopGraph({
+    continueWhile: '$input.iteration < 2',
+    body: {
+      schemaVersion: 1, id: 'wf-loop-tools', version: 1, entryNodeId: 'body-start',
+      nodes: [
+        { id: 'body-start', kind: 'trigger', label: 'Iteration input' },
+        { id: 'write', kind: 'tool', label: 'Protected write', config: { toolId: 'record.write', sideEffect: true, evaluationRequired: true, supervisorApprovalRequired: true } },
+        { id: 'body-done', kind: 'output', label: 'Iteration output' },
+      ],
+      edges: [{ id: 'body-in', from: 'body-start', to: 'write' }, { id: 'body-out', from: 'write', to: 'body-done' }],
+    },
+  })
+  const h = handlers()
+  const result = await executeWorkflowGraph(graph, { request: 'write' }, h)
+  assert.equal(result.status, 'completed')
+  for (const phase of ['validate:write', 'eval:write:before-execution', 'approve:write', 'authorize:write', 'consume:write', 'tool:write']) {
+    assert.equal(h.calls.filter((call) => call === phase).length, 2, `${phase} runs once for each iteration`)
+  }
+  const loop = result.steps.find((step) => step.nodeId === 'loop')!
+  assert.equal(loop.loopIterations, 2)
+  assert.equal(loop.loopTrace?.flatMap((iteration) => iteration.steps).filter((step) => step.authorizationId).length, 2)
 })
 
 test('Runtime: condition selects exactly one branch and the other is recorded as skipped', async () => {

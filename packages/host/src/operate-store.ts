@@ -15,6 +15,7 @@ import { join, resolve } from 'node:path'
 import { FileLedgerStore, loadLedger, replay, type CompanyIntent } from '@quicksilver/aura'
 import { verifyMoneyLedger, type Experiment, type MoneyLedger } from '@quicksilver/kernel/playbooks/economics'
 import { AUTONOMY_DEPTHS, departmentAutonomy, minDepth, type ApprovedPlan, type AutonomyDepth, type DepartmentAutonomy } from '@quicksilver/kernel/playbooks/operate'
+import { verifyDepartmentPortfolioApproval, verifyDepartmentPortfolioProposal, type DepartmentPortfolioApproval, type DepartmentPortfolioProposal } from '@quicksilver/kernel/playbooks/department-economics'
 import { shadowReport, type HandOverRules, type ShadowLog } from '@quicksilver/kernel/playbooks/shadow'
 
 export async function readJson<T>(path: string, fallback: T): Promise<T> {
@@ -31,6 +32,11 @@ export async function writeJsonAtomic(path: string, value: unknown): Promise<voi
 
 const RUN_ID = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$/
 
+export interface StoredDepartmentProposal {
+  portfolio: DepartmentPortfolioProposal
+  decisions: DepartmentPortfolioApproval[]
+}
+
 export class OperateStore {
   readonly dir: string
   readonly runId: string
@@ -39,7 +45,7 @@ export class OperateStore {
     this.dir = join(dataDir, runId)
     this.runId = runId
   }
-  private path(name: 'ledger' | 'plans' | 'experiments') { return join(this.dir, `${name}.json`) }
+  private path(name: 'ledger' | 'plans' | 'experiments' | 'department-proposals') { return join(this.dir, `${name}.json`) }
 
   async ledger(): Promise<MoneyLedger> {
     const l = await readJson<MoneyLedger>(this.path('ledger'), { runId: this.runId, budgetUsd: 0, entries: [] })
@@ -66,6 +72,46 @@ export class OperateStore {
   }
   async experiments(): Promise<Experiment[]> { return readJson<Experiment[]>(this.path('experiments'), []) }
   async saveExperiments(list: Experiment[]): Promise<void> { await writeJsonAtomic(this.path('experiments'), list) }
+
+  async departmentProposals(): Promise<StoredDepartmentProposal[]> {
+    const records = await readJson<StoredDepartmentProposal[]>(this.path('department-proposals'), [])
+    if (!Array.isArray(records) || records.some((record) => !record || !verifyDepartmentPortfolioProposal(record.portfolio) || !Array.isArray(record.decisions) || record.decisions.some((decision) => !verifyDepartmentPortfolioApproval(record.portfolio, decision)))) {
+      throw new Error('The department proposal history is invalid; refusing to overwrite it.')
+    }
+    return records
+  }
+
+  /** Immutable append-only portfolio proposal log. Identical retries are idempotent. */
+  async appendDepartmentProposal(portfolio: DepartmentPortfolioProposal): Promise<StoredDepartmentProposal[]> {
+    if (!verifyDepartmentPortfolioProposal(portfolio)) throw new Error('Refusing to store a department proposal that fails digest or capital verification.')
+    const records = await this.departmentProposals()
+    const existing = records.find((record) => record.portfolio.proposalId === portfolio.proposalId)
+    if (existing) {
+      if (existing.portfolio.digest !== portfolio.digest) throw new Error('Department proposal id is already bound to different content.')
+      return records
+    }
+    const next = [...records, { portfolio: structuredClone(portfolio), decisions: [] }]
+    await writeJsonAtomic(this.path('department-proposals'), next)
+    return next
+  }
+
+  /** Append one founder decision to its immutable proposal; a different repeat is rejected. */
+  async appendDepartmentDecision(decision: DepartmentPortfolioApproval): Promise<StoredDepartmentProposal[]> {
+    const records = await this.departmentProposals()
+    const index = records.findIndex((record) => record.portfolio.proposalId === decision.proposalId)
+    if (index < 0) throw new Error('No stored department proposal matches this decision.')
+    const record = records[index]!
+    if (record.portfolio.digest !== decision.digest) throw new Error('The decision digest does not match the stored department proposal.')
+    if (!verifyDepartmentPortfolioApproval(record.portfolio, decision)) throw new Error('Refusing to store a department decision that does not match its immutable proposal.')
+    const existing = record.decisions.find((item) => item.proposalId === decision.proposalId)
+    if (existing) {
+      if (JSON.stringify(existing) !== JSON.stringify(decision)) throw new Error('A different decision already exists for this department proposal.')
+      return records
+    }
+    records[index] = { ...record, decisions: [...record.decisions, structuredClone(decision)] }
+    await writeJsonAtomic(this.path('department-proposals'), records)
+    return records
+  }
 }
 
 /**

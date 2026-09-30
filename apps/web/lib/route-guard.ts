@@ -40,7 +40,7 @@ const RATE_LIMIT_ENV: Readonly<Record<WebRateLimitClass, string>> = Object.freez
 /** The routes (other than the decision routes, which have their own checks) and what each needs. */
 export type WebRoute =
   | 'plan' | 'query' | 'dashboard/overview' | 'dashboard/finance'
-  | 'monitoring/workflows'
+  | 'monitoring/workflows' | 'monitoring/traces'
   | 'agents/catalog' | 'agents/definitions' | 'agents/drafts' | 'agents/drafts/submit' | 'agents/review' | 'agents/publish' | 'agents/rollback'
   | 'workflows/validate' | 'workflows/simulate' | 'workflows/run' | 'workflows/diff'
   | 'workflows/publications' | 'workflows/executions' | 'workflows/drafts' | 'workflows/drafts/submit'
@@ -54,6 +54,7 @@ export const WEB_ROUTE_ACCESS: Readonly<Record<WebRoute, { permissions: readonly
   'dashboard/overview': { permissions: Object.freeze<Permission[]>(['decision:read']) },
   'dashboard/finance': { permissions: Object.freeze<Permission[]>(['finance:read']) },
   'monitoring/workflows': { permissions: Object.freeze<Permission[]>(['workflow:read']) },
+  'monitoring/traces': { permissions: Object.freeze<Permission[]>(['audit:read']) },
   // Agent definitions are governed declarative contracts, not executable plugins.
   'agents/catalog': { permissions: Object.freeze<Permission[]>(['agent:read']) },
   'agents/definitions': { permissions: Object.freeze<Permission[]>(['agent:read']) },

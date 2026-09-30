@@ -178,20 +178,21 @@ export async function mergeClientTools(
       merged[key] = {
         ...tool,
         execute: async (args: unknown, options: unknown) => {
+          const startedAt = Date.now()
           const validation = registry.validate({ name: key, arguments: args }, undefined, completedTools)
           if (!validation.allowed) {
-            callLog.push({ name: key, succeeded: false })
+            callLog.push({ name: key, succeeded: false, durationMs: Math.max(0, Date.now() - startedAt) })
             throw new Error(`NQC Kernel denied tool call "${key}": ${validation.reasons.join(' ')}`)
           }
           try {
             const result = await originalExecute(args, options)
             completedTools.push(key)
-            callLog.push({ name: key, succeeded: true })
+            callLog.push({ name: key, succeeded: true, durationMs: Math.max(0, Date.now() - startedAt) })
             return result
           } catch (error) {
             // Record outcome without persisting provider error text, which can
             // contain user data or credentials.
-            callLog.push({ name: key, succeeded: false })
+            callLog.push({ name: key, succeeded: false, durationMs: Math.max(0, Date.now() - startedAt) })
             throw error
           }
         },

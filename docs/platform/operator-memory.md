@@ -18,8 +18,15 @@ default retention is 365 days.
 
 Replacing an inferred note preserves the old version as superseded, links both
 versions, and excludes the old value from the active prompt snapshot. Snapshots
-include the memory ID, source citation, provenance hash, confidence, and expiry.
-The agent sees active, unexpired entries only. Expiry redacts the text while
+include the memory ID, sensitivity label, source citation, provenance hash,
+confidence, and expiry. The agent sees active, unexpired entries only when the
+retrieval policy permits their sensitivity. `standard` entries are included
+by default. Text classified as health or financial is labeled `sensitive` and
+excluded from the default agent snapshot; a trusted caller must explicitly
+raise the snapshot ceiling. Callers may make a label stricter, but cannot
+weaken the automatic classifier. Legacy entries are conservatively classified
+when read. This topic classifier is a safeguard, not a complete personal-data
+detector. Expiry redacts the text while
 retaining the content digest and metadata event. A legal hold blocks removal
 and expiry purge until a reviewer releases it.
 
@@ -34,9 +41,10 @@ privileged writer who can rewrite the file and recompute the chain.
 
 `MemoryBook.recordEffectiveness(id, outcome, reviewerId)` records one explicit
 `useful`, `stale`, or `harmful` signal per reviewer and memory version. Counts
-are derived from verified audit events on read. The method is an internal
-storage API: callers must authenticate and authorize reviewers before calling
-it. There is not yet a product review surface.
+are derived from verified audit events on read. The storage method is an
+internal API; callers must authenticate and authorize reviewers. The Operator
+CLI now requires an authenticated human principal with `memory:approve` for
+memory review, feedback, export, restore, and stated-memory writes.
 
 `MemoryBook.exportData()` creates an integrity-checked portable bundle. It
 contains plaintext memory and must be protected as sensitive data. The digest
@@ -50,9 +58,15 @@ const backup = await source.exportData()
 await target.restore(backup, authorizedReviewerId)
 ```
 
-These methods do not implement encryption-at-rest, identity-backed access
-control, sensitivity labels, domain labels, or authorized export/restore
-endpoints. Per-person directories encode the exact UTF-8 identity as base64url,
+The CLI reads principals from `QUICKSILVER_PRINCIPALS` and the operator's raw
+bearer token from `QUICKSILVER_OPERATOR_TOKEN`; every allow or deny is written
+to the workspace's hash-chained `.qs-audit/operator.jsonl` before the operation
+continues. Missing, invalid, non-human, cross-tenant, or underprivileged
+credentials are denied. The lower-level `MemoryBook` methods remain an
+internal storage API and must only be exposed through an authorized caller.
+There is not yet an authenticated web memory surface. Remaining gaps include
+encryption-at-rest, domain labels, source-decision existence validation, and
+tenant-aware memory administration. Per-person directories encode the exact UTF-8 identity as base64url,
 so distinct IDs cannot collide through lossy sanitization. Simple legacy IDs
 are moved automatically when the destination is empty. Legacy paths produced
 from punctuation-bearing IDs may be ambiguous; the operator refuses to use
@@ -62,8 +76,8 @@ Mutations to one canonical memory file are serialized across local processes
 with an atomic directory lock. Lock acquisition waits up to 30 seconds and
 reclaims locks older than ten minutes. This is local-filesystem coordination;
 network filesystems and multi-host locking are not established. P-018 remains
-partial until identity-backed authorization, sensitivity-aware retrieval,
-source-decision validation, and the remaining memory capabilities are closed.
+partial until source-decision validation, an authenticated product memory
+surface, and the remaining memory capabilities are closed.
 
 Regression coverage is in `packages/operator/src/operator.test.ts` under the
 `memory:` cases and in `packages/operator/src/setup.test.ts` for namespace

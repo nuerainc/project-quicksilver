@@ -32,6 +32,13 @@ class TestAdapter implements ChannelAdapter {
 }
 
 const tick = (ms = 20) => new Promise((r) => setTimeout(r, ms))
+async function waitFor(predicate: () => boolean, timeoutMs = 2_000): Promise<void> {
+  const deadline = Date.now() + timeoutMs
+  while (!predicate()) {
+    if (Date.now() >= deadline) throw new Error(`Condition was not met within ${timeoutMs} ms.`)
+    await tick(10)
+  }
+}
 
 async function setup(turn: (r: TurnRequest) => Promise<{ reply: string }>) {
   const dir = await mkdtemp(join(tmpdir(), 'qs-gw-'))
@@ -139,7 +146,7 @@ test('gateway: messages during a run wait their turn', async () => {
   await gw.idle()
   assert.match(a.sent.at(-1)!.text, /this one is next/)
   release()
-  await tick(50)
+  await waitFor(() => order.length === 2)
   assert.deepEqual(order, ['slow', 'next'])
 })
 
