@@ -14,7 +14,7 @@ by Quicksilver, our Sanity Challenge 2026 submission, which lives separately at
 - [Contributor guide](../CONTRIBUTING.md): setup, verification, boundaries, and design rules
 - [Parity tests](platform/parity-tests.md): release-gate requirements and evidence
 - [v1.0.0 execution plan](V1-PLAN.md): dependency-aware implementation, pilot, and release gates
-- [v1 scope decision](V1-SCOPE.md): proposed mode-critical release scope; pending founder approval
+- [v1 scope decision](V1-SCOPE.md): approved P-001–P-123 v1.0.0 baseline and remaining operational decisions
 - [NQC evaluation benchmark plan](NQC-EVALUATION-BENCHMARK.md): held-out measurement protocol and claim gates
 - [authoritative enterprise specification](NUERA-QUICKSILVER-ENTERPRISE-SPEC-v1.md): merged platform target and Supervisor Agent contract
 - [M8–M9 enterprise plan](M8-M9-ENTERPRISE-PLAN.md): feature-complete release candidate, hardening, evidence, and 1.0.0 gate

@@ -14,6 +14,7 @@ import {
   languageModelForId,
   modelForRole,
   resolveId,
+  type MeasuredRoutingConfig,
 } from './models.ts'
 
 const ENV_KEYS = [
@@ -29,6 +30,7 @@ const ENV_KEYS = [
   'QUICKSILVER_REVIEWER_MODEL',
   'QUICKSILVER_ROUTER_MODEL',
   'QUICKSILVER_EXECUTOR_MODEL',
+  'QUICKSILVER_ROUTING_CONFIG',
 ] as const
 
 /** Run `fn` with exactly `env` set (all other model-related vars cleared), then restore. */
@@ -127,4 +129,50 @@ test('isLlmConfigured: azure, direct key, or explicit local opt-in', () => {
   withEnv(AZURE, () => assert.equal(isLlmConfigured(), true))
   withEnv({ GOOGLE_GENERATIVE_AI_API_KEY: 'g' }, () => assert.equal(isLlmConfigured(), true))
   withEnv({ QUICKSILVER_MODEL_MODE: 'local' }, () => assert.equal(isLlmConfigured(), true))
+})
+
+test('Measured routing: selects the measured profile for the actual role dispatch model', () => {
+  const config: MeasuredRoutingConfig = {
+    profiles: [
+      { modelId: 'gpt-5.6-sol', supportedTasks: ['planning'], taskAccuracy: { planning: 0.7 }, successRate: 0.95, averageCostPer1kTokens: 0.01, p95LatencyMs: 2000, available: true },
+      { modelId: 'claude-sonnet-5', supportedTasks: ['planning'], taskAccuracy: { planning: 0.95 }, successRate: 0.98, averageCostPer1kTokens: 0.02, p95LatencyMs: 1500, available: true },
+    ],
+  }
+  withEnv({ OPENAI_API_KEY: 'test', ANTHROPIC_API_KEY: 'test' }, () => {
+    const model = modelForRole('planner', 'cloud', config) as { modelId?: string }
+    assert.equal(model.modelId, 'claude-sonnet-5')
+  })
+})
+
+test('Measured routing: per-role override remains authoritative over profiles', () => {
+  const config: MeasuredRoutingConfig = {
+    profiles: [{ modelId: 'claude-sonnet-5', supportedTasks: ['planning'], taskAccuracy: { planning: 0.99 }, successRate: 1, averageCostPer1kTokens: 0, p95LatencyMs: 1, available: true }],
+  }
+  withEnv({ OPENAI_API_KEY: 'test', QUICKSILVER_PLANNER_MODEL: 'gpt-5.6-sol' }, () => {
+    const model = modelForRole('planner', 'cloud', config) as { modelId?: string }
+    assert.equal(model.modelId, 'gpt-5.6-sol')
+  })
+})
+
+test('Measured routing: configured policy fails closed when no profile meets constraints', () => {
+  const config: MeasuredRoutingConfig = {
+    profiles: [{ modelId: 'gpt-5.6-sol', supportedTasks: ['planning'], taskAccuracy: { planning: 0.5 }, successRate: 1, averageCostPer1kTokens: 0, p95LatencyMs: 1, available: true }],
+    requests: { planner: { minimumAccuracy: 0.9 } },
+  }
+  withEnv({ OPENAI_API_KEY: 'test' }, () => {
+    assert.throws(() => modelForRole('planner', 'cloud', config), /Measured model routing refused planner dispatch/)
+  })
+})
+
+test('Measured routing: environment configuration is parsed and malformed profiles are rejected', () => {
+  const profile = { modelId: 'gpt-5.6-sol', supportedTasks: ['planning'], taskAccuracy: { planning: 0.9 }, successRate: 1, averageCostPer1kTokens: 0, p95LatencyMs: 1, available: true }
+  withEnv({ OPENAI_API_KEY: 'test', QUICKSILVER_ROUTING_CONFIG: JSON.stringify({ profiles: [profile] }) }, () => {
+    assert.equal((modelForRole('planner') as { modelId?: string }).modelId, 'gpt-5.6-sol')
+  })
+  withEnv({ OPENAI_API_KEY: 'test', QUICKSILVER_ROUTING_CONFIG: '{' }, () => {
+    assert.throws(() => modelForRole('planner'), /must be valid JSON/)
+  })
+  withEnv({ OPENAI_API_KEY: 'test', QUICKSILVER_ROUTING_CONFIG: JSON.stringify({ profiles: [{ ...profile, successRate: 'high' }] }) }, () => {
+    assert.throws(() => modelForRole('planner'), /invalid model performance profile/)
+  })
 })

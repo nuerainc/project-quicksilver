@@ -1,0 +1,110 @@
+.launcher {
+  position: fixed;
+  z-index: 70;
+  inset-inline-end: max(1.25rem, env(safe-area-inset-right));
+  inset-block-end: max(1.25rem, env(safe-area-inset-bottom));
+  display: inline-flex;
+  min-height: 3.25rem;
+  align-items: center;
+  gap: 0.65rem;
+  border: 1px solid rgb(121 220 210 / 0.3);
+  border-radius: 999px;
+  background: linear-gradient(135deg, #67c9c1, #75b9d5);
+  padding: 0.45rem 1rem 0.45rem 0.5rem;
+  box-shadow: 0 12px 35px rgb(0 0 0 / 0.34), 0 0 0 1px rgb(8 22 35 / 0.24);
+  color: #0a2027;
+  font: 650 0.88rem/1.2 var(--font-sans);
+  cursor: pointer;
+  transition: transform 140ms ease, box-shadow 140ms ease, filter 140ms ease;
+}
+
+.launcher:hover { transform: translateY(-2px); filter: brightness(1.05); box-shadow: 0 16px 38px rgb(0 0 0 / 0.38); }
+.launcher:focus-visible, .close:focus-visible, .form button:focus-visible, .suggestions button:focus-visible, .signInPrompt a:focus-visible { outline: 3px solid #a8e4ff; outline-offset: 3px; }
+.launcherMark, .avatar { display: grid; width: 2.25rem; aspect-ratio: 1; place-items: center; flex: 0 0 auto; border: 1px solid rgb(255 255 255 / 0.28); border-radius: 50%; background: rgb(8 33 41 / 0.12); color: #09252a; font-size: 0.7rem; font-weight: 800; letter-spacing: 0.02em; }
+.launcherSpark { margin-inline-start: 0.1rem; font-size: 0.8rem; }
+
+.panel {
+  position: fixed;
+  z-index: 71;
+  inset-inline-end: max(1.25rem, env(safe-area-inset-right));
+  inset-block-end: calc(max(1.25rem, env(safe-area-inset-bottom)) + 4rem);
+  display: grid;
+  width: min(27rem, calc(100vw - 2rem));
+  height: min(42rem, calc(100dvh - 7.25rem));
+  min-height: min(24rem, calc(100dvh - 2rem));
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  overflow: hidden;
+  border: 1px solid #30455b;
+  border-radius: 1.15rem;
+  background: #101b2c;
+  box-shadow: 0 24px 70px rgb(0 0 0 / 0.5), 0 0 0 1px rgb(0 0 0 / 0.18);
+  color: #e7eef7;
+  font-family: var(--font-sans);
+}
+
+.header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; border-bottom: 1px solid #26384c; background: #142237; padding: 1rem 1rem 0.9rem; }
+.identity { display: flex; min-width: 0; align-items: center; gap: 0.75rem; }
+.avatar { width: 2.5rem; background: linear-gradient(145deg, #69c9c1, #72badd); }
+.identity h2 { margin: 0; color: #e7eef7; font-size: 0.98rem; font-weight: 680; letter-spacing: -0.02em; }
+.identity p { margin: 0.2rem 0 0; color: #a7b6c8; font-size: 0.72rem; }
+.close { display: grid; width: 2.4rem; min-height: 2.4rem; place-items: center; border: 1px solid transparent; border-radius: 0.65rem; background: transparent; color: #b6c6d8; font: 400 1.5rem/1 var(--font-sans); cursor: pointer; }
+.close:hover { border-color: #334a62; background: rgb(255 255 255 / 0.05); color: #fff; }
+
+.safetyNote { border-bottom: 1px solid #26384c; background: #0d1727; padding: 0.65rem 1rem; color: #b9c7d5; font-size: 0.71rem; line-height: 1.45; }
+.thread { display: flex; min-height: 0; flex-direction: column; gap: 0.9rem; overflow-y: auto; overscroll-behavior: contain; padding: 1rem; scrollbar-color: #40566e transparent; }
+.welcome { display: grid; justify-items: start; align-content: center; gap: 0.65rem; flex: 1; padding: 0.35rem 0.15rem; }
+.welcome > span { display: grid; width: 2.5rem; aspect-ratio: 1; place-items: center; border: 1px solid rgb(105 201 193 / 0.28); border-radius: 0.8rem; background: rgb(105 201 193 / 0.1); color: #89ded5; font-size: 1.1rem; }
+.welcome h3 { margin: 0.2rem 0 0; color: #edf4fa; font-size: 1.18rem; font-weight: 650; letter-spacing: -0.03em; }
+.welcome > p { max-width: 24rem; margin: 0; color: #a7b6c8; font-size: 0.83rem; line-height: 1.55; }
+.suggestions { display: grid; width: 100%; gap: 0.45rem; margin-top: 0.55rem; }
+.suggestions button { min-height: 2.7rem; border: 1px solid #2a3f55; border-radius: 0.7rem; background: #142237; padding: 0.6rem 0.75rem; color: #c7d4e1; font: 500 0.77rem/1.35 var(--font-sans); text-align: start; cursor: pointer; }
+.suggestions button:hover { border-color: #508c91; background: #172d3d; color: #effafa; }
+
+.exchange { display: grid; justify-items: end; gap: 0.6rem; }
+.userMessage { max-width: 90%; margin: 0; border: 1px solid rgb(105 201 193 / 0.16); border-radius: 1rem 1rem 0.25rem 1rem; background: #1a3441; padding: 0.7rem 0.85rem; color: #e6f7f5; font-size: 0.83rem; line-height: 1.5; overflow-wrap: anywhere; }
+.answer { width: 100%; border: 1px solid #2a3d52; border-radius: 0.9rem 0.9rem 0.9rem 0.25rem; background: #142237; padding: 0.8rem; color: #dbe5ef; font-size: 0.81rem; line-height: 1.55; overflow-wrap: anywhere; }
+.answer > p { margin: 0; }
+.contextList { display: grid; gap: 0.65rem; margin: 0; padding-inline-start: 1.15rem; }
+.contextList li { padding-inline-start: 0.1rem; }
+.references { margin-top: 0.75rem; border-top: 1px solid #2a3d52; padding-top: 0.55rem; }
+.references summary { min-height: 2.4rem; display: flex; align-items: center; color: #8cd7d1; font-size: 0.77rem; font-weight: 620; cursor: pointer; }
+.references p { margin: 0.4rem 0 0; font-size: 0.75rem; }
+.references p span { display: block; color: #9eafc1; font-size: 0.69rem; }
+.evaluation { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.75rem; }
+.evaluation span { border: 1px solid #354b61; border-radius: 999px; background: #0d1a2a; padding: 0.2rem 0.55rem; color: #acbdce; font-size: 0.64rem; }
+.thinking { align-self: start; margin: 0; border-radius: 0.7rem; background: #142237; padding: 0.6rem 0.75rem; color: #b9c7d5; font-size: 0.75rem; }
+.error { margin: 0; border: 1px solid #74414c; border-radius: 0.7rem; background: #321d27; padding: 0.65rem 0.75rem; color: #ffd2d5; font-size: 0.75rem; line-height: 1.5; overflow-wrap: anywhere; }
+
+.footer { border-top: 1px solid #26384c; background: #0d1727; padding: 0.75rem; padding-bottom: max(0.75rem, env(safe-area-inset-bottom)); }
+.form { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 0.5rem; }
+.form input { width: 100%; min-width: 0; min-height: 2.8rem; border: 1px solid #354a60; border-radius: 0.7rem; background: #111e30; padding: 0.65rem 0.75rem; color: #e7eef7; font: 400 0.82rem/1.35 var(--font-sans); }
+.form input::placeholder { color: #8ea0b3; }
+.form input:focus-visible { outline: 2px solid #67c8df; outline-offset: 2px; }
+.form button { min-width: 3.75rem; min-height: 2.8rem; border: 1px solid transparent; border-radius: 0.7rem; background: #69c9c1; padding: 0.55rem 0.75rem; color: #0a2027; font: 650 0.78rem/1.2 var(--font-sans); cursor: pointer; }
+.form button:hover:not(:disabled) { background: #87dcd4; }
+.form button:disabled { opacity: 0.48; cursor: not-allowed; }
+.footerHint { margin: 0.55rem 0 0; color: #8093a8; font-size: 0.63rem; line-height: 1.4; text-align: center; }
+.signInPrompt { display: grid; justify-items: center; gap: 0.45rem; padding: 0.25rem 0; text-align: center; }
+.signInPrompt p { margin: 0; color: #c1cedb; font-size: 0.78rem; }
+.signInPrompt a { color: #8fd9d1; font-size: 0.78rem; font-weight: 650; text-underline-offset: 3px; }
+.srOnly { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; }
+
+@media (max-width: 38rem) {
+  .launcher { inset-inline-end: max(0.85rem, env(safe-area-inset-right)); inset-block-end: max(0.85rem, env(safe-area-inset-bottom)); min-height: 3rem; padding-inline-end: 0.85rem; font-size: 0.82rem; }
+  .launcherMark { width: 2.1rem; }
+  .panel { inset-inline: max(0.5rem, env(safe-area-inset-right)) max(0.5rem, env(safe-area-inset-left)); inset-block-end: max(0.5rem, env(safe-area-inset-bottom)); width: auto; height: min(76dvh, 42rem); min-height: min(22rem, calc(100dvh - 1rem)); border-radius: 1rem; }
+}
+
+@media (max-width: 24rem) {
+  .panel { inset-inline: 0; inset-block-end: 0; height: min(82dvh, 42rem); border-radius: 1rem 1rem 0 0; }
+  .header { padding-inline: 0.8rem; }
+  .thread { padding-inline: 0.8rem; }
+}
+
+@media (max-height: 32rem) {
+  .panel { inset-block-end: max(0.5rem, env(safe-area-inset-bottom)); height: calc(100dvh - 1rem); min-height: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .launcher { transition: none; }
+}

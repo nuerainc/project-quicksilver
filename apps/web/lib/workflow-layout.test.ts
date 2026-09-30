@@ -49,9 +49,11 @@ test('workflow graph map handles an empty draft with finite minimum canvas dimen
   assert.equal(layout.height, 136)
 })
 
-test('workflow editor tucks the scrollable visual map behind a labeled disclosure', () => {
+test('workflow editor keeps the visual map available in a responsive full-width canvas', () => {
   const page = readFileSync(new URL('../app/workflows/page.tsx', import.meta.url), 'utf8')
-  assert.match(page, /<details className="mb-6 rounded border border-quicksilver-border">\s*<summary[^>]*>Visual flow · \{nodes\.length\} steps, \{edges\.length\} connections<\/summary>/s)
-  assert.match(page, /max-h-\[440px\] overflow-auto[^>]*role="img" aria-label=\{`Workflow diagram with \$\{nodes\.length\} steps and \$\{edges\.length\} connections`\}/)
-  assert.match(page, /<h3 className="mb-3 font-mono text-\[10px\] uppercase tracking-widest text-quicksilver-accent">Step settings<\/h3>/)
+  assert.match(page, /<section aria-label="Workflow graph" className="qs-panel">/)
+  assert.match(page, /flex h-\[min\(56svh,44rem\)\] min-h-32 w-full items-center justify-center overflow-hidden/)
+  assert.match(page, /role="img" aria-label=\{`Workflow diagram with \$\{nodes\.length\} steps and \$\{edges\.length\} connections`\}/)
+  assert.match(page, /preserveAspectRatio="xMidYMid meet"/)
+  assert.match(page, /<h3 className="mt-1 text-base font-semibold text-quicksilver-signal">Step settings<\/h3>/)
 })

@@ -233,8 +233,9 @@ readiness claims.
 1. **Preserve and regression-lock the existing foundation:** land the local
    agent catalog RBAC and safe rollback-to-draft work with focused tests; keep
    challenge data isolated from the new Studio project.
-2. **Close Gate 0 explicitly:** get product-owner approval for the proposed
-   scope in [`V1-SCOPE.md`](V1-SCOPE.md), then classify every parity row.
+2. **Close Gate 0 explicitly:** preserve the approved P-001–P-123 v1.0.0
+   baseline in [`V1-SCOPE.md`](V1-SCOPE.md), complete remaining operational
+   decisions, and track parity evidence separately from operational readiness.
 3. **Prove one connected workflow path:** publisher → immutable version → host
    admission → durable run → read-only query → NQC evaluation → metadata audit
    and monitoring. Runs pin the admitted digest; persisted graph/digest

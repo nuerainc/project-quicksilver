@@ -96,7 +96,7 @@ test('whoami: the shared supervisor token names NQC_SUPERVISOR_ID and never echo
   assert.equal(ok.body.principalId, 'entity-sole')
   assert.equal(ok.body.kind, 'human')
   assert.equal(ok.body.credential, 'shared-supervisor')
-  assert.deepEqual(ok.body.permissions, ['decision:read', 'decision:propose', 'decision:approve', 'decision:execute', 'decision:rollback', 'workflow:read'])
+  assert.deepEqual(ok.body.permissions, ['decision:read', 'decision:propose', 'decision:approve', 'decision:execute', 'decision:rollback', 'workflow:read', 'finance:read'])
   assertNoSecrets(ok.body, [shared])
 
   const wrong = checkWhoami(bearer('x'.repeat(48)), sharedEnv)
@@ -143,7 +143,7 @@ test('console token: saved, read and cleared under one sessionStorage key; stora
 })
 
 test('console token: sent only as a bearer header to this app\'s own API routes (decisions, whoami, plan, query, workflows)', () => {
-  for (const url of ['/api/decisions/decision-plan-abc-1/action', '/api/decisions/d/execute', '/api/decisions/d/observe', '/api/decisions/d/resume', '/api/decisions/d/rollback', '/api/whoami', '/api/plan', '/api/query', '/api/workflows/validate', '/api/workflows/simulate', '/api/workflows/run']) {
+  for (const url of ['/api/decisions/decision-plan-abc-1/action', '/api/decisions/d/execute', '/api/decisions/d/observe', '/api/decisions/d/resume', '/api/decisions/d/rollback', '/api/whoami', '/api/plan', '/api/query', '/api/dashboard/overview', '/api/workflows/validate', '/api/workflows/simulate', '/api/workflows/run']) {
     assert.equal(mayCarryConsoleToken(url), true, url)
     assert.deepEqual(consoleHeaders(url, 't0k', { 'content-type': 'application/json' }), { 'content-type': 'application/json', authorization: 'Bearer t0k' })
   }
@@ -152,6 +152,11 @@ test('console token: sent only as a bearer header to this app\'s own API routes 
     assert.deepEqual(consoleHeaders(url, 't0k'), {}, url)
   }
   assert.deepEqual(consoleHeaders('/api/whoami', null), {})
+})
+
+test('dashboard finance request attaches the token only to the exact same-origin route', () => {
+  assert.equal(mayCarryConsoleToken('/api/dashboard/finance'), true)
+  assert.equal(mayCarryConsoleToken('/api/dashboard/finance?tenant=other'), false)
 })
 
 test('agent catalog token access is limited to the declared same-origin routes', () => {

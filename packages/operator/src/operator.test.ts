@@ -6,7 +6,8 @@
  */
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtemp, readdir, readFile, rm, symlink, writeFile } from 'node:fs/promises'
+import { spawn } from 'node:child_process'
+import { mkdir, mkdtemp, readdir, readFile, rm, symlink, utimes, writeFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -456,6 +457,36 @@ test('memory: separate book instances serialize concurrent writers to the same c
   assert.equal((await reopened.history()).filter((event) => event.action === 'created').length, 24)
 })
 
+test('memory: separate processes serialize concurrent writers to the same durable file', async () => {
+  const ws = await workspace()
+  const path = join(ws, '.qs-memory', 'memory.json')
+  const memoryModule = new URL('./memory.ts', import.meta.url).href
+  const script = `import { MemoryBook } from ${JSON.stringify(memoryModule)}; const result = await new MemoryBook(process.argv[1]).agentWrite({ scope: 'notes', text: 'Process note ' + process.argv[2] }, { by: 'worker:' + process.argv[2], runId: 'process-' + process.argv[2] }); if (!result.ok) throw new Error(result.reason)`
+  const runWriter = (index: number) => new Promise<void>((resolve, reject) => {
+    const child = spawn(process.execPath, ['--experimental-strip-types', '--no-warnings', '--input-type=module', '-e', script, path, String(index)], { stdio: ['ignore', 'ignore', 'pipe'] })
+    let stderr = ''
+    child.stderr.setEncoding('utf8').on('data', (chunk: string) => { stderr += chunk })
+    child.once('error', reject)
+    child.once('exit', (code) => code === 0 ? resolve() : reject(new Error(`memory writer ${index} exited ${code}: ${stderr}`)))
+  })
+  await Promise.all(Array.from({ length: 10 }, (_, index) => runWriter(index)))
+  const reopened = new MemoryBook(path)
+  assert.equal((await reopened.all()).length, 10, 'cross-process updates are not lost')
+  assert.equal((await reopened.history()).filter((event) => event.action === 'created').length, 10)
+})
+
+test('memory: a lock left by a crashed writer is reclaimed after the stale timeout', async () => {
+  const ws = await workspace()
+  const path = join(ws, '.qs-memory', 'memory.json')
+  const lockDir = `${path}.lock`
+  await mkdir(lockDir, { recursive: true })
+  const stale = new Date(Date.now() - 11 * 60_000)
+  await utimes(lockDir, stale, stale)
+  const result = await new MemoryBook(path).addStated('notes', 'Recovered after stale lock.', 'person')
+  assert.equal(result.text, 'Recovered after stale lock.')
+  assert.equal((await new MemoryBook(path).all()).length, 1)
+})
+
 test('memory: exports verify, restore into an empty book, and continue the audit chain', async () => {
   const ws = await workspace()
   const sourcePath = join(ws, '.qs-memory', 'source.json')
@@ -510,7 +541,6 @@ test('memory: the recall and remember tools work through the gate like any other
 // Skills (M8 part 3)
 
 import { checkSkill, lineDiff, parseSkillMd, renderSkillMd, SkillLibrary, skillTools } from './index.ts'
-import { mkdir } from 'node:fs/promises'
 
 test('skills: SKILL.md front matter parses, and unsafe skills are refused', () => {
   const md = '---\nname: release-notes\ndescription: >\n  Write release notes from\n  the git log.\nlicense: MIT\n---\n\n1. Run git log.\n'

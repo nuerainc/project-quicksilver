@@ -1,6 +1,7 @@
 import './globals.css'
 import type { Metadata, Viewport } from 'next'
 import { AppNavigation } from '@/components/app-navigation'
+import { AgentChatWidget } from '@/components/agent-chat-widget'
 
 // Render per request so each page gets the CSP nonce middleware.ts sets
 // (threat model T-67); a prerendered page would carry no nonce and its
@@ -32,6 +33,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <div id="main-content" tabIndex={-1}>
           {children}
         </div>
+        <AgentChatWidget />
       </body>
     </html>
   )

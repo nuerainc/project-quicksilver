@@ -395,6 +395,7 @@ export const SHARED_SUPERVISOR_PERMISSIONS: readonly Permission[] = Object.freez
   'decision:execute',
   'decision:rollback',
   'workflow:read',
+  'finance:read',
 ])
 
 /** Who a credential belongs to, as `GET /api/whoami` reports it. Never carries a token or digest. */

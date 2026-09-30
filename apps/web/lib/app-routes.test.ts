@@ -51,6 +51,63 @@ test('OpenAPI contract (P-118): paths and methods match exported API route handl
     return methods.map((method) => `${method} ${path}`)
   }).sort()
   assert.deepEqual(declared, implemented, 'update docs/api/openapi.json when a route method is added, removed, or moved')
+
+  const operationIds = new Set<string>()
+  for (const [path, methods] of Object.entries(contract.paths)) {
+    for (const [method, rawOperation] of Object.entries(methods)) {
+      const operation = rawOperation as { operationId?: string; responses?: Record<string, unknown>; requestBody?: unknown }
+      assert.ok(operation.operationId, `${method.toUpperCase()} ${path} has an operationId`)
+      assert.ok(!operationIds.has(operation.operationId!), `duplicate operationId ${operation.operationId}`)
+      operationIds.add(operation.operationId!)
+      assert.ok(operation.responses && Object.keys(operation.responses).length > 0, `${operation.operationId} declares responses`)
+      if (method.toLowerCase() === 'post' || method.toLowerCase() === 'put' || method.toLowerCase() === 'patch') {
+        assert.ok(operation.requestBody, `${operation.operationId} declares its request body`)
+      }
+    }
+  }
+
+  // Catch broken local schema/response/parameter links before the contract is
+  // consumed by SDK generation or API tooling.
+  const resolvePointer = (pointer: string): unknown => {
+    assert.ok(pointer.startsWith('#/'), `only local OpenAPI references are expected: ${pointer}`)
+    return pointer.slice(2).split('/').map((part) => part.replace(/~1/g, '/').replace(/~0/g, '~')).reduce<unknown>((node, key) => {
+      assert.ok(node !== null && typeof node === 'object' && key in node, `unresolved OpenAPI reference: ${pointer}`)
+      return (node as Record<string, unknown>)[key]
+    }, contract)
+  }
+  const visit = (node: unknown): void => {
+    if (Array.isArray(node)) return node.forEach(visit)
+    if (!node || typeof node !== 'object') return
+    const object = node as Record<string, unknown>
+    if (typeof object.$ref === 'string') resolvePointer(object.$ref)
+    Object.values(object).forEach(visit)
+  }
+  visit(contract)
+
+  const validate = contract.paths['/api/workflows/validate']?.post as { requestBody?: { $ref?: string }; responses?: Record<string, { $ref?: string }> } | undefined
+  const simulate = contract.paths['/api/workflows/simulate']?.post as { requestBody?: { $ref?: string }; responses?: Record<string, { $ref?: string }> } | undefined
+  const run = contract.paths['/api/workflows/run']?.post as { requestBody?: { $ref?: string }; responses?: Record<string, { $ref?: string }> } | undefined
+  assert.equal(validate?.requestBody?.$ref, '#/components/requestBodies/WorkflowGraphRequest')
+  assert.equal(validate?.responses?.['2XX']?.$ref, '#/components/responses/WorkflowValidationResponse')
+  assert.equal(simulate?.requestBody?.$ref, '#/components/requestBodies/WorkflowGraphRequest')
+  assert.equal(simulate?.responses?.['2XX']?.$ref, '#/components/responses/WorkflowSimulationResponse')
+  assert.equal(run?.requestBody?.$ref, '#/components/requestBodies/WorkflowRunRequest')
+  assert.equal(run?.responses?.['2XX']?.$ref, '#/components/responses/WorkflowRunResponse')
+
+  const agentBindings: Array<[string, string, string | undefined, string, string?]> = [
+    ['/api/agents/catalog', 'get', undefined, 'AgentCatalogResponse'],
+    ['/api/agents/definitions', 'get', undefined, 'AgentDefinitionsResponse'],
+    ['/api/agents/drafts', 'post', 'CreateAgentDraft', 'AgentDefinitionResponse', '201'],
+    ['/api/agents/drafts/submit', 'post', 'AgentVersionAction', 'AgentDefinitionResponse'],
+    ['/api/agents/review', 'post', 'ReviewAgentDefinition', 'AgentDefinitionResponse'],
+    ['/api/agents/publish', 'post', 'AgentVersionAction', 'AgentDefinitionResponse'],
+    ['/api/agents/rollback', 'post', 'RollbackAgentDefinition', 'AgentDefinitionResponse', '201'],
+  ]
+  for (const [path, method, body, response, status = '2XX'] of agentBindings) {
+    const operation = contract.paths[path]?.[method] as { requestBody?: { $ref?: string }; responses?: Record<string, { $ref?: string }> } | undefined
+    assert.equal(operation?.responses?.[status]?.$ref, `#/components/responses/${response}`, `${method.toUpperCase()} ${path} binds its observed response schema`)
+    if (body) assert.equal(operation?.requestBody?.$ref, `#/components/requestBodies/${body}`, `${method.toUpperCase()} ${path} binds its validated request schema`)
+  }
 })
 
 /** Routes a valid principal with no permission may call, and why (a reviewed list). */
@@ -157,6 +214,10 @@ test('web route permissions (A-3): plan/query/workflows and agent lifecycle use 
   const env = { ...principalEnv }
   assert.deepEqual(WEB_ROUTE_ACCESS.plan.permissions, ['decision:propose'])
   assert.deepEqual(WEB_ROUTE_ACCESS.query.permissions, ['decision:read'])
+  assert.deepEqual(WEB_ROUTE_ACCESS['dashboard/overview'].permissions, ['decision:read'])
+  assert.deepEqual(WEB_ROUTE_ACCESS['dashboard/finance'].permissions, ['finance:read'])
+  assert.equal(checkWebRoute('dashboard/finance', `Bearer ${TOKENS.viewer}`, env).ok, false, 'ordinary viewers cannot read ledger totals')
+  assert.equal(checkWebRoute('dashboard/finance', `Bearer ${TOKENS.supervisor}`, env).ok, true, 'supervisors can read ledger totals')
   assert.deepEqual(WEB_ROUTE_ACCESS['workflows/validate'].permissions, ['workflow:read'])
   assert.deepEqual(WEB_ROUTE_ACCESS['workflows/simulate'].permissions, ['workflow:read'])
   assert.deepEqual(WEB_ROUTE_ACCESS['workflows/run'].permissions, ['run:enqueue'])

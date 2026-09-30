@@ -482,6 +482,12 @@ test('the CLI uses the same intake: a founder submits, lists and denies', async 
     const submitted = await run('submit', 'Look into late invoices.')
     const id = /task-[0-9a-f]{20}/.exec(submitted.stdout)![0]
     assert.match(submitted.stdout, /awaiting-approval/)
+    const second = await run('submit', 'Review the monthly close.')
+    assert.match(second.stdout, /task-[0-9a-f]{20}/)
+    const limited = await run('list', '--limit', '1')
+    assert.equal(new Set(limited.stdout.match(/task-[0-9a-f]{20}/g) ?? []).size, 1, 'CLI list honors the same 1–200 result limit as GET /api/tasks?limit=')
+    const clamped = await run('list', '--limit', '-1')
+    assert.equal(new Set(clamped.stdout.match(/task-[0-9a-f]{20}/g) ?? []).size, 1, 'CLI list mirrors the API lower bound of one result')
     const refused = await run('submit', 'Summarize the patent claims.', '--capability', 'reports.brief')
     assert.match(refused.stdout, /refused/)
     assert.match((await run('list', '--status', 'awaiting-approval')).stdout, new RegExp(id))

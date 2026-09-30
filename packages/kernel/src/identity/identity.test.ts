@@ -40,6 +40,9 @@ test('RBAC: deny by default, allow only through a granting role', () => {
   assert.equal(denied.allowed, false)
   assert.match(denied.reasons[0]!, /No role grants "run:enqueue"/)
   assert.deepEqual(access.authorize(dev, 'run:enqueue', acme).grantedBy, ['developer'])
+  assert.equal(access.authorize(viewer, 'finance:read', acme).allowed, false, 'finance is excluded from the ordinary viewer role')
+  assert.equal(access.authorize(ana, 'finance:read', acme).allowed, true, 'the supervisor can review recorded ledger totals')
+  assert.equal(access.authorize(agent, 'finance:read', acme).allowed, false, 'agents never read finance records')
   assert.equal(access.authorize(undefined, 'run:read', acme).allowed, false)
   assert.equal(access.authorize({ ...viewer, roles: ['nonexistent'] }, 'run:read', acme).allowed, false)
   assert.equal(access.authorize(viewer, 'root:everything' as 'run:read', acme).allowed, false)
@@ -61,6 +64,7 @@ test('RBAC: agents never gain authority, even if a role would grant it', () => {
     assert.equal(decision.allowed, false, permission)
   }
   assert.equal(access.authorize(agent, 'decision:propose', acme).allowed, true)
+  assert.equal(AUTHORITY_PERMISSIONS.includes('finance:read'), true, 'finance access is treated as authority')
   assert.equal(access.effectivePermissions(agent).has('decision:approve'), false)
   for (const permission of ['agent:review', 'agent:publish'] as const) {
     assert.equal(access.authorize(agent, permission, acme).allowed, false, permission)

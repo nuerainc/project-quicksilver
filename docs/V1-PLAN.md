@@ -31,20 +31,25 @@ and remaining owner/evidence checklist are tracked in [`V1-SCOPE.md`](V1-SCOPE.m
 Gate 0 remains open until the parity classification and operational decisions
 are completed.
 
-The product owner has decided that **all requirements P-001–P-121 are required
+The product owner has decided that **all requirements P-001–P-123 are required
 for v1.0.0**. P-017–P-031 are the platform-baseline group within that complete
-scope, not the only parity rows gated on the release. P-122 and P-123 are
-additional usability requirements; record their release classification before
-Gate 0 closes. Any exception requires an explicit owner, rationale, replacement
-behavior, evidence, and product-owner approval; nothing may be silently moved
-post-1.0.0.
+scope, not the only parity rows gated on the release. P-122 and P-123 are also
+in scope by explicit product-owner direction. Any exception requires an
+explicit owner, rationale, replacement behavior, evidence, and product-owner
+approval; nothing may be silently moved post-1.0.0.
+
+Keep verification categories distinct: P-014, P-081, P-089, P-096, and P-121
+require operational evidence and remain release blockers until that evidence
+is recorded. P-064–P-066 measure Aura's separate charter ladder and, as stated
+in the parity register, do not gate a Quicksilver release. Tests alone do not
+satisfy operational-evidence requirements.
 
 ### Gate 0 checklist
 
 - [x] Record the literal-baseline choice in `docs/V1-SCOPE.md`.
 - [x] Record the literal-baseline release-scope decision in `docs/NUERA-QUICKSILVER-PRODUCT.md`.
-- [x] Include every P-001–P-121 requirement in the v1.0.0 release scope.
-- [ ] Classify P-122 and P-123 for v1.0.0 and define acceptance evidence.
+- [x] Include every P-001–P-123 requirement in the v1.0.0 release scope.
+- [x] Define P-122/P-123 acceptance evidence: responsive rendered-app checks and task-based usability/accessibility review remain required before release.
 - [ ] Name product, security, operations, data, and finance owners.
 - [ ] Choose supported Node, browsers, database, deployment platform, model providers, and Sanity dataset.
 - [ ] Decide whether WAES is a service or whether manual founder review remains allowed.

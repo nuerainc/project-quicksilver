@@ -2,7 +2,7 @@
  * Task commands (M7 part 4), run on the founder's computer or the host.
  *
  *   npm run tasks -- submit "<objective>" [--capability <id>] [--department <d>] [--key <idempotencyKey>]
- *   npm run tasks -- list [--status <status>]
+ *   npm run tasks -- list [--status <status>] [--limit <1-200>]
  *   npm run tasks -- show <taskId>
  *   npm run tasks -- cancel <taskId> ["reason"]
  *   npm run tasks -- approve <taskId> ["justification"]      a human founder only
@@ -70,7 +70,7 @@ function line(t: Task): string {
 
 async function main(): Promise<void> {
   if (!cmd || cmd === 'help' || cmd === '--help') {
-    console.log('Commands: submit, list, show, cancel, approve, deny, capabilities, client add|list|revoke. See the header of packages/host/src/tasks-cli.ts.')
+    console.log('Commands: submit, list [--status <status>] [--limit <1-200>], show, cancel, approve, deny, capabilities, client add|list|revoke. See the header of packages/host/src/tasks-cli.ts.')
     return
   }
   const config = await hostConfig()
@@ -134,7 +134,9 @@ async function main(): Promise<void> {
     case 'list': {
       const status = flag('--status')
       if (status && !TASK_STATUSES.includes(status as Task['status'])) fail(`--status must be one of ${TASK_STATUSES.join(', ')}.`)
-      const tasks = await service.list(actor, status ? { status } : {})
+      const requestedLimit = flag('--limit')
+      const limit = Math.min(200, Math.max(1, Number(requestedLimit ?? 50) || 50))
+      const tasks = (await service.list(actor, status ? { status } : {})).slice(0, limit)
       if (!tasks.length) console.log('No tasks.')
       for (const t of tasks) console.log(line(t))
       return

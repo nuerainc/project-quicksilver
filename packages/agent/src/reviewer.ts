@@ -17,10 +17,11 @@ import { generateText, Output } from 'ai'
 import { z } from 'zod'
 
 import { REVIEWER_SYSTEM_PROMPT } from './prompts.ts'
-import { getMode, modelForRole, resolveId } from './models.ts'
+import { getMode, resolveId } from './models.ts'
 import type { ProposedAction } from '@quicksilver/kernel'
 import { assertAgentDispatch } from './governance.ts'
 import type { NueraQuicksilverAgent } from './contracts.ts'
+import { withMeasuredProviderFallback } from './provider-fallback.ts'
 
 // NOTE: no `.default([])` on these array fields. A Zod default marks the field
 // optional in the generated JSON Schema, which fails Azure/OpenAI's strict
@@ -71,8 +72,8 @@ export async function reviewProposedAction(input: ReviewInput): Promise<ReviewRe
     : '(none resolved)'
 
   try {
-    const result = await generateText({
-      model: modelForRole('reviewer'),
+    const result = await withMeasuredProviderFallback('reviewer', (model) => generateText({
+      model,
       system: REVIEWER_SYSTEM_PROMPT,
       prompt: `Proposed action: ${action.description}
 
@@ -93,7 +94,7 @@ Uncertainty: ${action.uncertainty}/5
 Review this proposed action independently. Flag any policy conflicts, missing evidence, or risk concerns you see. Do not simply restate the kernel's own computation -- add what an independent reviewer would actually catch.`,
       experimental_output: Output.object({ schema: ReviewResultSchema }),
       maxRetries: 1,
-    } as Parameters<typeof generateText>[0])
+    } as Parameters<typeof generateText>[0]))
 
     const parsed = (result as unknown as { experimental_output?: ReviewResult }).experimental_output
     return parsed ?? unreviewed('model did not return structured output')

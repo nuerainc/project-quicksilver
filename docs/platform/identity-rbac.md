@@ -12,7 +12,7 @@ model, and so do the web app's supervisor decision routes.
 - **Permission:** one of a fixed list. Examples: `run:enqueue`, `run:cancel`,
   `run:redrive`, `decision:approve`, `decision:rollback`, `workflow:publish`,
   `memory:approve`, `routing:approve`, `secret:*`, `audit:read`,
-  `tenant:admin`, `intent:provide`, `intent:rules`.
+  `finance:read`, `tenant:admin`, `intent:provide`, `intent:rules`.
 - **Roles:** built in are `viewer`, `operator`, `developer`, `supervisor`,
   `auditor`, `tenant-admin`, `trigger` (enqueue runs and submit tasks), `task-client`, `agent-worker`,
   `intent-provider` and `intent-admin`.
@@ -37,8 +37,8 @@ model, and so do the web app's supervisor decision routes.
 2. **Tenant isolation.** A principal can only act on resources in its own
    tenant. No super-role crosses tenants.
 3. **Agents never hold authority.** Agent principals can't approve, execute,
-   roll back, redrive, publish, read or write secrets, or administer, even if
-   a role would grant it. This matches the agent-manifest rule that agents
+  roll back, redrive, publish, read or write secrets, read finance records, or
+  administer, even if a role would grant it. This matches the agent-manifest rule that agents
    propose and a human authorizes.
 4. **Separation of duties.** A principal can't approve a decision, memory
    change, routing change or workflow publication that it requested itself.

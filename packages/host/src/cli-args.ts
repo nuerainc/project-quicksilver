@@ -10,7 +10,7 @@ export const CLI_VALUE_FLAGS = Object.freeze({
   onboard: [] as const,
   genesis: ['--source', '--experiment', '--channel', '--proposer'] as const,
   operate: ['--source', '--experiment', '--cash'] as const,
-  tasks: ['--capability', '--department', '--key', '--status'] as const,
+  tasks: ['--capability', '--department', '--key', '--status', '--limit'] as const,
   whatif: ['--run', '--horizon', '--runs', '--seed', '--cash', '--scenario', '--period-days', '--reserve', '--block', '--noise', '--department'] as const,
 })
 

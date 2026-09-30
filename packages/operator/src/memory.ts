@@ -17,9 +17,9 @@
  *   in the workspace are loaded as data, with lines that try to instruct the
  *   agent to drop its rules flagged rather than obeyed.
  */
-import { mkdir, readFile, readdir, writeFile, rename } from 'node:fs/promises'
+import { mkdir, readFile, readdir, writeFile, rename, rm, stat } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
-import { join, resolve } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 import { createHash, randomBytes } from 'node:crypto'
 import { z } from 'zod'
 
@@ -189,6 +189,44 @@ export interface MemoryExportBundle {
 const MEMORY_AUDIT_GENESIS = '0'.repeat(64)
 const DEFAULT_MEMORY_RETENTION_DAYS = 365
 const memoryWriteQueues = new Map<string, Promise<void>>()
+const MEMORY_LOCK_STALE_MS = 10 * 60_000
+const MEMORY_LOCK_WAIT_MS = 30_000
+
+async function withMemoryFileLock<T>(path: string, operation: () => Promise<T>): Promise<T> {
+  await mkdir(dirname(path), { recursive: true, mode: 0o700 })
+  const lockDir = `${path}.lock`
+  const started = Date.now()
+  while (true) {
+    try {
+      await mkdir(lockDir, { mode: 0o700 })
+      try {
+        await writeFile(join(lockDir, 'owner.json'), JSON.stringify({ pid: process.pid, token: randomBytes(16).toString('hex'), createdAt: new Date().toISOString() }), { mode: 0o600, flag: 'wx' })
+      } catch (error) {
+        await rm(lockDir, { recursive: true, force: true })
+        throw error
+      }
+      break
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code
+      if (code !== 'EEXIST' && code !== 'EISDIR') throw error
+      try {
+        const lockStat = await stat(lockDir)
+        if (Date.now() - lockStat.mtimeMs > MEMORY_LOCK_STALE_MS) {
+          // Mutations hold this lock only for local read/modify/write. A ten
+          // minute old lock indicates a crashed process, not a live operation.
+          await rm(lockDir, { recursive: true, force: true })
+          continue
+        }
+      } catch (lockError) {
+        if ((lockError as NodeJS.ErrnoException).code === 'ENOENT') continue
+        throw lockError
+      }
+      if (Date.now() - started >= MEMORY_LOCK_WAIT_MS) throw new Error('Timed out waiting for the memory book write lock.')
+      await new Promise((resolve) => setTimeout(resolve, 15 + Math.floor(Math.random() * 35)))
+    }
+  }
+  try { return await operation() } finally { await rm(lockDir, { recursive: true, force: true }) }
+}
 
 function sha256(value: string): string { return createHash('sha256').update(value).digest('hex') }
 function memoryEventHash(event: Omit<MemoryAuditEvent, 'hash'>): string { return sha256(JSON.stringify(event)) }
@@ -359,7 +397,7 @@ export class MemoryBook {
       return result
     }
     const previous = memoryWriteQueues.get(this.path) ?? Promise.resolve()
-    const p = previous.then(run, run)
+    const p = previous.then(() => withMemoryFileLock(this.path, run), () => withMemoryFileLock(this.path, run))
     const tail = p.then(() => undefined, () => undefined)
     memoryWriteQueues.set(this.path, tail)
     void tail.then(() => {

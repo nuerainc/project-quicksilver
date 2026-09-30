@@ -50,15 +50,24 @@ const backup = await source.exportData()
 await target.restore(backup, authorizedReviewerId)
 ```
 
-These methods do not implement encryption-at-rest, access control, tenant or
-domain labels, cross-process locking, or authorized export/restore endpoints.
-Per-person memory storage currently derives a directory from a sanitized
-person ID; colliding sanitized IDs and migration to collision-safe namespaces
-must be resolved before multi-tenant hosting. P-018 remains partial until those
-gaps and explicit source-decision validation are closed.
+These methods do not implement encryption-at-rest, identity-backed access
+control, sensitivity labels, domain labels, or authorized export/restore
+endpoints. Per-person directories encode the exact UTF-8 identity as base64url,
+so distinct IDs cannot collide through lossy sanitization. Simple legacy IDs
+are moved automatically when the destination is empty. Legacy paths produced
+from punctuation-bearing IDs may be ambiguous; the operator refuses to use
+memory for that identity until an owner reviews and resolves the old data.
+
+Mutations to one canonical memory file are serialized across local processes
+with an atomic directory lock. Lock acquisition waits up to 30 seconds and
+reclaims locks older than ten minutes. This is local-filesystem coordination;
+network filesystems and multi-host locking are not established. P-018 remains
+partial until identity-backed authorization, sensitivity-aware retrieval,
+source-decision validation, and the remaining memory capabilities are closed.
 
 Regression coverage is in `packages/operator/src/operator.test.ts` under the
-`memory:` cases. Run it with:
+`memory:` cases and in `packages/operator/src/setup.test.ts` for namespace
+isolation and migration. Run the Operator suite with:
 
 ```sh
 node --experimental-strip-types --no-warnings --test packages/operator/src/operator.test.ts

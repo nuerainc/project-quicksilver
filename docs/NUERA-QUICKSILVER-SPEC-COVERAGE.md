@@ -100,7 +100,7 @@ These requirements come from the [product definition](NUERA-QUICKSILVER-PRODUCT.
 | WAES review | None | Missing; `wellbeingReview` type, review contract, hard block on failure |
 | Small-budget spend risk | Financial tiers start at $1,000 | Missing; a lower tier scale for Genesis runs |
 | Business agent family | Planner, reviewer and query manifests | Missing; research, offer, content, outreach, sales, fulfillment and finance agents, each defined by a manifest |
-| Platform feature baseline | See the tables above; the pass/fail list is [parity tests](platform/parity-tests.md) (123 requirements: 83 covered, 17 partial, 15 missing, 8 needing operational evidence, as of 2026-09-30) | Partial; literal baseline selected. P-024–P-027 and P-031 remain missing; all partial and missing rows, including P-122 and P-123, remain in V1 scope |
+| Platform feature baseline | See the tables above; the pass/fail list is [parity tests](platform/parity-tests.md) (123 requirements: 83 covered, 17 partial, 15 missing, 8 needing operational evidence, as of 2026-09-30) | Partial; P-001–P-123 are required for v1.0.0. P-024–P-027 and P-031 remain missing. P-122/P-123 are in scope by the product owner's explicit direction. |
 
 ## Regression coverage
 
