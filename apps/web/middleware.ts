@@ -41,6 +41,10 @@ export function middleware(request: NextRequest) {
 }
 
 export const config = {
+  // Vercel Services currently rejects Edge middleware output. Next.js 15.5
+  // supports Node.js middleware, which preserves this security boundary while
+  // emitting a Node runtime function for the web service.
+  runtime: 'nodejs',
   // Everything except Next's hashed static assets and image optimiser.
   matcher: [{ source: '/((?!_next/static|_next/image|favicon.ico).*)' }],
 }
