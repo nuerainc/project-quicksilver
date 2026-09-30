@@ -13,6 +13,7 @@ const SHELL_ROUTE_GROUP: Record<string, (typeof SHELL_GROUP_ORDER)[number]> = {
   '/planning': 'Operate',
   '/workflows': 'Build',
   '/agents': 'Govern',
+  '/entities': 'Govern',
   '/monitoring': 'Observe',
   '/monitoring/traces': 'Observe',
 }

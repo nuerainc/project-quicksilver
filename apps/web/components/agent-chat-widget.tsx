@@ -257,7 +257,7 @@ function QueryAnswer({ result }: { result: QueryResponse }) {
         <details className={styles.references}>
           <summary>Related records</summary>
           {result.entities.map((entity) => (
-            <p key={entity.id}><strong>{entity.name}</strong> <span>{entity.entityType}{entity.role ? ` · ${entity.role}` : ''}</span></p>
+            <p key={entity.id}><strong>{entity.name}</strong> <span>{entity.entityType}{entity.role ? ` · ${entity.role}` : ''}</span> <Link href={`/entities?search=${encodeURIComponent(entity.name)}`}>Open record</Link></p>
           ))}
           {result.capabilities.map((capability) => <p key={capability.id}><strong>{capability.name}</strong> <span>Capability · risk {capability.riskLevel}/5</span></p>)}
           {result.policies.map((policy) => <p key={policy.id}><strong>{policy.name}</strong> <span>Policy · {policy.scope}</span></p>)}

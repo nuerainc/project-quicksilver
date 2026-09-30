@@ -18,6 +18,11 @@ test('business chat is available across every app page and separates asking from
   assert.match(widget, /\/planning#console-token/)
 })
 
+test('company records cited by Ask mode link into the entity directory', () => {
+  assert.match(widget, /href=\{`\/entities\?search=\$\{encodeURIComponent\(entity\.name\)\}`\}/)
+  assert.match(widget, /Open record/)
+})
+
 test('chat launcher and transcript have accessible, session-scoped controls', () => {
   assert.match(widget, /aria-haspopup="dialog"/)
   assert.match(widget, /aria-expanded=\{open\}/)

@@ -569,6 +569,18 @@
         }
       }
     },
+    "/api/entities": {
+      "get": {
+        "operationId": "listCompanyEntities",
+        "tags": ["Company data"],
+        "responses": {
+          "401": { "$ref": "#/components/responses/ErrorResponse" },
+          "403": { "$ref": "#/components/responses/ErrorResponse" },
+          "503": { "$ref": "#/components/responses/ErrorResponse" },
+          "2XX": { "$ref": "#/components/responses/JsonResponse" }
+        }
+      }
+    },
     "/api/plan": {
       "post": {
         "operationId": "createPlan",
