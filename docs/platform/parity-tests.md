@@ -16,6 +16,11 @@ behavior, and covered by the regression suites. Tests alone are not the
 
 ## 1. The parity gate
 
+The product owner selected the literal baseline on 2026-09-29. Every P-017–P-031
+platform-baseline capability remains required before 1.0.0; the remaining
+classification checklist is in [`V1-SCOPE.md`](../V1-SCOPE.md). This does not
+mark unimplemented parity rows complete or waive any requirement.
+
 From the product definition (sections 7, 8 and 8.1):
 
 - **Platform baseline parity** is goal 8: "proven by a pass/fail test for each

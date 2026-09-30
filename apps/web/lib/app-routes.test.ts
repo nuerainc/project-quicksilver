@@ -96,7 +96,7 @@ test('web API routes (A-3, A-9): every handler refuses no credential (401), an u
   for (const expected of ['POST /api/plan', 'POST /api/query', 'POST /api/workflows/run', 'POST /api/workflows/simulate', 'POST /api/workflows/validate', 'POST /api/decisions/[id]/action', 'GET /api/whoami']) {
     assert.ok(routes.some((r) => r.key === expected), `${expected} was enumerated`)
   }
-  for (const expected of ['GET /api/agents/catalog', 'GET /api/agents/definitions', 'POST /api/agents/drafts', 'POST /api/agents/drafts/submit', 'POST /api/agents/review', 'POST /api/agents/publish']) {
+  for (const expected of ['GET /api/agents/catalog', 'GET /api/agents/definitions', 'POST /api/agents/drafts', 'POST /api/agents/drafts/submit', 'POST /api/agents/review', 'POST /api/agents/publish', 'POST /api/agents/rollback']) {
     assert.ok(routes.some((r) => r.key === expected), `${expected} was enumerated`)
   }
   for (const route of routes) {
@@ -134,10 +134,18 @@ test('web route permissions (A-3): plan/query/workflows and agent lifecycle use 
   assert.deepEqual(WEB_ROUTE_ACCESS['workflows/validate'].permissions, ['workflow:read'])
   assert.deepEqual(WEB_ROUTE_ACCESS['workflows/simulate'].permissions, ['workflow:read'])
   assert.deepEqual(WEB_ROUTE_ACCESS['workflows/run'].permissions, ['run:enqueue'])
-  assert.deepEqual(WEB_ROUTE_ACCESS['agents/catalog'].permissions, ['workflow:read'])
-  assert.deepEqual(WEB_ROUTE_ACCESS['agents/drafts'].permissions, ['workflow:write'])
-  assert.deepEqual(WEB_ROUTE_ACCESS['agents/review'].permissions, ['workflow:publish'])
-  assert.deepEqual(WEB_ROUTE_ACCESS['agents/publish'].permissions, ['workflow:publish'])
+  assert.deepEqual(WEB_ROUTE_ACCESS['agents/catalog'].permissions, ['agent:read'])
+  assert.deepEqual(WEB_ROUTE_ACCESS['agents/definitions'].permissions, ['agent:read'])
+  assert.deepEqual(WEB_ROUTE_ACCESS['agents/drafts'].permissions, ['agent:write'])
+  assert.deepEqual(WEB_ROUTE_ACCESS['agents/drafts/submit'].permissions, ['agent:write'])
+  assert.deepEqual(WEB_ROUTE_ACCESS['agents/review'].permissions, ['agent:review'])
+  assert.deepEqual(WEB_ROUTE_ACCESS['agents/publish'].permissions, ['agent:publish'])
+  assert.deepEqual(WEB_ROUTE_ACCESS['agents/rollback'].permissions, ['agent:write'])
+  assert.equal(checkWebRoute('agents/catalog', `Bearer ${TOKENS.viewer}`, env).ok, true)
+  assert.equal(checkWebRoute('agents/drafts', `Bearer ${TOKENS.proposer}`, env).ok, true)
+  assert.equal(checkWebRoute('agents/review', `Bearer ${TOKENS.proposer}`, env).ok, false, 'developers cannot review agent definitions')
+  assert.equal(checkWebRoute('agents/review', `Bearer ${TOKENS.supervisor}`, env).ok, true)
+  assert.equal(checkWebRoute('agents/publish', `Bearer ${TOKENS.supervisor}`, env).ok, true)
   // The principal authenticated from the header is the requester; nothing else is consulted.
   const plan = checkWebRoute('plan', `Bearer ${TOKENS.proposer}`, env)
   assert.deepEqual(plan, { ok: true, principalId: 'entity-pat' })
@@ -159,7 +167,7 @@ test('agent catalog routes validate bodies before any Sanity access', async () =
   setEnv(principalEnv)
   const routes = await loadHandlers()
   const supervisor = `Bearer ${TOKENS.supervisor}`
-  for (const key of ['POST /api/agents/drafts', 'POST /api/agents/drafts/submit', 'POST /api/agents/review', 'POST /api/agents/publish']) {
+  for (const key of ['POST /api/agents/drafts', 'POST /api/agents/drafts/submit', 'POST /api/agents/review', 'POST /api/agents/publish', 'POST /api/agents/rollback']) {
     const route = routes.find((item) => item.key === key)!
     assert.equal((await call(route, supervisor, '{}')).status, 400, key)
   }
