@@ -39,6 +39,7 @@ const RATE_LIMIT_ENV: Readonly<Record<WebRateLimitClass, string>> = Object.freez
 /** The routes (other than the decision routes, which have their own checks) and what each needs. */
 export type WebRoute =
   | 'plan' | 'query'
+  | 'monitoring/workflows'
   | 'workflows/validate' | 'workflows/simulate' | 'workflows/run' | 'workflows/diff'
   | 'workflows/publications' | 'workflows/executions' | 'workflows/drafts' | 'workflows/drafts/submit'
   | 'workflows/review' | 'workflows/publish' | 'workflows/rollback'
@@ -48,6 +49,7 @@ export const WEB_ROUTE_ACCESS: Readonly<Record<WebRoute, { permissions: readonly
   plan: { permissions: Object.freeze<Permission[]>(['decision:propose']), rateLimit: 'model' },
   // A question to the query agent (a model) that writes an evaluation record.
   query: { permissions: Object.freeze<Permission[]>(['decision:read']), rateLimit: 'model' },
+  'monitoring/workflows': { permissions: Object.freeze<Permission[]>(['workflow:read']) },
   // Stateless checks of a graph the caller sends: no model, no write.
   'workflows/validate': { permissions: Object.freeze<Permission[]>(['workflow:read']) },
   'workflows/simulate': { permissions: Object.freeze<Permission[]>(['workflow:read']) },
