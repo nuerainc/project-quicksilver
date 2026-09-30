@@ -1,4 +1,5 @@
 node_modules
+.pnpm-store/
 .next
 dist
 build
@@ -8,6 +9,9 @@ build
 .DS_Store
 .turbo
 coverage
+__pycache__/
+*.py[cod]
+*.tsbuildinfo
 *.log
 .vscode/*
 !.vscode/extensions.json

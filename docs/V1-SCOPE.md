@@ -3,7 +3,10 @@
 **Baseline choice: literal baseline — selected by the product owner on 2026-09-29.**  
 **Product owner:** Brodi (per the NQC Kernel specification).  
 **Decision owner for product, security, operations, data, and finance:** Brodi.
-**Scope classification and operational decisions:** still in progress.
+**Scope:** P-001–P-121 are required for v1.0.0, per the product owner's
+decision. P-122 and P-123 were added afterward and still need an explicit
+release classification. Operational decisions and release evidence remain in
+progress.
 
 The product owner selected the literal baseline. This records the decision; it
 does not claim the requirements are implemented or waive any requirement. The
@@ -12,13 +15,12 @@ the [M8–M9 enterprise plan](M8-M9-ENTERPRISE-PLAN.md).
 
 ## Release rule
 
-Build every platform-baseline capability P-017–P-031 before 1.0.0, as defined
-by `V1-PLAN.md`. Complete all other applicable parity requirements and all
-capabilities in the authoritative enterprise specification by M9. No baseline
-capability is reduced to a mode-critical subset. Any `not applicable`
-classification outside the literal P-017–P-031 commitment still needs the
-product owner's explicit rationale, replacement behavior, owner, and evidence;
-no requirement is silently deferred.
+Complete every requirement P-001–P-121 for v1.0.0, including all P-017–P-031
+platform-baseline capabilities. P-122 and P-123 are active usability
+requirements; their release classification must be explicitly recorded before
+Gate 0 closes. No requirement may be silently deferred or marked not applicable
+without the product owner's rationale, replacement behavior, owner, and
+acceptance evidence.
 
 Implementation order remains risk-based: SDKs, workflow authoring, hosted
 runtime, identity and secrets, monitoring, and governed extensions are all
@@ -27,11 +29,11 @@ and signed extension lifecycle; it remains in the M9 scope.
 
 ## Required baseline and product scope
 
-Every P-017–P-031 platform domain listed in the [parity tests](platform/parity-tests.md)
-is required before 1.0.0. Genesis, Onboard, Operate, WAES, provenance, finance,
-and their required integrations also remain part of the product definition and
-M8–M9 delivery contract. This scope record does not assert that any missing
-path is implemented; current evidence is in [spec coverage](NUERA-QUICKSILVER-SPEC-COVERAGE.md).
+Every P-001–P-121 row in the [parity tests](platform/parity-tests.md) is
+required before 1.0.0. This includes the P-017–P-031 platform baseline,
+Genesis, Onboard, Operate, WAES, provenance, finance, and their required
+integrations. This scope record does not assert that any missing path is
+implemented; current evidence is in [spec coverage](NUERA-QUICKSILVER-SPEC-COVERAGE.md).
 The dedicated Quicksilver Sanity project stays separate from the public Sanity
 Challenge project and its challenge dataset.
 
@@ -42,7 +44,8 @@ independent human approval or reviewer-separation rules for runtime actions.
 
 | Decision | Recommended default | Status |
 |---|---|---|
-| Literal baseline vs. mode-critical baseline | Literal; P-017–P-031 required before 1.0.0 | **Selected 2026-09-29** |
+| P-001–P-121 release scope | All P-001–P-121 are v1.0.0 requirements | **Selected by product owner** |
+| P-122 and P-123 release scope | Explicitly classify the added usability requirements before Gate 0 closes | Open |
 | Pilot scenarios | Nuera Onboard; founder-owned, digital-only Genesis microbusiness with $500/30-day limits; Operate on that venture after Genesis handover | Onboard and Genesis are already in the product definition; Operate linkage needs confirmation |
 | Deployment | Vercel for `apps/web`; Render for the persistent host and managed Postgres; keep Sanity Studio/project separate | Proposed; not deployed |
 | Host replica count | One replica for initial founder pilots; require B-16 shared webhook replay protection before enabling multiple replicas | Proposed |
@@ -57,8 +60,8 @@ independent human approval or reviewer-separation rules for runtime actions.
 
 - [x] Product owner selects literal baseline (2026-09-29).
 - [ ] Exact pilot scenarios and supported connectors/channels are listed.
-- [ ] Every P-001–P-121 is classified `v1`, `post-v1`, or `not applicable`
-      with an owner, rationale, replacement behavior, and evidence.
+- [x] P-001–P-121 are included in v1.0.0 per the product owner's decision.
+- [ ] Classify P-122 and P-123 for v1.0.0; document acceptance evidence.
 - [x] Product, security, operations, data, and finance decision owner is Brodi.
 - [ ] Runtime, provider, data-class, WAES, and replica decisions are recorded.
 - [ ] `V1-ACCEPTANCE.md` maps every in-scope item to automated and operational

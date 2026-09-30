@@ -17,9 +17,10 @@ suites, plus TypeScript checks for eight projects. The separate Operator suite
 had 26/34 pass and 8 failures on Windows; review those failures before release.
 
 Checkpoint verification on 2026-09-30: the web regression suite passed 69/69
-and web typecheck passed; the latest full Operator suite passed 42/43 with one
+and web typecheck passed; the latest full Operator suite passed 43/44 with one
 Windows environment skip (`taskkill` access denied), and its typecheck passed.
-The host suite passed 129/129 with host typecheck passing. The Go SDK checks
+The host suite passed 129/129 with host typecheck passing. Operator regression
+tests are included in `npm run verify` as of this checkpoint. The Go SDK checks
 could not run locally because no Go executable is installed.
 
 A requirement is not complete until it meets the roadmap's completion
@@ -29,9 +30,10 @@ behavior, and covered by the regression suites. Tests alone are not the
 
 ## 1. The parity gate
 
-The product owner selected the literal baseline on 2026-09-29. Every P-017–P-031
-platform-baseline capability remains required before 1.0.0; the remaining
-classification checklist is in [`V1-SCOPE.md`](../V1-SCOPE.md). This does not
+The product owner selected the literal baseline on 2026-09-29 and confirmed
+that every P-001–P-121 requirement is required before 1.0.0. P-017–P-031 are
+the platform-baseline subset. P-122 and P-123 were added later and still need
+release classification; see [`V1-SCOPE.md`](../V1-SCOPE.md). This does not
 mark unimplemented parity rows complete or waive any requirement.
 
 From the product definition (sections 7, 8 and 8.1):

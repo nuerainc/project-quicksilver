@@ -2,7 +2,6 @@ package quicksilver
 
 import (
 	"context"
-	"errors"
 	"encoding/json"
 	"errors"
 	"net/http"

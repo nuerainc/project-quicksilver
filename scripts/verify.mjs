@@ -4,6 +4,7 @@ const commands = [
   ['kernel:test', 'Kernel regression suite'],
   ['agent:test', 'Agent regression suite'],
   ['host:test', 'Host regression suite'],
+  ['operator:test', 'Operator regression suite'],
   ['aura:test', 'Aura regression suite'],
   ['seed:test', 'Seed and web security suite'],
   ['sdk:test', 'TypeScript SDK contract suite'],

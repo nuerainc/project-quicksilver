@@ -11,9 +11,10 @@ carries a status label:
 - **New:** this definition requires it, and the repository doesn't have it yet.
 
 **Release scope decision (2026-09-29):** the product owner selected the literal
-platform baseline. Every P-017–P-031 capability remains required before 1.0.0;
-see the [v1 scope record](V1-SCOPE.md) for open classification and operational
-evidence work.
+baseline and confirmed that all P-001–P-121 requirements are required before
+1.0.0. P-017–P-031 are the platform-baseline subset, not the complete release
+scope. P-122 and P-123 were added later and need explicit release classification.
+See the [v1 scope record](V1-SCOPE.md) for operational decisions and evidence.
 
 Nuera Quicksilver belongs to the Applied Engineering Platforms division of
 Nuera Research & Developmental Laboratories (Nuera RDL).
