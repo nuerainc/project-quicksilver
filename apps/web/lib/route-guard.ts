@@ -37,7 +37,11 @@ const RATE_LIMIT_ENV: Readonly<Record<WebRateLimitClass, string>> = Object.freez
 })
 
 /** The routes (other than the decision routes, which have their own checks) and what each needs. */
-export type WebRoute = 'plan' | 'query' | 'workflows/validate' | 'workflows/simulate' | 'workflows/run'
+export type WebRoute =
+  | 'plan' | 'query'
+  | 'workflows/validate' | 'workflows/simulate' | 'workflows/run' | 'workflows/diff'
+  | 'workflows/publications' | 'workflows/executions' | 'workflows/drafts' | 'workflows/drafts/submit'
+  | 'workflows/review' | 'workflows/publish' | 'workflows/rollback'
 
 export const WEB_ROUTE_ACCESS: Readonly<Record<WebRoute, { permissions: readonly Permission[]; rateLimit?: WebRateLimitClass }>> = Object.freeze({
   // Planning calls the planner and reviewer models and writes decision documents.
@@ -49,6 +53,16 @@ export const WEB_ROUTE_ACCESS: Readonly<Record<WebRoute, { permissions: readonly
   'workflows/simulate': { permissions: Object.freeze<Permission[]>(['workflow:read']) },
   // A live run calls the query agent: the same permission the host checks for POST /api/runs.
   'workflows/run': { permissions: Object.freeze<Permission[]>(['run:enqueue']), rateLimit: 'model' },
+  // Version listing is read-only; lifecycle writes use separate routes so
+  // authorization is decided before request bodies are inspected (A-3).
+  'workflows/publications': { permissions: Object.freeze<Permission[]>(['workflow:read']) },
+  'workflows/diff': { permissions: Object.freeze<Permission[]>(['workflow:read']) },
+  'workflows/executions': { permissions: Object.freeze<Permission[]>(['workflow:read']) },
+  'workflows/drafts': { permissions: Object.freeze<Permission[]>(['workflow:write']), rateLimit: 'write' },
+  'workflows/drafts/submit': { permissions: Object.freeze<Permission[]>(['workflow:write']), rateLimit: 'write' },
+  'workflows/review': { permissions: Object.freeze<Permission[]>(['workflow:publish']), rateLimit: 'write' },
+  'workflows/publish': { permissions: Object.freeze<Permission[]>(['workflow:publish']), rateLimit: 'write' },
+  'workflows/rollback': { permissions: Object.freeze<Permission[]>(['workflow:publish']), rateLimit: 'write' },
 })
 
 /** A refusal ready to return: status, JSON body and headers (Retry-After on 429). */

@@ -5,8 +5,13 @@ import type { WorkflowEdge, WorkflowGraph, WorkflowNode, WorkflowNodeKind } from
 import { authFailureMessage, consoleHeaders, readConsoleToken, type ConsoleRoute } from '@/lib/console-auth'
 
 type ValidationResponse = { valid: boolean; errors: string[]; topologicalOrder: string[] }
+type PublicationVersion = { workflowId: string; version: number; graph: WorkflowGraph; digest: string; authoredBy: string; createdAt: number; status: 'draft' | 'in-review' | 'published' | 'deprecated'; reviewedBy?: string; reviewNote?: string; publishedAt?: number }
+type PublicationAudit = { event: string; workflowId: string; version: number; actorId: string; at: number; digest: string; detail?: string }
+type PublicationList = { versions: PublicationVersion[]; audit: PublicationAudit[] }
+type WorkflowVersionDiff = { workflowId: string; fromVersion: number; toVersion: number; fromDigest: string; toDigest: string; entryNodeChanged: boolean; nodes: Array<{ id: string; change: string; changedFields: string[] }>; edges: Array<{ id: string; change: string; changedFields: string[] }>; riskChanges: Array<{ nodeId: string; field: string; from: string | boolean | null; to: string | boolean | null }> }
+type WorkflowExecution = { runId: string; workflowId: string; version: number; digest: string; requestedBy: string; status: 'succeeded' | 'blocked' | 'failed'; startedAt: number; completedAt: number; durationMs: number; evaluationCount: number }
 type SimulationResponse = { mode: 'simulation'; externalEffectsEnabled: false; status: 'completed' | 'blocked' | 'failed'; steps: Array<{ nodeId: string; status: 'completed' | 'skipped' | 'blocked' | 'failed'; safetyDecision?: string; detail?: string }>; error?: string }
-type LiveRunResponse = { mode: 'live-read-only'; externalEffectsEnabled: false; status: 'completed' | 'blocked' | 'failed'; steps: Array<{ nodeId: string; status: 'completed' | 'skipped' | 'blocked' | 'failed'; safetyDecision?: string; detail?: string }>; error?: string; evaluations: Record<string, { reasoningScore: number; hallucinationRisk: string; brittleness: string; safetyDecision: string; issues: string[] }> }
+type LiveRunResponse = { mode: 'live-read-only'; externalEffectsEnabled: false; status: 'completed' | 'blocked' | 'failed'; steps: Array<{ nodeId: string; status: 'completed' | 'skipped' | 'blocked' | 'failed'; safetyDecision?: string; detail?: string }>; error?: string; publishedWorkflow?: { workflowId: string; version: number; digest: string }; historyPersisted?: boolean; evaluations: Record<string, { reasoningScore: number; hallucinationRisk: string; brittleness: string; safetyDecision: string; issues: string[] }> }
 
 const initialNodes: WorkflowNode[] = [
   { id: 'trigger-1', kind: 'trigger', label: 'Start from a trigger' },
@@ -41,6 +46,39 @@ async function postWorkflow(route: Extract<ConsoleRoute, `workflows/${string}`>,
 
 async function validateGraph(graph: unknown): Promise<ValidationResponse> {
   return (await postWorkflow('workflows/validate', { graph }, 'Could not validate the workflow.')) as ValidationResponse
+}
+
+async function getWorkflowPublications(workflowId: string): Promise<PublicationList> {
+  const route: ConsoleRoute = 'workflows/publications'
+  const token = readConsoleToken()
+  if (!token) throw new Error(`${authFailureMessage(401, route)} (use the token box on the home page).`)
+  const url = `/api/workflows/publications?workflowId=${encodeURIComponent(workflowId)}`
+  const response = await fetch(url, { headers: consoleHeaders(url, token) })
+  const result = await response.json().catch(() => ({}))
+  if (!response.ok) throw new Error(authFailureMessage(response.status, route, result.error) ?? result.error ?? 'Could not load workflow versions.')
+  return result as PublicationList
+}
+
+async function getWorkflowExecutions(workflowId: string): Promise<WorkflowExecution[]> {
+  const route: ConsoleRoute = 'workflows/executions'
+  const token = readConsoleToken()
+  if (!token) throw new Error(`${authFailureMessage(401, route)} (use the token box on the home page).`)
+  const url = `/api/workflows/executions?workflowId=${encodeURIComponent(workflowId)}&limit=25`
+  const response = await fetch(url, { headers: consoleHeaders(url, token) })
+  const result = await response.json().catch(() => ({}))
+  if (!response.ok) throw new Error(authFailureMessage(response.status, route, result.error) ?? result.error ?? 'Could not load workflow execution history.')
+  return (result as { executions: WorkflowExecution[] }).executions
+}
+
+async function getWorkflowVersionDiff(workflowId: string, from: number, to: number): Promise<WorkflowVersionDiff> {
+  const route: ConsoleRoute = 'workflows/diff'
+  const token = readConsoleToken()
+  if (!token) throw new Error(`${authFailureMessage(401, route)} (use the token box on the home page).`)
+  const url = `/api/workflows/diff?workflowId=${encodeURIComponent(workflowId)}&from=${from}&to=${to}`
+  const response = await fetch(url, { headers: consoleHeaders(url, token) })
+  const result = await response.json().catch(() => ({}))
+  if (!response.ok) throw new Error(authFailureMessage(response.status, route, result.error) ?? result.error ?? 'Could not compare workflow versions.')
+  return result as WorkflowVersionDiff
 }
 
 function isWorkflowGraph(value: unknown): value is WorkflowGraph {
@@ -102,6 +140,15 @@ export default function WorkflowBuilderPage() {
   const [graphVersion, setGraphVersion] = useState(1)
   const [persistenceReady, setPersistenceReady] = useState(false)
   const [storageAvailable, setStorageAvailable] = useState(true)
+  const [publication, setPublication] = useState<PublicationList>({ versions: [], audit: [] })
+  const [executions, setExecutions] = useState<WorkflowExecution[]>([])
+  const [executionHistoryError, setExecutionHistoryError] = useState<string | null>(null)
+  const [publicationBusy, setPublicationBusy] = useState(false)
+  const [publicationError, setPublicationError] = useState<string | null>(null)
+  const [publicationNotice, setPublicationNotice] = useState<string | null>(null)
+  const [reviewRationale, setReviewRationale] = useState('')
+  const [versionDiff, setVersionDiff] = useState<WorkflowVersionDiff | null>(null)
+  const [diffBusy, setDiffBusy] = useState(false)
   const fileInput = useRef<HTMLInputElement>(null)
   const [simulation, setSimulation] = useState<{ graphKey: string; result: SimulationResponse } | null>(null)
   const [liveInput, setLiveInput] = useState('Summarize the available information relevant to this request.')
@@ -186,6 +233,110 @@ export default function WorkflowBuilderPage() {
     return () => window.clearTimeout(timeout)
   }, [nodes, edges, graphId, graphVersion, persistenceReady, storageAvailable])
 
+  useEffect(() => {
+    let cancelled = false
+    setPublicationError(null)
+    getWorkflowPublications(graphId).then((result) => {
+      if (!cancelled) setPublication(result)
+    }).catch((cause) => {
+      if (!cancelled) setPublicationError((cause as Error).message || 'Could not load workflow versions.')
+    })
+    getWorkflowExecutions(graphId).then((result) => {
+      if (!cancelled) { setExecutions(result); setExecutionHistoryError(null) }
+    }).catch((cause) => {
+      if (!cancelled) setExecutionHistoryError((cause as Error).message || 'Could not load workflow execution history.')
+    })
+    return () => { cancelled = true }
+  }, [graphId])
+
+  async function refreshPublications() {
+    const result = await getWorkflowPublications(graphId)
+    setPublication(result)
+  }
+
+  async function savePlatformDraft() {
+    setPublicationBusy(true)
+    setPublicationError(null)
+    setPublicationNotice(null)
+    try {
+      const result = await validateGraph(graph)
+      setValidation(result)
+      if (!result.valid) throw new Error('Fix the workflow validation issues before saving a platform draft.')
+      await postWorkflow('workflows/drafts', { graph }, 'Could not save the workflow draft.')
+      await refreshPublications()
+      setPublicationNotice(`Saved ${graph.id} v${graph.version} as a shared draft.`)
+    } catch (cause) {
+      setPublicationError((cause as Error).message || 'Could not save the workflow draft.')
+    } finally {
+      setPublicationBusy(false)
+    }
+  }
+
+  async function submitDraft(version: number) {
+    await runPublicationAction('workflows/drafts/submit', version, 'Submitted for independent review.')
+  }
+
+  async function reviewVersion(version: number) {
+    if (reviewRationale.trim().length < 10) {
+      setPublicationError('Add a review rationale of at least 10 characters before recording approval.')
+      return
+    }
+    await runPublicationAction('workflows/review', version, 'Review recorded. A different publisher must release this version.', { note: reviewRationale.trim() })
+    setReviewRationale('')
+  }
+
+  async function compareWithPrevious(version: number) {
+    const previous = publication.versions.filter((item) => item.version < version).sort((a, b) => b.version - a.version)[0]
+    if (!previous) return
+    setDiffBusy(true)
+    setPublicationError(null)
+    try {
+      setVersionDiff(await getWorkflowVersionDiff(graphId, previous.version, version))
+    } catch (cause) {
+      setPublicationError((cause as Error).message || 'Could not compare workflow versions.')
+    } finally {
+      setDiffBusy(false)
+    }
+  }
+
+  async function publishVersion(version: number) {
+    await runPublicationAction('workflows/publish', version, 'Workflow published. The previous active version was archived.')
+  }
+
+  async function rollbackVersion(version: number) {
+    await runPublicationAction('workflows/rollback', version, 'Previously reviewed version restored as active.')
+  }
+
+  function forkVersionAsNextDraft(version: PublicationVersion) {
+    const nextVersion = Math.max(version.version, ...publication.versions.map((item) => item.version)) + 1
+    setGraphId(version.workflowId)
+    setGraphVersion(nextVersion)
+    setNodes(version.graph.nodes)
+    setEdges(version.graph.edges)
+    setSequence(nextSequence(version.graph.nodes, version.graph.edges))
+    const trigger = version.graph.nodes.find((node) => node.kind === 'trigger')
+    const first = version.graph.edges.find((edge) => edge.from === trigger?.id)
+    setConnection({ from: trigger?.id ?? '', to: first?.to ?? trigger?.id ?? '', branch: '' })
+    setValidation(null)
+    setPublicationNotice(`Loaded immutable v${version.version} as editable v${nextVersion}. Save it as a new shared version when ready.`)
+    setPublicationError(null)
+  }
+
+  async function runPublicationAction(route: Extract<ConsoleRoute, `workflows/${string}`>, version: number, success: string, extra: Record<string, unknown> = {}) {
+    setPublicationBusy(true)
+    setPublicationError(null)
+    setPublicationNotice(null)
+    try {
+      await postWorkflow(route, { workflowId: graphId, version, ...extra }, success)
+      await refreshPublications()
+      setPublicationNotice(success)
+    } catch (cause) {
+      setPublicationError((cause as Error).message || 'Could not update workflow publication.')
+    } finally {
+      setPublicationBusy(false)
+    }
+  }
+
   function addNode(kind: WorkflowNodeKind) {
     const id = `${kind}-${sequence + 1}`
     const node: WorkflowNode = {
@@ -265,13 +416,17 @@ export default function WorkflowBuilderPage() {
     }
   }
 
-  async function runReadOnlyWorkflow() {
+  async function runReadOnlyWorkflow(published = false) {
     setLiveRunning(true)
     setLiveRun(null)
     setError(null)
     try {
-      const result = await postWorkflow('workflows/run', { graph, input: liveInput }, 'Could not run this workflow.')
-      setLiveRun({ graphKey: JSON.stringify(graph), result: result as LiveRunResponse })
+      const active = publication.versions.find((version) => version.status === 'published')
+      if (published && !active) throw new Error('Publish a workflow version before running it by version.')
+      const body = published && active ? { workflowId: graphId, version: active.version, input: liveInput } : { graph, input: liveInput }
+      const result = await postWorkflow('workflows/run', body, 'Could not run this workflow.') as LiveRunResponse
+      setLiveRun({ graphKey: published ? `published:${graphId}:${active?.version}` : JSON.stringify(graph), result })
+      if (published) setExecutions(await getWorkflowExecutions(graphId))
     } catch (cause) {
       setError((cause as Error).message)
     } finally {
@@ -384,8 +539,32 @@ export default function WorkflowBuilderPage() {
         </section>
 
         <aside className="space-y-4">
+          <section className="rounded border border-quicksilver-border bg-quicksilver-panel p-5">
+            <h2 className="font-mono text-xs uppercase tracking-widest text-quicksilver-accent">Shared workflow lifecycle</h2>
+            <p className="mt-2 text-xs leading-5 text-quicksilver-accent">Save immutable versions to the dedicated Nuera Quicksilver project. Authors submit for review; a different human reviewer and publisher are required before a version becomes active.</p><label className="mt-3 block text-xs text-quicksilver-accent">Reviewer rationale (10–500 characters)<textarea value={reviewRationale} onChange={(event) => setReviewRationale(event.target.value.slice(0, 500))} maxLength={500} rows={3} className="mt-1 w-full rounded border border-quicksilver-border bg-quicksilver-bg px-3 py-2 text-xs text-quicksilver-signal" placeholder="Record the evidence and remaining concerns behind this review." /></label>
+            <button onClick={savePlatformDraft} disabled={publicationBusy || !persistenceReady} className="mt-4 w-full rounded border border-quicksilver-quicksilver bg-quicksilver-quicksilver/5 px-4 py-3 font-mono text-xs uppercase tracking-widest text-quicksilver-signal hover:bg-quicksilver-quicksilver/15 disabled:opacity-40">{publicationBusy ? 'Saving…' : `Save ${graph.id} v${graph.version} to platform`}</button>
+            {publicationNotice && <p role="status" className="mt-3 text-xs text-emerald-300">{publicationNotice}</p>}
+            {publicationError && <p role="alert" className="mt-3 text-xs text-red-300">{publicationError}</p>}
+            <div className="mt-4 space-y-3">
+              {publication.versions.map((version) => <article key={`${version.workflowId}@${version.version}`} className="rounded border border-quicksilver-border p-3">
+                <div className="flex items-center justify-between gap-3"><p className="font-mono text-xs text-quicksilver-signal">v{version.version} · {version.status}</p>{version.status === 'published' && <span className="font-mono text-[9px] uppercase tracking-widest text-emerald-300">active</span>}</div>
+                <p className="mt-1 break-all font-mono text-[9px] text-quicksilver-accent">{version.digest.slice(0, 24)}… · authored by {version.authoredBy}</p>
+                {version.reviewedBy && <p className="mt-1 text-[10px] text-quicksilver-accent">Reviewed by {version.reviewedBy}{version.reviewNote ? ` · ${version.reviewNote}` : ''}</p>}
+                <div className="mt-3 flex flex-wrap gap-2"><button disabled={diffBusy || !publication.versions.some((item) => item.version < version.version)} onClick={() => compareWithPrevious(version.version)} className="rounded border border-quicksilver-border px-2 py-1 font-mono text-[9px] uppercase text-quicksilver-signal disabled:opacity-40">{diffBusy ? 'Comparing…' : 'Compare prior version'}</button>
+                  <button disabled={!persistenceReady} onClick={() => forkVersionAsNextDraft(version)} className="rounded border border-quicksilver-border px-2 py-1 font-mono text-[9px] uppercase text-quicksilver-signal disabled:opacity-40">Edit as v{Math.max(version.version, ...publication.versions.map((item) => item.version)) + 1}</button>
+                  {version.status === 'draft' && <button disabled={publicationBusy} onClick={() => submitDraft(version.version)} className="rounded border border-quicksilver-border px-2 py-1 font-mono text-[9px] uppercase text-quicksilver-signal disabled:opacity-40">Submit for review</button>}
+                  {version.status === 'in-review' && !version.reviewedBy && <button disabled={publicationBusy || reviewRationale.trim().length < 10} onClick={() => reviewVersion(version.version)} className="rounded border border-quicksilver-border px-2 py-1 font-mono text-[9px] uppercase text-quicksilver-signal disabled:opacity-40">Review version</button>}
+                  {version.status === 'in-review' && version.reviewedBy && <button disabled={publicationBusy} onClick={() => publishVersion(version.version)} className="rounded border border-quicksilver-border px-2 py-1 font-mono text-[9px] uppercase text-quicksilver-signal disabled:opacity-40">Publish version</button>}
+                  {version.status === 'deprecated' && <button disabled={publicationBusy} onClick={() => rollbackVersion(version.version)} className="rounded border border-quicksilver-border px-2 py-1 font-mono text-[9px] uppercase text-quicksilver-signal disabled:opacity-40">Restore version</button>}
+                </div>
+              </article>)}
+              {publication.versions.length === 0 && <p className="text-xs text-quicksilver-accent">No shared versions for this workflow yet.</p>}
+            </div>
+            {versionDiff && <section className="mt-4 rounded border border-quicksilver-accent/40 bg-quicksilver-bg p-3"><div className="flex items-center justify-between gap-2"><h3 className="font-mono text-[10px] uppercase tracking-widest">Version diff · v{versionDiff.fromVersion} → v{versionDiff.toVersion}</h3><button onClick={() => setVersionDiff(null)} className="text-[10px] text-quicksilver-accent">Clear</button></div><p className="mt-1 break-all font-mono text-[9px] text-quicksilver-accent">{versionDiff.fromDigest.slice(0, 16)}… → {versionDiff.toDigest.slice(0, 16)}…</p>{versionDiff.entryNodeChanged && <p className="mt-2 text-xs text-amber-200">Entry node changed.</p>}<ul className="mt-2 space-y-1 text-[10px] text-quicksilver-accent">{versionDiff.nodes.map((change) => <li key={`node-${change.id}`}>Node {change.change}: {change.id}{change.changedFields.length ? ` · ${change.changedFields.join(', ')}` : ''}</li>)}{versionDiff.edges.map((change) => <li key={`edge-${change.id}`}>Edge {change.change}: {change.id}{change.changedFields.length ? ` · ${change.changedFields.join(', ')}` : ''}</li>)}</ul>{versionDiff.riskChanges.length > 0 && <div className="mt-3 rounded border border-amber-800/60 p-2"><p className="font-mono text-[9px] uppercase tracking-widest text-amber-200">Safety-relevant changes</p><ul className="mt-1 space-y-1 text-[10px] text-amber-100">{versionDiff.riskChanges.map((change) => <li key={`${change.nodeId}-${change.field}`}>{change.nodeId} · {change.field}: {String(change.from)} → {String(change.to)}</li>)}</ul></div>}{versionDiff.nodes.length === 0 && versionDiff.edges.length === 0 && !versionDiff.entryNodeChanged && versionDiff.riskChanges.length === 0 && <p className="mt-2 text-xs text-emerald-200">No workflow graph changes detected.</p>}</section>}
+            {publication.audit.length > 0 && <details className="mt-4"><summary className="cursor-pointer font-mono text-[10px] uppercase tracking-widest text-quicksilver-accent">Publication history ({publication.audit.length})</summary><ol className="mt-2 space-y-2 text-[10px] text-quicksilver-accent">{publication.audit.slice(0, 12).map((event, index) => <li key={`${event.event}-${event.version}-${event.at}-${index}`}>{new Date(event.at).toLocaleString()} · {event.event} v{event.version} · {event.actorId}{event.detail ? ` · ${event.detail}` : ''}</li>)}</ol></details>}
+          </section>
           <section className="rounded border border-quicksilver-border bg-quicksilver-panel p-5"><h2 className="font-mono text-xs uppercase tracking-widest text-quicksilver-accent">Safety check</h2><p className="mt-2 text-xs leading-5 text-quicksilver-accent">Validation checks graph structure, branches, step limits, evaluation, and supervisor approval requirements.</p><input ref={fileInput} type="file" accept=".json,application/json" onChange={importDraft} className="hidden" /><button onClick={() => fileInput.current?.click()} disabled={!persistenceReady} className="mb-2 w-full rounded border border-quicksilver-border px-4 py-3 font-mono text-xs uppercase tracking-widest text-quicksilver-signal hover:border-quicksilver-accent disabled:opacity-40">Import workflow JSON</button><button onClick={exportDraft} className="w-full rounded border border-quicksilver-border px-4 py-3 font-mono text-xs uppercase tracking-widest text-quicksilver-signal hover:border-quicksilver-accent">Export workflow draft</button><button onClick={validateDraft} disabled={validating} className="mt-4 w-full rounded border border-quicksilver-quicksilver bg-quicksilver-quicksilver/5 px-4 py-3 font-mono text-xs uppercase tracking-widest text-quicksilver-signal hover:bg-quicksilver-quicksilver/15 disabled:opacity-40">{validating ? 'Checking…' : 'Validate workflow'}</button>{error && <p role="alert" className="mt-3 text-xs text-red-300">{error}</p>}{validation && <div className={`mt-4 rounded border p-3 ${validation.valid ? 'border-emerald-800 bg-emerald-950/20' : 'border-amber-800 bg-amber-950/20'}`}><p className="font-mono text-xs uppercase tracking-widest">{validation.valid ? 'Ready for review' : 'Needs changes'}</p>{validation.errors.length > 0 && <ul className="mt-2 list-disc space-y-1 pl-4 text-xs text-quicksilver-accent">{validation.errors.map((item) => <li key={item}>{item}</li>)}</ul>}{validation.valid && <p className="mt-2 text-xs text-quicksilver-accent">Topological order: {validation.topologicalOrder.join(' → ')}</p>}</div>}</section>
-          <section className="rounded border border-quicksilver-border bg-quicksilver-panel p-5"><h2 className="font-mono text-xs uppercase tracking-widest text-quicksilver-accent">Run read-only workflow</h2><p className="mt-2 text-xs leading-5 text-quicksilver-accent">Calls the Nuera Quicksilver query agent and evaluates its result with the NQC Kernel. Tool steps remain blocked. This requires the server live-run flag, model credentials, and read-only Sanity Context MCP credentials.</p><label className="mt-3 block text-xs text-quicksilver-accent">Request<input value={liveInput} onChange={(event) => setLiveInput(event.target.value)} maxLength={2000} className="mt-1 w-full rounded border border-quicksilver-border bg-quicksilver-bg px-3 py-2 text-sm text-quicksilver-signal" /></label><button onClick={runReadOnlyWorkflow} disabled={liveRunning || !persistenceReady || liveInput.trim().length < 3} className="mt-4 w-full rounded border border-quicksilver-quicksilver bg-quicksilver-quicksilver/5 px-4 py-3 font-mono text-xs uppercase tracking-widest text-quicksilver-signal hover:bg-quicksilver-quicksilver/15 disabled:opacity-40">{liveRunning ? 'Running read-only steps…' : 'Run workflow'}</button>{liveRun?.graphKey === JSON.stringify(graph) && <div role="status" className="mt-4 rounded border border-quicksilver-border p-3"><p className="font-mono text-xs uppercase tracking-widest">Live read-only run · {liveRun.result.status}</p>{liveRun.result.error && <p className="mt-2 text-xs text-amber-200">{liveRun.result.error}</p>}<ul className="mt-3 space-y-3 text-xs text-quicksilver-accent">{liveRun.result.steps.map((step) => { const evaluation = liveRun.result.evaluations[step.nodeId]; return <li key={step.nodeId}><span className="font-mono">{nodes.find((node) => node.id === step.nodeId)?.label ?? step.nodeId}</span> · {step.status}{step.safetyDecision ? ` · ${step.safetyDecision}` : ''}{step.detail ? <span className="block">{step.detail}</span> : null}{evaluation && <span className="mt-1 block">NQC score {evaluation.reasoningScore}/100 · hallucination risk {evaluation.hallucinationRisk} · brittleness {evaluation.brittleness}{evaluation.issues.length > 0 ? ` · ${evaluation.issues.join(' ')}` : ''}</span>}</li> })}</ul><p className="mt-3 text-[10px] leading-4 text-quicksilver-accent">Live model-backed query only. No workflow tool dispatch or external state changes are enabled.</p></div>}</section>          <section className="rounded border border-quicksilver-border bg-quicksilver-panel p-5"><h2 className="font-mono text-xs uppercase tracking-widest text-quicksilver-accent">Run preview</h2><p className="mt-2 text-xs leading-5 text-quicksilver-accent">Simulation only: agent results are placeholders. No model, live evaluator, tool, or supervisor approval is called, and no external action can run.</p><button onClick={previewWorkflow} disabled={!persistenceReady} className="mt-4 w-full rounded border border-quicksilver-quicksilver bg-quicksilver-quicksilver/5 px-4 py-3 font-mono text-xs uppercase tracking-widest text-quicksilver-signal hover:bg-quicksilver-quicksilver/15 disabled:opacity-40">Preview workflow path</button>{simulation?.graphKey === JSON.stringify(graph) && <div role="status" className="mt-4 rounded border border-quicksilver-border p-3"><p className="font-mono text-xs uppercase tracking-widest">Simulation · {simulation.result.status}</p>{simulation.result.error && <p className="mt-2 text-xs text-amber-200">{simulation.result.error}</p>}<ul className="mt-3 space-y-2 text-xs text-quicksilver-accent">{simulation.result.steps.map((step) => <li key={step.nodeId}><span className="font-mono">{nodes.find((node) => node.id === step.nodeId)?.label ?? step.nodeId}</span> · {step.status}{step.safetyDecision ? ` · ${step.safetyDecision}` : ''}{step.detail ? <span className="block">{step.detail}</span> : null}</li>)}</ul><p className="mt-3 text-[10px] leading-4 text-quicksilver-accent">A preview is not a live evaluation or approval. Tool steps stop before dispatch.</p></div>}</section>          <section className="rounded border border-quicksilver-border bg-quicksilver-panel p-5"><h2 className="font-mono text-xs uppercase tracking-widest text-quicksilver-accent">What happens next</h2><p className="mt-2 text-xs leading-5 text-quicksilver-accent">This draft autosaves in this browser and can be imported or exported as JSON. Shared storage, publishing, team permissions, and execution still need the dedicated project and runtime security controls.</p></section>
+          <section className="rounded border border-quicksilver-border bg-quicksilver-panel p-5"><h2 className="font-mono text-xs uppercase tracking-widest text-quicksilver-accent">Run read-only workflow</h2><p className="mt-2 text-xs leading-5 text-quicksilver-accent">Calls the Nuera Quicksilver query agent and evaluates its result with the NQC Kernel. Tool steps remain blocked. This requires the server live-run flag, model credentials, and read-only Sanity Context MCP credentials.</p><label className="mt-3 block text-xs text-quicksilver-accent">Request<input value={liveInput} onChange={(event) => setLiveInput(event.target.value)} maxLength={2000} className="mt-1 w-full rounded border border-quicksilver-border bg-quicksilver-bg px-3 py-2 text-sm text-quicksilver-signal" /></label><button onClick={() => runReadOnlyWorkflow(false)} disabled={liveRunning || !persistenceReady || liveInput.trim().length < 3} className="mt-4 w-full rounded border border-quicksilver-quicksilver bg-quicksilver-quicksilver/5 px-4 py-3 font-mono text-xs uppercase tracking-widest text-quicksilver-signal hover:bg-quicksilver-quicksilver/15 disabled:opacity-40">{liveRunning ? 'Running read-only steps…' : 'Run editable draft'}</button><button onClick={() => runReadOnlyWorkflow(true)} disabled={liveRunning || !publication.versions.some((version) => version.status === 'published') || liveInput.trim().length < 3} className="mt-2 w-full rounded border border-emerald-700 px-4 py-3 font-mono text-xs uppercase tracking-widest text-emerald-200 disabled:opacity-40">Run active published version</button>{liveRun && (liveRun.graphKey === JSON.stringify(graph) || liveRun.graphKey.startsWith(`published:${graphId}:`)) && <div role="status" className="mt-4 rounded border border-quicksilver-border p-3"><p className="font-mono text-xs uppercase tracking-widest">Live read-only run · {liveRun.result.status}{liveRun.result.publishedWorkflow ? ` · published v${liveRun.result.publishedWorkflow.version}` : ` · editable draft`}</p>{liveRun.result.publishedWorkflow && <p className="mt-1 break-all text-[10px] text-quicksilver-accent">Pinned digest {liveRun.result.publishedWorkflow.digest}</p>}{liveRun.result.error && <p className="mt-2 text-xs text-amber-200">{liveRun.result.error}</p>}<ul className="mt-3 space-y-3 text-xs text-quicksilver-accent">{liveRun.result.steps.map((step) => { const evaluation = liveRun.result.evaluations[step.nodeId]; return <li key={step.nodeId}><span className="font-mono">{nodes.find((node) => node.id === step.nodeId)?.label ?? step.nodeId}</span> · {step.status}{step.safetyDecision ? ` · ${step.safetyDecision}` : ''}{step.detail ? <span className="block">{step.detail}</span> : null}{evaluation && <span className="mt-1 block">NQC score {evaluation.reasoningScore}/100 · hallucination risk {evaluation.hallucinationRisk} · brittleness {evaluation.brittleness}{evaluation.issues.length > 0 ? ` · ${evaluation.issues.join(' ')}` : ''}</span>}</li> })}</ul><p className="mt-3 text-[10px] leading-4 text-quicksilver-accent">Live model-backed query only. No workflow tool dispatch or external state changes are enabled.</p></div>}</section>          <details className="mt-4"><summary className="cursor-pointer font-mono text-[10px] uppercase tracking-widest text-quicksilver-accent">Execution history ({executions.length})</summary>{executionHistoryError ? <p className="mt-2 text-xs text-amber-200">{executionHistoryError}</p> : <ol className="mt-2 space-y-2 text-[10px] text-quicksilver-accent">{executions.map((execution) => <li key={execution.runId}>{new Date(execution.completedAt).toLocaleString()} · v{execution.version} · {execution.status} · {execution.durationMs} ms · {execution.evaluationCount} evaluations · {execution.requestedBy}</li>)}</ol>}</details><section className="rounded border border-quicksilver-border bg-quicksilver-panel p-5"><h2 className="font-mono text-xs uppercase tracking-widest text-quicksilver-accent">Run preview</h2><p className="mt-2 text-xs leading-5 text-quicksilver-accent">Simulation only: agent results are placeholders. No model, live evaluator, tool, or supervisor approval is called, and no external action can run.</p><button onClick={previewWorkflow} disabled={!persistenceReady} className="mt-4 w-full rounded border border-quicksilver-quicksilver bg-quicksilver-quicksilver/5 px-4 py-3 font-mono text-xs uppercase tracking-widest text-quicksilver-signal hover:bg-quicksilver-quicksilver/15 disabled:opacity-40">Preview workflow path</button>{simulation?.graphKey === JSON.stringify(graph) && <div role="status" className="mt-4 rounded border border-quicksilver-border p-3"><p className="font-mono text-xs uppercase tracking-widest">Simulation · {simulation.result.status}</p>{simulation.result.error && <p className="mt-2 text-xs text-amber-200">{simulation.result.error}</p>}<ul className="mt-3 space-y-2 text-xs text-quicksilver-accent">{simulation.result.steps.map((step) => <li key={step.nodeId}><span className="font-mono">{nodes.find((node) => node.id === step.nodeId)?.label ?? step.nodeId}</span> · {step.status}{step.safetyDecision ? ` · ${step.safetyDecision}` : ''}{step.detail ? <span className="block">{step.detail}</span> : null}</li>)}</ul><p className="mt-3 text-[10px] leading-4 text-quicksilver-accent">A preview is not a live evaluation or approval. Tool steps stop before dispatch.</p></div>}</section>          <section className="rounded border border-quicksilver-border bg-quicksilver-panel p-5"><h2 className="font-mono text-xs uppercase tracking-widest text-quicksilver-accent">What happens next</h2><p className="mt-2 text-xs leading-5 text-quicksilver-accent">Published versions can run through the gated read-only path and their release and run history is visible above. Hosted execution, team workspaces, scheduled deployment, and effectful tools remain in progress.</p></section>
         </aside>
       </div>
     </main>

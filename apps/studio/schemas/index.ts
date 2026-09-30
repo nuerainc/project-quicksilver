@@ -6,6 +6,9 @@ import policy from './policy'
 import objective from './objective'
 import workflow from './workflow'
 import automationWorkflow from './automation-workflow'
+import workflowPublicationHead from './workflow-publication-head'
+import workflowPublicationAudit from './workflow-publication-audit'
+import workflowExecution from './workflow-execution'
 import evidence from './evidence'
 import decision from './decision'
 import metric from './metric'
@@ -28,6 +31,9 @@ export const schemaTypes = [
   objective,
   workflow,
   automationWorkflow,
+  workflowPublicationHead,
+  workflowPublicationAudit,
+  workflowExecution,
   evidence,
   decision,
   metric,

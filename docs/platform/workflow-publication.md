@@ -1,81 +1,59 @@
-# Workflow publication lifecycle (M8 foundation)
+# Workflow publication lifecycle
 
-The kernel now provides a versioned, digest-pinned publication lifecycle for
-workflow content in `packages/kernel/src/workflows/publication.ts`. The
-`FileWorkflowPublicationStore` adapter persists tenant/deployment state as a
-private JSON snapshot using a temporary file and atomic rename, so published
-workflow state survives a host restart.
+The workflow builder keeps its editable browser copy local. A person with
+`workflow:write` can save a validated graph as a shared, immutable version and
+submit it for review. A different human with `workflow:publish` records the
+review, and a second publisher releases it. The author cannot review their own
+version, and the reviewer cannot publish that version.
 
-## Lifecycle
+## Lifecycle API
 
-```text
-draft → in-review → published → deprecated
-                              ↘ rollback → published
-```
+Every endpoint requires a per-person credential and is rate-limited on writes.
+The server derives actor identity from the authenticated principal; request
+bodies cannot select an actor or tenant.
 
-- **Draft:** a human author creates a graph after kernel graph validation.
-- **In review:** the author submits the exact graph for review.
-- **Published:** a human with `workflow:publish` publishes only after an
-  independent reviewer has recorded approval.
-- **Deprecated:** publishing a newer version deprecates the previous published
-  version rather than deleting it.
-- **Rollback:** a previously reviewed deprecated version can be restored by a
-  human publisher; the event is retained in the audit log.
+| Endpoint | Permission | Effect |
+|---|---|---|
+| `GET /api/workflows/publications?workflowId=...` | `workflow:read` | Lists up to 100 tenant-scoped versions and audit events |
+| `GET /api/workflows/executions?workflowId=...&limit=25` | `workflow:read` | Lists metadata-only run history (limit 1–100) |
+| `GET /api/workflows/diff?workflowId=...&from=1&to=2` | `workflow:read` | Compares verified versions; returns changed fields and safety-sensitive deltas without config values |
+| `POST /api/workflows/drafts` | `workflow:write` | Validates and creates a new immutable version |
+| `POST /api/workflows/drafts/submit` | `workflow:write` | Moves a draft to review |
+| `POST /api/workflows/review` | `workflow:publish` | Records an independent human reviewer and a required 10–500 character rationale in the version and audit log |
+| `POST /api/workflows/publish` | `workflow:publish` | Activates the reviewed version and archives the former active version |
+| `POST /api/workflows/rollback` | `workflow:publish` | Reactivates a previously reviewed, archived version |
 
-## Safety properties
+The Sanity documents contain the graph, its canonical digest, lifecycle and
+actor metadata. Reviewer rationale is mandatory and appears in the audit
+history. The version diff compares node and edge changes and flags changes to
+impact, side-effect, evaluation, and supervisor-approval settings without
+returning configuration values. A per-workflow head document uses revision-conditional
+transactions to serialize releases, so two concurrent publishes cannot leave
+two versions active. Audit records are separate append-only documents. Reads
+recompute and verify every graph digest before returning a version.
 
-- Agents and services cannot author, review, publish, or roll back workflow
-  versions through this contract.
-- An author cannot review their own workflow.
-- A reviewer cannot publish the same workflow version.
-- Invalid graphs and duplicate workflow versions are refused.
-- Every version stores an immutable graph copy and a `sha256:` digest.
-- Publication and rollback do not execute a workflow or grant executor
-  authority. Runtime admission must still authenticate the caller, enforce
-  tenant policy, and pin the run to the published digest.
-- Audit entries retain the workflow id, version, actor, timestamp, and digest.
-- File-backed snapshots are created with restrictive permissions and never
-  expose the workflow store through the runtime executor.
+## Storage and limits
 
-## Verification
+All reads and writes use the existing server-only Sanity client. The helper
+rejects the public challenge project ID and uses the configured dedicated
+Nuera Quicksilver project and tenant (`QUICKSILVER_TENANT_ID`, defaulting to
+`default`). No Sanity project, token, or dataset configuration is changed by
+this feature.
 
-`packages/kernel/src/workflows/publication.test.ts` covers invalid and duplicate
-drafts, digest pinning, independent review, deprecation, rollback, audit
-ordering, and restart persistence. The suite is included in
-`npm run kernel:test`.
+The new publication head, audit, and execution schemas, plus publication and
+review-note fields on `automationWorkflow`, are included in the Studio schema. Deploy those
+schemas to the dedicated project before using Sanity Studio to inspect or
+operate on publication records. The API itself still applies NQC RBAC and
+separation-of-duties checks.
 
-This is the M8 contract foundation. A later host/Sanity adapter must provide
-persistent storage, tenant-scoped access checks, and API/UI routes without
-weakening the kernel lifecycle.
-
-## Host API integration
-
-The single-tenant host now exposes the lifecycle through authenticated routes:
-
-| Method | Route | Required permission | Purpose |
-|---|---|---|---|
-| `GET` | `/api/workflows/:id` | `workflow:read` | Read configured metadata and publication versions |
-| `POST` | `/api/workflows/drafts` | `workflow:write` | Create a validated draft |
-| `POST` | `/api/workflows/:id/submit-review` | `workflow:write` | Submit the authored version for review |
-| `POST` | `/api/workflows/:id/review` | `workflow:publish` | Record independent human review |
-| `POST` | `/api/workflows/:id/publish` | `workflow:publish` | Publish the reviewed version |
-| `POST` | `/api/workflows/:id/rollback` | `workflow:publish` | Restore a reviewed deprecated version |
-
-The host applies its normal bearer authentication, tenant boundary, route-table
-permission floor, rate limits, and JSON body limits before invoking the kernel
-store. File-backed hosts use a private `workflow-publications.json` snapshot
-next to the configured run store; memory-backed hosts use an in-memory adapter.
-
-## Runtime binding
-
-`POST /api/runs` resolves a published version before falling back to a static
-host-config workflow. The queue receives the immutable published graph, so the
-durable run record contains its version and graph digest. The admission response
-also returns `{ publication: { version, digest } }` for published runs. A later
-published version cannot mutate an already-admitted run; it only changes which
-published version a subsequent admission resolves.
-
-The same precedence applies to host-managed schedules and the governed task
-interface. When a published version exists, those triggers enqueue that graph
-and carry the same immutable version/digest provenance. Static host
-configuration remains the fallback only when no published version exists.
+Publication establishes durable version history and an active-version pointer.
+The live workflow runner accepts either an editable graph (development path) or
+an active published workflow ID. Published runs resolve through the server-side
+tenant-scoped head, verify graph integrity, and may pin an explicit version only
+when it is still active. Execution history stores the workflow version and
+digest, requester, timestamps, duration, and status; it does not store input or
+output bodies. Executions are marked succeeded, blocked, or failed. Existing
+evaluation records continue to follow the evaluation store's own retention
+behavior. If execution-history storage fails, the run
+response reports that separately from the workflow result. Tools remain
+blocked; scheduled deployment and hosted execution are not part of this slice.
