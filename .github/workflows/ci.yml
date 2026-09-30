@@ -59,5 +59,24 @@ jobs:
       - name: Vet Go SDK
         run: go vet ./...
 
+      - name: Test Go SDK
+        run: go test -v -timeout=2m ./...
+
       - name: Build Go SDK
         run: go build ./...
+
+  python-sdk:
+    name: python-sdk
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Test Python SDK and CLI
+        run: python -m unittest discover -s packages/sdk-python/tests -v

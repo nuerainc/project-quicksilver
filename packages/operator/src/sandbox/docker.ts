@@ -51,6 +51,9 @@ export class DockerSandbox implements Sandbox {
   /** The `docker run` arguments for a command. Pure; exported for tests. */
   args(command: string, cwd = '.'): string[] {
     const workdir = `/work/${cwd.replace(/^\.?\/*/, '')}`.replace(/\/+$/, '') || '/work'
+    // Docker Desktop accepts drive-qualified forward-slash paths. Native
+    // backslashes are treated as escape characters by parts of its CLI.
+    const mount = this.o.workspace.replace(/\\/g, '/')
     return [
       'run', '--rm', '-i',
       '--network', this.o.network ? 'bridge' : 'none',
@@ -60,7 +63,7 @@ export class DockerSandbox implements Sandbox {
       '--cpus', String(this.o.cpus),
       '--memory', `${this.o.memoryMb}m`,
       '--read-only', '--tmpfs', '/tmp:rw,size=256m',
-      '-v', `${this.o.workspace}:/work`,
+      '-v', `${mount}:/work`,
       '-w', workdir,
       '-e', 'HOME=/tmp', '-e', 'PYTHONUNBUFFERED=1', '-e', 'PYTHONDONTWRITEBYTECODE=1',
       this.o.image, 'bash', '-c', command,

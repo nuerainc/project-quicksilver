@@ -45,13 +45,18 @@ export interface QuicksilverClientOptions {
 }
 
 export class QuicksilverApiError extends Error {
+  readonly status: number
+  readonly responseBody: unknown
+
   constructor(
     message: string,
-    readonly status: number,
-    readonly responseBody: unknown,
+    status: number,
+    responseBody: unknown,
   ) {
     super(message)
     this.name = 'QuicksilverApiError'
+    this.status = status
+    this.responseBody = responseBody
   }
 }
 
@@ -62,7 +67,8 @@ export class QuicksilverClient {
 
   constructor(options: QuicksilverClientOptions) {
     const parsed = new URL(options.baseUrl)
-    if (parsed.protocol !== 'https:' && parsed.hostname !== 'localhost' && parsed.hostname !== '127.0.0.1') {
+    const loopback = ['localhost', '127.0.0.1', '[::1]'].includes(parsed.hostname.toLowerCase())
+    if (parsed.protocol !== 'https:' && !(parsed.protocol === 'http:' && loopback)) {
       throw new Error('Quicksilver API URLs must use HTTPS outside localhost.')
     }
     this.baseUrl = parsed.toString().replace(/\/$/, '')
@@ -151,7 +157,8 @@ function isReadOnlyWorkflowRunResponse(value: unknown): value is ReadOnlyWorkflo
   return Object.values(value.evaluations).every((item) => {
     if (!item || typeof item !== 'object') return false
     const evaluation = item as unknown as Record<string, unknown>
-    return typeof evaluation.reasoningScore === 'number'
+    return typeof evaluation.reasoningScore === 'number' && Number.isFinite(evaluation.reasoningScore)
+      && evaluation.reasoningScore >= 0 && evaluation.reasoningScore <= 100
       && ['low', 'med', 'high'].includes(String(evaluation.hallucinationRisk))
       && ['low', 'med', 'high'].includes(String(evaluation.brittleness))
       && ['ALLOW', 'BLOCK', 'ESCALATE'].includes(String(evaluation.safetyDecision))
@@ -174,5 +181,6 @@ function isExecutionResponse(value: unknown, mode: 'simulation' | 'live-read-onl
         && ['completed', 'skipped', 'blocked', 'failed', 'cancelled'].includes(String(item.status))
         && (item.safetyDecision === undefined || ['ALLOW', 'BLOCK', 'ESCALATE', 'SKIPPED'].includes(String(item.safetyDecision)))
         && (item.detail === undefined || typeof item.detail === 'string')
+        && (item.retryAfterMs === undefined || (typeof item.retryAfterMs === 'number' && Number.isFinite(item.retryAfterMs) && item.retryAfterMs >= 0))
     })
 }

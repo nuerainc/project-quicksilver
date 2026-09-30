@@ -6,6 +6,7 @@
  */
 
 import { NextResponse } from 'next/server'
+import { safeErrorName } from '@/lib/safe-log'
 import { queryCompany } from '@quicksilver/agent'
 import { evaluateNqcRequest } from '@quicksilver/kernel'
 import { persistEvaluations } from '@/lib/evaluation-store'
@@ -14,7 +15,7 @@ import { guardWebRoute } from '@/lib/route-guard'
 export async function POST(req: Request) {
   // A principal with decision:read before anything else (A-3), then the
   // per-principal model-route limit (A-5).
-  const requester = guardWebRoute(req, 'query')
+  const requester = await guardWebRoute(req, 'query')
   if (!requester.ok) return NextResponse.json(requester.body, { status: requester.status, headers: requester.headers })
 
   let body: unknown
@@ -69,9 +70,9 @@ export async function POST(req: Request) {
       },
     })
   } catch (err) {
-    console.error('[/api/query]', err)
+    console.error('[/api/query]', safeErrorName(err))
     return NextResponse.json(
-      { error: 'Query failed', detail: (err as Error).message },
+      { error: 'Query failed', detail: safeErrorName(err) },
       { status: 500 },
     )
   }

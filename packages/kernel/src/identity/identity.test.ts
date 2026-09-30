@@ -40,6 +40,9 @@ test('RBAC: deny by default, allow only through a granting role', () => {
   assert.equal(denied.allowed, false)
   assert.match(denied.reasons[0]!, /No role grants "run:enqueue"/)
   assert.deepEqual(access.authorize(dev, 'run:enqueue', acme).grantedBy, ['developer'])
+  assert.equal(access.authorize(viewer, 'finance:read', acme).allowed, false, 'finance is excluded from the ordinary viewer role')
+  assert.equal(access.authorize(ana, 'finance:read', acme).allowed, true, 'the supervisor can review recorded ledger totals')
+  assert.equal(access.authorize(agent, 'finance:read', acme).allowed, false, 'agents never read finance records')
   assert.equal(access.authorize(undefined, 'run:read', acme).allowed, false)
   assert.equal(access.authorize({ ...viewer, roles: ['nonexistent'] }, 'run:read', acme).allowed, false)
   assert.equal(access.authorize(viewer, 'root:everything' as 'run:read', acme).allowed, false)
@@ -61,6 +64,7 @@ test('RBAC: agents never gain authority, even if a role would grant it', () => {
     assert.equal(decision.allowed, false, permission)
   }
   assert.equal(access.authorize(agent, 'decision:propose', acme).allowed, true)
+  assert.equal(AUTHORITY_PERMISSIONS.includes('finance:read'), true, 'finance access is treated as authority')
   assert.equal(access.effectivePermissions(agent).has('decision:approve'), false)
   for (const permission of ['agent:review', 'agent:publish'] as const) {
     assert.equal(access.authorize(agent, permission, acme).allowed, false, permission)
@@ -115,7 +119,7 @@ test('RBAC: custom roles are tenant-scoped and cannot shadow built-ins', () => {
   assert.throws(() => access.defineRole({ id: 'release-manager', tenantId: 'acme', description: 'x', permissions: ['run:read'] }), /already exists/)
 })
 
-test('RBAC: every decision reaches the audit sink, and a failing sink changes nothing', () => {
+test('RBAC: every decision reaches the audit sink, and a failing sink denies access', () => {
   const log: AccessDecision[] = []
   const access = new AccessController({ audit: (d) => log.push(d), now: () => 42 })
   access.authorize(ana, 'run:redrive', { ...acme, id: 'run-9', kind: 'workflow-run' })
@@ -123,7 +127,9 @@ test('RBAC: every decision reaches the audit sink, and a failing sink changes no
   assert.deepEqual(log.map((d) => [d.principalId, d.permission, d.allowed, d.at]), [[ana.id, 'run:redrive', true, 42], [viewer.id, 'run:redrive', false, 42]])
   assert.equal(log[0]!.resourceId, 'run-9')
   const noisy = new AccessController({ audit: () => { throw new Error('sink down') } })
-  assert.equal(noisy.authorize(ana, 'run:read', acme).allowed, true)
+  const refused = noisy.authorize(ana, 'run:read', acme)
+  assert.equal(refused.allowed, false)
+  assert.match(refused.reasons.at(-1)!, /audit persistence failed/i)
 })
 
 test('RBAC: assert throws AccessDeniedError carrying the decision', () => {

@@ -68,3 +68,7 @@ or an envelope such as `{"graph": {"nodes": [], "edges": []}}`.
 - The Go client is an internal foundation documented in the
   [Go SDK guide](sdk-go.md); its contract is not stable or published. Broader
   agent creation APIs remain future work.
+
+Run the dependency-free client and CLI contract tests from the repository root
+with `python -m unittest discover -s packages/sdk-python/tests -v`. CI runs
+these tests with Python 3.12.

@@ -4,7 +4,7 @@ import { reviewAgentDefinition } from '@/lib/agent-catalog-store'
 import { guardPublicationActor, publicationFailure, publicationRefusal, readPublicationBody } from '@/lib/workflow-publication-http'
 const requestSchema = z.object({ agentId: z.string().regex(/^nuera-quicksilver:[a-z][a-z0-9-]{0,62}$/), version: z.number().int().positive(), note: z.string().trim().min(10).max(500) }).strict()
 export async function POST(request: Request) {
-  const caller = guardPublicationActor(request, 'agents/review')
+  const caller = await guardPublicationActor(request, 'agents/review')
   if (!caller.ok) return publicationRefusal(caller.refusal)
   const body = await readPublicationBody(request); if (!body.ok) return body.response
   const parsed = requestSchema.safeParse(body.body)

@@ -24,6 +24,7 @@ import contentReview from './content-review'
 import agentDefinition from './agent-definition'
 import agentPublicationAudit from './agent-publication-audit'
 import agentPublicationHead from './agent-publication-head'
+import authorizationDecisionAudit from './authorization-decision-audit'
 
 export const schemaTypes = [
   organization,
@@ -52,4 +53,5 @@ export const schemaTypes = [
   agentDefinition,
   agentPublicationAudit,
   agentPublicationHead,
+  authorizationDecisionAudit,
 ]

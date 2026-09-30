@@ -16,6 +16,7 @@
  */
 
 import { NextResponse } from 'next/server'
+import { safeErrorName } from '@/lib/safe-log'
 import { getSanityClient } from '@/lib/sanity-client'
 import { loadDecisionLifecycle } from '@/lib/process-engine'
 import { authorizeDecisionRoute } from '@/lib/nqc-approval'
@@ -29,7 +30,7 @@ export async function POST(
   if (!id) return NextResponse.json({ error: 'Missing decision id' }, { status: 400 })
 
   // A valid principal with decision:read or decision:propose, before any read or write.
-  const caller = authorizeDecisionRoute(req, 'observe')
+  const caller = await authorizeDecisionRoute(req, 'observe')
   if (!caller.ok) return NextResponse.json({ error: caller.reason }, { status: caller.status })
   const limited = takeWebRateLimit('write', caller.principalId)
   if (limited) return NextResponse.json(limited.body, { status: limited.status, headers: limited.headers })
@@ -126,9 +127,9 @@ export async function POST(
         : null,
     })
   } catch (err) {
-    console.error('[/api/decisions/[id]/observe]', err)
+    console.error('[/api/decisions/[id]/observe]', safeErrorName(err))
     return NextResponse.json(
-      { error: 'Observe failed', detail: (err as Error).message },
+      { error: 'Observe failed', detail: safeErrorName(err) },
       { status: 500 },
     )
   }

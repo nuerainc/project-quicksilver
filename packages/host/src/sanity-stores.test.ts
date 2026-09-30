@@ -157,7 +157,8 @@ const RUN = 'genesis-500'
 function entries(n: number, tweak?: (i: number) => Partial<Parameters<typeof appendMoney>[1]>) {
   let ledger: MoneyLedger = { runId: RUN, budgetUsd: 500, entries: [] }
   for (let i = 0; i < n; i++) {
-    const r = appendMoney(ledger, { kind: i === 2 ? 'compute' : 'spend', amountUsd: 10 + i, category: i === 2 ? 'compute' : 'domains', description: `entry ${i + 1}`, source: { type: 'receipt', ref: `r-${i + 1}` }, ...(i === 1 ? { experimentId: 'exp-landing-1' } : {}), ...tweak?.(i) }, human, new Date(T0.getTime() + i * 1000))
+    const at = new Date(T0.getTime() + i * 1000)
+    const r = appendMoney(ledger, { kind: i === 2 ? 'compute' : 'spend', amountUsd: 10 + i, category: i === 2 ? 'compute' : 'domains', description: `entry ${i + 1}`, source: { type: 'receipt', ref: `r-${i + 1}` }, spendAuthorization: { decisionId: `decision-${i + 1}`, recommendation: 'execute-autonomously', riskLevel: 1, reasons: [], confirmedBy: human.id, confirmedAt: at.toISOString() }, ...(i === 1 ? { experimentId: 'exp-landing-1' } : {}), ...tweak?.(i) }, human, at)
     assert.ok(r.ok)
     ledger = r.ledger
   }
@@ -310,7 +311,8 @@ test('the host adapter appends only new entries and loads what the CLI stores wr
   let ledger: MoneyLedger = (await adapter.load(config)).ledger
   const human = { id: 'entity-founder', kind: 'human' as const }
   for (const amount of [5, 7]) {
-    const r = appendMoney(ledger, { kind: 'spend', amountUsd: amount, category: 'domain', description: `d${amount}`, source: { type: 'receipt', ref: `r${amount}` } }, human, new Date('2026-11-01T00:00:00Z'))
+    const at = new Date('2026-11-01T00:00:00Z')
+    const r = appendMoney(ledger, { kind: 'spend', amountUsd: amount, category: 'domain', description: `d${amount}`, source: { type: 'receipt', ref: `r${amount}` }, spendAuthorization: { decisionId: `decision-${amount}`, recommendation: 'execute-autonomously', riskLevel: 1, reasons: [], confirmedBy: human.id, confirmedAt: at.toISOString() } }, human, at)
     assert.ok(r.ok)
     if (r.ok) ledger = r.ledger
     await adapter.saveLedger('run-a', ledger)

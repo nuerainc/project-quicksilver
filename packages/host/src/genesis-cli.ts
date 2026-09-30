@@ -28,9 +28,11 @@
  * review commands send and publish nothing.
  */
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
+import { randomUUID } from 'node:crypto'
 import { join, resolve } from 'node:path'
 
 import { AccessController } from '@quicksilver/kernel/identity'
+import { FileAuthorizationAuditStore, resolveAuthorizationAuditPath } from './authorization-audit.ts'
 import { validatePlaybook, type PlaybookDefinition } from '@quicksilver/kernel/playbooks'
 import {
   appendMoney,
@@ -53,16 +55,14 @@ import { loadHostConfig } from './config.ts'
 import { contentStatus, createManualReview, MANUAL_REVIEW_LABEL, parseContentReviewInput, readContentArg, reviewSummary } from './genesis-reviews.ts'
 import { genesisStoresFromEnv, MoneyLedgerIntegrityError, runStartedAt } from './genesis-store.ts'
 import { SecretsVault } from './vault.ts'
+import { CLI_VALUE_FLAGS, parseCommandArgs } from './cli-args.ts'
 
 const root = process.env.INIT_CWD ?? process.cwd()
 const configPath = resolve(root, process.env.QUICKSILVER_GENESIS_CONFIG ?? 'deploy/genesis/genesis-500.json')
 const actorId = process.env.QUICKSILVER_GENESIS_ACTOR || 'entity-founder'
 const founder = { id: actorId, kind: 'human' as const }
 const kernelActor = { id: 'kernel', kind: 'service' as const }
-const [cmd, ...args] = process.argv.slice(2)
-const flag = (name: string) => { const i = args.indexOf(name); return i >= 0 ? args[i + 1] : undefined }
-const VALUE_FLAGS = ['--source', '--experiment', '--channel', '--proposer']
-const positional = args.filter((a, i) => !a.startsWith('--') && !(i > 0 && VALUE_FLAGS.includes(args[i - 1]!)))
+const { command: cmd, args, flag, positional } = parseCommandArgs(process.argv.slice(2), { valueFlags: CLI_VALUE_FLAGS.genesis })
 
 function fail(message: string): never { console.error(message); process.exit(1) }
 async function readJson<T>(path: string, fallback: T): Promise<T> {
@@ -104,7 +104,8 @@ async function vaultNames(): Promise<{ names: string[]; note?: string }> {
     if (!host.vault) return { names: [], note: 'No vault is configured in the host config.' }
     const masterKey = process.env[host.vault.keyEnv]
     if (!masterKey) return { names: [], note: `${host.vault.keyEnv} is not set, so the vault can't be checked.` }
-    const vault = new SecretsVault({ path: host.vault.path, masterKey, tenantId: host.tenantId, access: new AccessController(), audit: () => {} })
+    const authorizationAudit = new FileAuthorizationAuditStore(resolveAuthorizationAuditPath(host))
+    const vault = new SecretsVault({ path: host.vault.path, masterKey, tenantId: host.tenantId, access: new AccessController({ audit: (decision) => authorizationAudit.append(decision) }), audit: () => {} })
     await vault.open()
     const admin = { id: `genesis-cli:${actorId}`, kind: 'human' as const, tenantId: host.tenantId, roles: ['tenant-admin'] }
     return { names: (await vault.list(admin)).filter((s) => !s.disabled).map((s) => s.name) }
@@ -204,13 +205,15 @@ switch (cmd) {
     const experimentId = flag('--experiment')
     const experiment = experimentId ? findExperiment(experimentId)[0] : undefined
     const now = new Date()
+    let spendAuthorization: MoneyEntryInput['spendAuthorization']
     if (cmd === 'spend' || cmd === 'compute') {
       const d = decideSpend(config, ledger, { amountUsd, category, description, ...(experimentId ? { experimentId } : {}) }, now, experiment)
       console.log(`Kernel: ${d.recommendation} (spend risk ${d.riskLevel}).${d.reasons.length ? ` ${d.reasons.join(' ')}` : ''}`)
       if (d.recommendation === 'reject') fail('Not recorded: the rules refuse this spend. If the money already moved outside the rules, stop the run and review it.')
       if (d.recommendation === 'request-approval' && !args.includes('--confirm')) fail('Not recorded: this needs your decision. Re-run with --confirm to approve it as yourself.')
+      spendAuthorization = { decisionId: `spend-${randomUUID()}`, recommendation: d.recommendation, riskLevel: d.riskLevel, reasons: d.reasons, confirmedBy: founder.id, confirmedAt: now.toISOString() }
     }
-    const r = appendMoney(ledger, { kind: cmd as MoneyKind, amountUsd, category, description, source: parseSource(), ...(experimentId ? { experimentId } : {}) }, founder, now)
+    const r = appendMoney(ledger, { kind: cmd as MoneyKind, amountUsd, category, description, source: parseSource(), ...(experimentId ? { experimentId } : {}), ...(spendAuthorization ? { spendAuthorization } : {}) }, founder, now)
     if (!r.ok) fail(r.reasons.join(' '))
     await stores.ledger.append(config.runId, r.entry)
     const t = moneyTotals(r.ledger)

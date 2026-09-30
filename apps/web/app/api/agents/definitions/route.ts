@@ -6,7 +6,7 @@ import { guardWebRoute } from '@/lib/route-guard'
 
 const idSchema = z.string().regex(/^nuera-quicksilver:[a-z][a-z0-9-]{0,62}$/)
 export async function GET(request: Request) {
-  const caller = guardWebRoute(request, 'agents/definitions')
+  const caller = await guardWebRoute(request, 'agents/definitions')
   if (!caller.ok) return publicationRefusal(caller)
   const id = new URL(request.url).searchParams.get('agentId')
   if (!idSchema.safeParse(id).success) return NextResponse.json({ error: 'A namespaced agentId is required.' }, { status: 400 })

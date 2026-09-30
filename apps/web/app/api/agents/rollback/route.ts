@@ -6,7 +6,7 @@ import { guardPublicationActor, publicationFailure, publicationRefusal, readPubl
 const requestSchema = z.object({ agentId: z.string().regex(/^nuera-quicksilver:[a-z][a-z0-9-]{0,62}$/), sourceVersion: z.number().int().positive() }).strict()
 
 export async function POST(request: Request) {
-  const caller = guardPublicationActor(request, 'agents/rollback')
+  const caller = await guardPublicationActor(request, 'agents/rollback')
   if (!caller.ok) return publicationRefusal(caller.refusal)
   const body = await readPublicationBody(request)
   if (!body.ok) return body.response

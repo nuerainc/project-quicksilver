@@ -1,8 +1,8 @@
 /**
  * POST /api/decisions/[id]/action — act on a proposed decision.
  *
- * Body: { action: 'approve' | 'reject' | 'request-evidence', comment?: string }
- * (no other fields). The approver recorded (`approvedBy`,
+ * Body: { action, comment?, expectedActionFingerprint? }. Approvals require
+ * the fingerprint returned in the plan response; the approver recorded (`approvedBy`,
  * `approvalRecord.supervisorId`) is the principal authenticated from the
  * `Authorization: Bearer` header, never anything in the body.
  *
@@ -17,11 +17,12 @@
  */
 
 import { NextResponse } from 'next/server'
+import { safeErrorName } from '@/lib/safe-log'
 import { getSanityClient } from '@/lib/sanity-client'
 import { randomUUID } from 'node:crypto'
 import { DecisionActionBody, separationRefusal } from '@/lib/decision-action-body'
 import { authorizeTransition, checkSeparationOfDuties } from '@quicksilver/kernel'
-import { currentPolicySnapshotVersion, decisionActionFingerprint, soleOperatorId, verifySupervisorCredential } from '@/lib/nqc-approval'
+import { approvalFingerprintWasReviewed, currentPolicySnapshotVersion, decisionActionFingerprint, soleOperatorId, verifySupervisorCredential } from '@/lib/nqc-approval'
 import { takeWebRateLimit } from '@/lib/route-guard'
 import {
   commitTransition,
@@ -49,7 +50,7 @@ export async function POST(
 
   // The supervisor credential before the body is read (A-3), then the
   // per-principal write limit (A-5).
-  const supervisor = verifySupervisorCredential(req)
+  const supervisor = await verifySupervisorCredential(req)
   if (!supervisor.ok) return NextResponse.json({ error: supervisor.reason }, { status: supervisor.status })
   const limited = takeWebRateLimit('write', supervisor.supervisorId)
   if (limited) return NextResponse.json(limited.body, { status: limited.status, headers: limited.headers })
@@ -64,7 +65,7 @@ export async function POST(
   if (!parsed.success) {
     return NextResponse.json({ error: 'Validation failed', issues: parsed.error.issues }, { status: 400 })
   }
-  const { action, comment } = parsed.data
+  const { action, comment, expectedActionFingerprint } = parsed.data
 
   if (!process.env.NEXT_PUBLIC_SANITY_PROJECT_ID) {
     return NextResponse.json({ error: 'Sanity not configured' }, { status: 500 })
@@ -119,6 +120,18 @@ export async function POST(
       const livePolicyVersion = await currentPolicySnapshotVersion(client, policyIds)
       if (!existing.policySnapshotVersion || livePolicyVersion !== existing.policySnapshotVersion) {
         return NextResponse.json({ error: 'Policy versions changed or were not recorded for this decision. Request a fresh plan.' }, { status: 409 })
+      }
+      const currentActionFingerprint = existing.selectedAction && existing.policySnapshotVersion
+        ? decisionActionFingerprint({
+            decisionId: existing._id,
+            selectedAction: existing.selectedAction,
+            policySnapshotVersion: existing.policySnapshotVersion,
+            riskLevel: existing.riskLevel ?? 0,
+            requiredApproval: existing.requiredApproval ?? false,
+          })
+        : null
+      if (!approvalFingerprintWasReviewed(expectedActionFingerprint, currentActionFingerprint)) {
+        return NextResponse.json({ error: 'This action or policy snapshot differs from the version you reviewed. Reload the plan before approving.' }, { status: 409 })
       }
     }
     // Separation of duties: nobody approves what they requested, proposed, or would carry out,
@@ -198,6 +211,7 @@ export async function POST(
         status: step.to,
         supervisorId: supervisor.supervisorId,
         approvalId: approvalRecord?.id ?? null,
+        approvalFingerprint: approvalRecord?.actionFingerprint ?? null,
         comment,
         at: now,
         process: processView(definition, step.to!, facts, step.transition?.id),
@@ -261,13 +275,14 @@ export async function POST(
       status: updated.status ?? patch.status,
       supervisorId: supervisor.supervisorId,
       approvalId: approvalRecord?.id ?? null,
+      approvalFingerprint: approvalRecord?.actionFingerprint ?? null,
       comment,
       at: now,
     })
   } catch (err) {
-    console.error('[/api/decisions/[id]/action]', err)
+    console.error('[/api/decisions/[id]/action]', safeErrorName(err))
     return NextResponse.json(
-      { error: 'Action failed', detail: (err as Error).message },
+      { error: 'Action failed', detail: safeErrorName(err) },
       { status: 500 },
     )
   }

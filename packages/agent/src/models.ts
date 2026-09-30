@@ -36,9 +36,89 @@ import { anthropic } from '@ai-sdk/anthropic'
 import { google } from '@ai-sdk/google'
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
 import type { LanguageModel } from 'ai'
+import { selectRoute, type ModelPerformanceProfile, type RoutingDecision, type RoutingRequest } from '@quicksilver/kernel'
 
 export type QuicksilverModelRole = 'planner' | 'reviewer' | 'router' | 'executor'
 export type InferenceMode = 'azure' | 'cloud' | 'local'
+
+/** Optional measured routing config supplied by the host at process startup. */
+type RoleRoutingPolicy = Partial<Omit<RoutingRequest, 'candidates' | 'taskType'>>
+export interface MeasuredRoutingConfig {
+  profiles: ModelPerformanceProfile[]
+  requests?: Partial<Record<QuicksilverModelRole, RoleRoutingPolicy>>
+}
+
+const ROLE_TASK: Record<QuicksilverModelRole, RoutingRequest['taskType']> = {
+  planner: 'planning', reviewer: 'evaluation', router: 'routing', executor: 'code',
+}
+
+/**
+ * Resolve the measured route for a role. Hosts may inject a config directly or
+ * set QUICKSILVER_ROUTING_CONFIG to JSON. Configured routing fails closed when
+ * no measured profile satisfies the request; silently reverting to an
+ * unmeasured model would defeat the caller's routing policy.
+ */
+export function routeForRole(
+  role: QuicksilverModelRole,
+  config = readMeasuredRoutingConfig(),
+): RoutingDecision | null {
+  if (!config) return null
+  const policy = config.requests?.[role] ?? {}
+  return selectRoute({
+    taskType: ROLE_TASK[role],
+    estimatedTokens: 1000,
+    ...policy,
+    candidates: config.profiles,
+  })
+}
+
+/** Parse and minimally validate the host-provided measured model profiles. */
+export function readMeasuredRoutingConfig(): MeasuredRoutingConfig | null {
+  const raw = process.env.QUICKSILVER_ROUTING_CONFIG
+  if (!raw) return null
+  let value: unknown
+  try { value = JSON.parse(raw) } catch { throw new Error('QUICKSILVER_ROUTING_CONFIG must be valid JSON.') }
+  if (!value || typeof value !== 'object' || !Array.isArray((value as { profiles?: unknown }).profiles)) {
+    throw new Error('QUICKSILVER_ROUTING_CONFIG must be an object with a profiles array.')
+  }
+  const profiles = (value as { profiles: unknown[] }).profiles
+  if (!profiles.every(isModelPerformanceProfile)) {
+    throw new Error('QUICKSILVER_ROUTING_CONFIG contains an invalid model performance profile.')
+  }
+  const requests = (value as { requests?: unknown }).requests
+  if (requests !== undefined && (!requests || typeof requests !== 'object' || Array.isArray(requests))) {
+    throw new Error('QUICKSILVER_ROUTING_CONFIG requests must be an object keyed by agent role.')
+  }
+  const normalizedRequests: MeasuredRoutingConfig['requests'] = {}
+  if (requests) {
+    for (const [role, request] of Object.entries(requests)) {
+      if (!(['planner', 'reviewer', 'router', 'executor'] as string[]).includes(role)
+        || !request || typeof request !== 'object' || Array.isArray(request)) {
+        throw new Error(`QUICKSILVER_ROUTING_CONFIG has an invalid request for role "${role}".`)
+      }
+      const r = request as Record<string, unknown>
+      const numericKeys = ['estimatedTokens', 'budget', 'maxLatencyMs', 'minimumAccuracy', 'maximumRateLimitRate']
+      if (Object.keys(r).some((key) => ![...numericKeys, 'domain', 'recentFailureModelIds'].includes(key))
+        || numericKeys.some((key) => r[key] !== undefined && (typeof r[key] !== 'number' || !Number.isFinite(r[key])))
+        || (r.domain !== undefined && typeof r.domain !== 'string')
+        || (r.recentFailureModelIds !== undefined && (!Array.isArray(r.recentFailureModelIds) || !r.recentFailureModelIds.every((id) => typeof id === 'string')))) {
+        throw new Error(`QUICKSILVER_ROUTING_CONFIG has invalid policy fields for role "${role}".`)
+      }
+      normalizedRequests[role as QuicksilverModelRole] = r as RoleRoutingPolicy
+    }
+  }
+  return { profiles: profiles as ModelPerformanceProfile[], ...(requests ? { requests: normalizedRequests } : {}) }
+}
+
+function isModelPerformanceProfile(value: unknown): value is ModelPerformanceProfile {
+  if (!value || typeof value !== 'object') return false
+  const p = value as Partial<ModelPerformanceProfile>
+  return typeof p.modelId === 'string' && Boolean(p.modelId.trim())
+    && Array.isArray(p.supportedTasks) && p.supportedTasks.every((x) => typeof x === 'string')
+    && Boolean(p.taskAccuracy) && typeof p.taskAccuracy === 'object'
+    && typeof p.successRate === 'number' && typeof p.averageCostPer1kTokens === 'number'
+    && typeof p.p95LatencyMs === 'number' && typeof p.available === 'boolean'
+}
 
 type Registry = Record<QuicksilverModelRole, string>
 
@@ -155,7 +235,13 @@ export function languageModelForId(id: string, mode: InferenceMode = getMode()):
  * `modelForRole('planner')` → the active planner model.
  * `modelForRole('reviewer', 'local')` → forces the local reviewer model.
  */
-export function modelForRole(role: QuicksilverModelRole, mode?: InferenceMode): LanguageModel {
+export function modelForRole(role: QuicksilverModelRole, mode?: InferenceMode, routingConfig?: MeasuredRoutingConfig | null): LanguageModel {
   const m: InferenceMode = mode ?? getMode()
-  return languageModelForId(resolveId(role, m), m)
+  // An explicit role override is an operator decision and retains precedence.
+  const override = process.env[`QUICKSILVER_${role.toUpperCase()}_MODEL`]
+  const route = override ? null : routeForRole(role, routingConfig === undefined ? readMeasuredRoutingConfig() : routingConfig)
+  if (route && !route.selectedModelId) {
+    throw new Error(`Measured model routing refused ${role} dispatch: ${route.reason}`)
+  }
+  return languageModelForId(route?.selectedModelId ?? resolveId(role, m), m)
 }

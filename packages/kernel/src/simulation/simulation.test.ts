@@ -14,7 +14,7 @@ function ledgerOf(rows: Array<[kind: 'revenue' | 'spend' | 'compute' | 'refund',
   let l: MoneyLedger = { runId: 'sim', budgetUsd: 0, entries: [] }
   for (const [kind, amountUsd, day, extra] of rows) {
     const at = new Date(T0 + day * DAY)
-    const r = appendMoney(l, { kind, amountUsd, category: kind === 'revenue' ? 'sales' : 'hosting', description: kind, source: { type: 'bank', ref: `d${day}` }, occurredAt: at.toISOString(), ...(extra ?? {}) }, founder, at)
+    const r = appendMoney(l, { kind, amountUsd, category: kind === 'revenue' ? 'sales' : 'hosting', description: kind, source: { type: 'bank', ref: `d${day}` }, occurredAt: at.toISOString(), ...(extra ?? {}), ...((kind === 'spend' || kind === 'compute') ? { spendAuthorization: { decisionId: `decision-${day}-${l.entries.length}`, recommendation: 'execute-autonomously' as const, riskLevel: 1 as const, reasons: [], confirmedBy: founder.id, confirmedAt: at.toISOString() } } : {}) }, founder, at)
     assert.ok(r.ok, r.ok ? '' : r.reasons.join(' '))
     if (r.ok) l = r.ledger
   }

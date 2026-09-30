@@ -30,8 +30,9 @@
  */
 
 import { NextResponse } from 'next/server'
+import { safeErrorName } from '@/lib/safe-log'
 import { getSanityClient } from '@/lib/sanity-client'
-import { authorizeDecisionRoute, currentPolicySnapshotVersion, decisionActionFingerprint } from '@/lib/nqc-approval'
+import { authorizeDecisionRoute, currentPolicySnapshotVersion, evaluateDecisionExecutionGate, type DecisionApprovalRecord } from '@/lib/nqc-approval'
 import { takeWebRateLimit } from '@/lib/route-guard'
 import { z } from 'zod'
 import { authorizeTransition } from '@quicksilver/kernel'
@@ -144,7 +145,7 @@ export async function POST(
 
   // Authenticate before any read or write: only a human with decision:execute
   // may execute, and that principal is recorded as the executor.
-  const executor = authorizeDecisionRoute(req, 'execute')
+  const executor = await authorizeDecisionRoute(req, 'execute')
   if (!executor.ok) return NextResponse.json({ error: executor.reason }, { status: executor.status })
   const limited = takeWebRateLimit('write', executor.principalId)
   if (limited) return NextResponse.json(limited.body, { status: limited.status, headers: limited.headers })
@@ -183,14 +184,7 @@ export async function POST(
       safetyDecision?: string | null
       policySnapshotVersion?: string | null
       policyIds?: string[]
-      approvalRecord?: {
-        id?: string
-        requestId?: string
-        actionFingerprint?: string
-        policySnapshotVersion?: string
-        supervisorId?: string
-        grantedAt?: string
-      } | null
+      approvalRecord?: DecisionApprovalRecord | null
       approvedById?: string | null
     } | null>(
       `*[_type == "decision" && _id == $id][0]{ _id, _rev, status, selectedAction, kind, riskLevel, requiredApproval, safetyDecision, policySnapshotVersion, "policyIds": policyChecks[].policy._ref, approvalRecord, "approvedById": approvedBy._ref, "rollbackOfId": rollbackOf._ref }`,
@@ -200,37 +194,29 @@ export async function POST(
       return NextResponse.json({ error: 'Decision not found' }, { status: 404 })
     }
 
-    if (decision.safetyDecision === 'BLOCK') {
-      return NextResponse.json({ error: 'The NQC Kernel blocked this decision; it cannot execute.' }, { status: 409 })
-    }
     const policyIds = [...new Set(decision.policyIds ?? [])].sort()
     const livePolicyVersion = await currentPolicySnapshotVersion(client, policyIds)
-    if (!decision.policySnapshotVersion || livePolicyVersion !== decision.policySnapshotVersion) {
-      return NextResponse.json({ error: 'Policy versions changed or were not recorded for this decision. Request a fresh plan.' }, { status: 409 })
-    }
-
-    const approvalRequired = decision.requiredApproval === true
-      || decision.safetyDecision === 'ESCALATE'
-      || (decision.riskLevel ?? 0) >= 4
-    const actionFingerprint = decisionActionFingerprint({
+    const executionGate = evaluateDecisionExecutionGate({
       decisionId: decision._id,
       selectedAction: decision.selectedAction,
+      riskLevel: decision.riskLevel,
+      requiredApproval: decision.requiredApproval,
+      safetyDecision: decision.safetyDecision,
       policySnapshotVersion: decision.policySnapshotVersion,
-      riskLevel: decision.riskLevel ?? 0,
-      requiredApproval: decision.requiredApproval ?? false,
+      livePolicySnapshotVersion: livePolicyVersion,
+      approvedById: decision.approvedById,
+      approval: decision.approvalRecord,
     })
-    const approval = decision.approvalRecord
-    if (approvalRequired && (
-      !approval?.id
-      || approval.requestId !== decision._id
-      || approval.actionFingerprint !== actionFingerprint
-      || approval.policySnapshotVersion !== decision.policySnapshotVersion
-      || !approval.supervisorId
-      || !approval.grantedAt
-      || decision.approvedById !== approval.supervisorId
-    )) {
-      return NextResponse.json({ error: 'A current supervisor approval for this exact action and policy version is required.' }, { status: 409 })
+    if (!executionGate.allowed) {
+      const error = executionGate.reason === 'kernel-blocked'
+        ? 'The NQC Kernel blocked this decision; it cannot execute.'
+        : executionGate.reason === 'policy-changed'
+          ? 'Policy versions changed or were not recorded for this decision. Request a fresh plan.'
+          : 'A current supervisor approval for this exact action and policy version is required.'
+      return NextResponse.json({ error }, { status: 409 })
     }
+    const { approvalRequired, actionFingerprint } = executionGate
+    const approval = decision.approvalRecord
     if (approvalRequired) {
       const supervisor = await client.fetch<{ _id: string; entityType: string } | null>(
         '*[_type == "entity" && _id == $id][0]{ _id, entityType }',
@@ -363,9 +349,9 @@ export async function POST(
       at: now,
     })
   } catch (err) {
-    console.error('[/api/decisions/[id]/execute]', err)
+    console.error('[/api/decisions/[id]/execute]', safeErrorName(err))
     return NextResponse.json(
-      { error: 'Execution failed', detail: (err as Error).message },
+      { error: 'Execution failed', detail: safeErrorName(err) },
       { status: 500 },
     )
   }
@@ -396,7 +382,7 @@ async function completeParentRollback(
   try {
     await commitTransition(client, parent._id, parent._rev, definition, step, KERNEL_ACTOR, now)
   } catch (err) {
-    return { id: parentId, error: (err as Error).message }
+    return { id: parentId, error: safeErrorName(err) }
   }
   return { id: parentId, status: step.to!, process: processView(definition, step.to!, facts, step.transition?.id) }
 }

@@ -70,6 +70,7 @@ import { validatePlaybook, type PlaybookDefinition } from '@quicksilver/kernel/p
 import { fileRankerStore } from './ranker-store.ts'
 import { judge, recommend, recordOutcome, shadowFacts, shadowReport, type Outcome, type ShadowLog, type Verdict } from '@quicksilver/kernel/playbooks/shadow'
 import { labConnectorPatterns, readLabBoundaries } from './lab-boundaries.ts'
+import { CLI_VALUE_FLAGS, parseCommandArgs } from './cli-args.ts'
 
 const root = process.env.INIT_CWD ?? process.cwd()
 const dir = resolve(root, process.env.QUICKSILVER_INTENT_DIR ?? 'data/intent')
@@ -83,9 +84,7 @@ const rankerStore = fileRankerStore(join(dir, 'ranker.json'))
 const ranker = await rankerStore.load()
 // The local, trusted command line acts as the founder's principal.
 const principal = { id: actorId, kind: 'human' as const, tenantId, roles: ['intent-provider'] }
-const [cmd, ...args] = process.argv.slice(2)
-const flag = (name: string) => { const i = args.indexOf(name); return i >= 0 ? args[i + 1] : undefined }
-const positional = args.filter((a, i) => !a.startsWith('--') && !(i > 0 && args[i - 1]!.startsWith('--')))
+const { command: cmd, args, flag, positional } = parseCommandArgs(process.argv.slice(2), { valueFlags: CLI_VALUE_FLAGS.onboard, skipValueAfterAnyFlag: true })
 
 function fail(message: string): never { console.error(message); process.exit(1) }
 const workDir = (id: string) => { if (!/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$/.test(id)) fail('Invalid intent id.'); return join(dir, 'onboard', id) }

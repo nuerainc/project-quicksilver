@@ -15,17 +15,100 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { register } from 'node:module'
-import { readdirSync, statSync } from 'node:fs'
+import { readFileSync, readdirSync, statSync } from 'node:fs'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { join, relative, sep } from 'node:path'
 
 import { digestToken } from '../../../packages/kernel/src/identity/tokens.ts'
+import { setAuthorizationAuditAppender } from './authorization-audit-store.ts'
+
+// This route contract suite clears Sanity credentials and verifies auth before
+// data access. Isolate its durable audit boundary; append semantics are covered
+// by authorization-audit-store.test.ts.
+setAuthorizationAuditAppender(async () => 'test-authorization-audit-record')
 
 // Lets Node import Next.js route modules: the "@/" alias and extensionless imports.
 register('./route-test-loader.mjs', import.meta.url)
 
 const API_DIR = fileURLToPath(new URL('../app/api/', import.meta.url))
 const HTTP_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'] as const
+
+test('OpenAPI contract (P-118): paths and methods match exported API route handlers', () => {
+  const contractPath = fileURLToPath(new URL('../../../docs/api/openapi.json', import.meta.url))
+  const contract = JSON.parse(readFileSync(contractPath, 'utf8')) as { openapi: string; info: { version: string }; paths: Record<string, Record<string, unknown>> }
+  assert.equal(contract.openapi, '3.1.0')
+  assert.match(contract.info.version, /^0\./, 'pre-1.0 contract version must not claim 1.0 stability')
+
+  const declared = Object.entries(contract.paths).flatMap(([path, methods]) =>
+    Object.keys(methods).map((method) => `${method.toUpperCase()} ${path}`),
+  ).sort()
+  const implemented = findRouteFiles(API_DIR).flatMap((file) => {
+    const rel = relative(API_DIR, file).split(sep).slice(0, -1).join('/')
+    const path = `/api/${rel}`.replace(/\[([^\]]+)\]/g, '{$1}')
+    const source = readFileSync(file, 'utf8')
+    const methods = [...source.matchAll(/export\s+(?:async\s+)?function\s+(GET|POST|PUT|PATCH|DELETE)|export\s+const\s+(GET|POST|PUT|PATCH|DELETE)\s*=/g)]
+      .map((match) => match[1] ?? match[2])
+    return methods.map((method) => `${method} ${path}`)
+  }).sort()
+  assert.deepEqual(declared, implemented, 'update docs/api/openapi.json when a route method is added, removed, or moved')
+
+  const operationIds = new Set<string>()
+  for (const [path, methods] of Object.entries(contract.paths)) {
+    for (const [method, rawOperation] of Object.entries(methods)) {
+      const operation = rawOperation as { operationId?: string; responses?: Record<string, unknown>; requestBody?: unknown }
+      assert.ok(operation.operationId, `${method.toUpperCase()} ${path} has an operationId`)
+      assert.ok(!operationIds.has(operation.operationId!), `duplicate operationId ${operation.operationId}`)
+      operationIds.add(operation.operationId!)
+      assert.ok(operation.responses && Object.keys(operation.responses).length > 0, `${operation.operationId} declares responses`)
+      if (method.toLowerCase() === 'post' || method.toLowerCase() === 'put' || method.toLowerCase() === 'patch') {
+        assert.ok(operation.requestBody, `${operation.operationId} declares its request body`)
+      }
+    }
+  }
+
+  // Catch broken local schema/response/parameter links before the contract is
+  // consumed by SDK generation or API tooling.
+  const resolvePointer = (pointer: string): unknown => {
+    assert.ok(pointer.startsWith('#/'), `only local OpenAPI references are expected: ${pointer}`)
+    return pointer.slice(2).split('/').map((part) => part.replace(/~1/g, '/').replace(/~0/g, '~')).reduce<unknown>((node, key) => {
+      assert.ok(node !== null && typeof node === 'object' && key in node, `unresolved OpenAPI reference: ${pointer}`)
+      return (node as Record<string, unknown>)[key]
+    }, contract)
+  }
+  const visit = (node: unknown): void => {
+    if (Array.isArray(node)) return node.forEach(visit)
+    if (!node || typeof node !== 'object') return
+    const object = node as Record<string, unknown>
+    if (typeof object.$ref === 'string') resolvePointer(object.$ref)
+    Object.values(object).forEach(visit)
+  }
+  visit(contract)
+
+  const validate = contract.paths['/api/workflows/validate']?.post as { requestBody?: { $ref?: string }; responses?: Record<string, { $ref?: string }> } | undefined
+  const simulate = contract.paths['/api/workflows/simulate']?.post as { requestBody?: { $ref?: string }; responses?: Record<string, { $ref?: string }> } | undefined
+  const run = contract.paths['/api/workflows/run']?.post as { requestBody?: { $ref?: string }; responses?: Record<string, { $ref?: string }> } | undefined
+  assert.equal(validate?.requestBody?.$ref, '#/components/requestBodies/WorkflowGraphRequest')
+  assert.equal(validate?.responses?.['2XX']?.$ref, '#/components/responses/WorkflowValidationResponse')
+  assert.equal(simulate?.requestBody?.$ref, '#/components/requestBodies/WorkflowGraphRequest')
+  assert.equal(simulate?.responses?.['2XX']?.$ref, '#/components/responses/WorkflowSimulationResponse')
+  assert.equal(run?.requestBody?.$ref, '#/components/requestBodies/WorkflowRunRequest')
+  assert.equal(run?.responses?.['2XX']?.$ref, '#/components/responses/WorkflowRunResponse')
+
+  const agentBindings: Array<[string, string, string | undefined, string, string?]> = [
+    ['/api/agents/catalog', 'get', undefined, 'AgentCatalogResponse'],
+    ['/api/agents/definitions', 'get', undefined, 'AgentDefinitionsResponse'],
+    ['/api/agents/drafts', 'post', 'CreateAgentDraft', 'AgentDefinitionResponse', '201'],
+    ['/api/agents/drafts/submit', 'post', 'AgentVersionAction', 'AgentDefinitionResponse'],
+    ['/api/agents/review', 'post', 'ReviewAgentDefinition', 'AgentDefinitionResponse'],
+    ['/api/agents/publish', 'post', 'AgentVersionAction', 'AgentDefinitionResponse'],
+    ['/api/agents/rollback', 'post', 'RollbackAgentDefinition', 'AgentDefinitionResponse', '201'],
+  ]
+  for (const [path, method, body, response, status = '2XX'] of agentBindings) {
+    const operation = contract.paths[path]?.[method] as { requestBody?: { $ref?: string }; responses?: Record<string, { $ref?: string }> } | undefined
+    assert.equal(operation?.responses?.[status]?.$ref, `#/components/responses/${response}`, `${method.toUpperCase()} ${path} binds its observed response schema`)
+    if (body) assert.equal(operation?.requestBody?.$ref, `#/components/requestBodies/${body}`, `${method.toUpperCase()} ${path} binds its validated request schema`)
+  }
+})
 
 /** Routes a valid principal with no permission may call, and why (a reviewed list). */
 const REVIEWED_ANY_PRINCIPAL: Record<string, string> = {
@@ -131,6 +214,10 @@ test('web route permissions (A-3): plan/query/workflows and agent lifecycle use 
   const env = { ...principalEnv }
   assert.deepEqual(WEB_ROUTE_ACCESS.plan.permissions, ['decision:propose'])
   assert.deepEqual(WEB_ROUTE_ACCESS.query.permissions, ['decision:read'])
+  assert.deepEqual(WEB_ROUTE_ACCESS['dashboard/overview'].permissions, ['decision:read'])
+  assert.deepEqual(WEB_ROUTE_ACCESS['dashboard/finance'].permissions, ['finance:read'])
+  assert.equal(checkWebRoute('dashboard/finance', `Bearer ${TOKENS.viewer}`, env).ok, false, 'ordinary viewers cannot read ledger totals')
+  assert.equal(checkWebRoute('dashboard/finance', `Bearer ${TOKENS.supervisor}`, env).ok, true, 'supervisors can read ledger totals')
   assert.deepEqual(WEB_ROUTE_ACCESS['workflows/validate'].permissions, ['workflow:read'])
   assert.deepEqual(WEB_ROUTE_ACCESS['workflows/simulate'].permissions, ['workflow:read'])
   assert.deepEqual(WEB_ROUTE_ACCESS['workflows/run'].permissions, ['run:enqueue'])
@@ -176,6 +263,20 @@ test('agent catalog routes validate bodies before any Sanity access', async () =
   assert.equal(response.status, 400)
   const draft = routes.find((item) => item.key === 'POST /api/agents/drafts')!
   assert.equal((await call(draft, supervisor, JSON.stringify({ displayName: 'Compliance', description: 'A definition that is structurally invalid.', manifest: { id: 'wrong', version: 1, authority: 'admin', tasks: [], maximumImpact: 'critical', requiresEvaluation: false } }))).status, 400)
+})
+
+test('decision approval route refuses a missing or malformed review fingerprint before Sanity access', async () => {
+  setEnv(principalEnv)
+  const routes = await loadHandlers()
+  const action = routes.find((item) => item.key === 'POST /api/decisions/[id]/action')!
+  const supervisor = `Bearer ${TOKENS.supervisor}`
+  for (const body of [
+    { action: 'approve' },
+    { action: 'approve', expectedActionFingerprint: 'sha256:stale' },
+  ]) {
+    const response = await call(action, supervisor, JSON.stringify(body))
+    assert.equal(response.status, 400, JSON.stringify(body))
+  }
 })
 
 test('web rate limits (A-5): model and write routes return 429 with Retry-After per principal; the default and bad settings', async () => {

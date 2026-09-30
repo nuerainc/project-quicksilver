@@ -21,6 +21,7 @@
  * log is, by definition, always changing.
  */
 
+import Link from 'next/link'
 import { getSanityClient } from '@/lib/sanity-client'
 
 export const dynamic = 'force-dynamic'
@@ -139,44 +140,45 @@ async function loadDecisions(): Promise<{ decisions: DecisionRow[] | null; error
 
 export default async function DecisionLogPage() {
   const { decisions, error } = await loadDecisions()
+  const awaiting = decisions?.filter((d) => d.status === 'awaiting-approval').length ?? 0
+  const executed = decisions?.filter((d) => d.status === 'executed').length ?? 0
+  const conflicts = decisions?.reduce((count, d) => count + (d.policyChecks ?? []).filter((check) => check.result === 'conflicts').length, 0) ?? 0
 
   return (
-    <main className="mx-auto max-w-6xl px-6 py-12">
-      <header className="mb-10">
-        <a
-          href="/"
-          className="font-mono text-xs uppercase tracking-widest text-quicksilver-accent transition hover:text-quicksilver-signal"
-        >
-          ← Back to console
-        </a>
-        <h1 className="qs-glow mt-4 font-mono text-3xl tracking-[0.3em] text-quicksilver-quicksilver">
-          DECISION LOG
-        </h1>
-        <p className="mt-2 max-w-2xl text-sm text-quicksilver-accent">
-          Every decision Quicksilver has proposed, authorized, rejected, or executed —
-          read-only, newest first. This is the same <code className="text-quicksilver-signal">decision</code>{' '}
-          document the kernel writes on every run; nothing here is re-computed or summarized by an LLM.
+    <main className="app-main">
+      <header className="qs-page-heading">
+        <p className="qs-eyebrow">Govern · Audit trail</p>
+        <h1>Decision log</h1>
+        <p className="qs-page-heading__summary">
+          A read-only record of what Quicksilver proposed, approved, rejected, and executed. Entries are shown newest first from the kernel&apos;s decision records.
         </p>
       </header>
 
       {error && (
-        <p className="rounded border border-red-400/60 bg-quicksilver-panel p-4 font-mono text-xs text-red-400">
-          Could not load the decision log: {error}
-        </p>
+        <div className="qs-panel qs-inline-alert" role="alert">
+          <strong>Decision history is unavailable.</strong>
+          <p>{error}</p>
+        </div>
       )}
 
       {!error && decisions && decisions.length === 0 && (
-        <p className="rounded border border-quicksilver-border bg-quicksilver-panel p-6 font-mono text-xs uppercase tracking-widest text-quicksilver-accent">
-          No decisions recorded yet. Send a CEO intent from the console to create the first one.
-        </p>
+        <section className="qs-panel qs-empty-state" aria-labelledby="empty-decisions-title">
+          <span className="qs-empty-state__icon" aria-hidden="true">✓</span>
+          <h2 id="empty-decisions-title">No decisions yet</h2>
+          <p>Start with a business objective. Quicksilver will prepare a plan for review before any action is taken.</p>
+          <Link href="/" className="qs-action-primary">Create a plan</Link>
+        </section>
       )}
 
       {!error && decisions && decisions.length > 0 && (
         <>
-          <p className="mb-4 font-mono text-xs uppercase tracking-widest text-quicksilver-accent">
-            {decisions.length} decision{decisions.length === 1 ? '' : 's'} on record
-          </p>
-          <section className="grid grid-cols-1 gap-4">
+          <section className="qs-stat-grid" aria-label="Decision summary">
+            <article className="qs-stat-card"><span>On record</span><strong>{decisions.length}</strong></article>
+            <article className="qs-stat-card"><span>Awaiting approval</span><strong>{awaiting}</strong></article>
+            <article className="qs-stat-card"><span>Executed</span><strong>{executed}</strong></article>
+            <article className="qs-stat-card"><span>Policy conflicts</span><strong>{conflicts}</strong></article>
+          </section>
+          <section className="qs-decision-list" aria-label="Decision history">
             {decisions.map((d) => (
               <DecisionLogRow key={d._id} d={d} />
             ))}
@@ -196,35 +198,26 @@ function DecisionLogRow({ d }: { d: DecisionRow }) {
     : 0
 
   return (
-    <article className="rounded border border-quicksilver-border bg-quicksilver-panel p-5">
-      <header className="mb-3 flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0 flex-1">
-          <p className="font-mono text-[11px] uppercase tracking-widest text-quicksilver-accent">
-            {formatDate(d.createdAt)}
-          </p>
-          <p className="mt-1 text-sm text-quicksilver-signal">
-            {d.selectedAction || d.question || d._id}
-          </p>
+    <article className="qs-data-card">
+      <header className="qs-data-card__header">
+        <div className="qs-data-card__title">
+          <time className="qs-data-card__date" dateTime={d.createdAt ?? undefined}>{formatDate(d.createdAt)}</time>
+          <h2>{d.selectedAction || d.question || d._id}</h2>
         </div>
-        <span
-          className={`shrink-0 rounded-full border px-2 py-0.5 font-mono text-xs whitespace-nowrap ${statusTone(d.status)}`}
-        >
-          {d.riskLevel == null ? (d.kind === 'rollback' ? 'rollback' : 'risk —') : `risk ${d.riskLevel}/5`} · {d.status ?? 'unknown'}
+        <span className={`qs-status-badge ${statusTone(d.status)}`}>
+          {d.status ?? 'Unknown'} <span aria-hidden="true">·</span> {d.riskLevel == null ? (d.kind === 'rollback' ? 'Rollback' : 'Risk not rated') : `Risk ${d.riskLevel}/5`}
         </span>
       </header>
 
-      <dl className="mb-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <Reference label="Requires approval" value={d.requiredApproval ? 'yes' : 'no'} />
+      <dl className="qs-decision-facts">
+        <Reference label="Human approval" value={d.requiredApproval ? 'Required' : 'Not required'} />
         <Reference label="Approved by" value={d.approvedByName ?? '—'} />
         <Reference label="Executed" value={formatDate(d.executedAt)} />
-        <Reference
-          label="Policy conflicts"
-          value={flaggedPolicies.length > 0 ? String(flaggedPolicies.length) : 'none'}
-        />
+        <Reference label="Policy conflicts" value={flaggedPolicies.length > 0 ? String(flaggedPolicies.length) : 'None'} />
       </dl>
 
       {(d.processHistory?.length ?? 0) > 0 && (
-        <div className="mb-3 rounded border border-quicksilver-border/60 p-3">
+        <div className="qs-nested-card">
           <h3 className="font-mono text-[11px] uppercase tracking-widest text-quicksilver-accent">
             Process: {d.processName ?? 'unknown'}{d.processVersion ? ` v${d.processVersion}` : ''}
             {d.faultInjection && (
@@ -246,16 +239,17 @@ function DecisionLogRow({ d }: { d: DecisionRow }) {
         </div>
       )}
 
-      {d.reasoningSummary && (
-        <p className="whitespace-pre-wrap text-xs leading-relaxed text-quicksilver-accent">
-          {d.reasoningSummary}
-        </p>
-      )}
-
-      {(flaggedPolicies.length > 0 || reviewerFlagCount > 0 || (d.evidenceTitles?.length ?? 0) > 0) && (
-        <div className="mt-3 border-t border-quicksilver-border pt-3">
+      {(d.reasoningSummary || flaggedPolicies.length > 0 || reviewerFlagCount > 0 || (d.evidenceTitles?.length ?? 0) > 0) && (
+        <details className="qs-decision-details">
+          <summary>Inspect reasoning, review, and evidence</summary>
+          <div className="qs-decision-details__body">
+          {d.reasoningSummary && (
+            <p className="whitespace-pre-wrap text-sm leading-relaxed text-quicksilver-accent">
+              {d.reasoningSummary}
+            </p>
+          )}
           {flaggedPolicies.length > 0 && (
-            <div className="mb-2">
+            <div className="qs-detail-section">
               <h3 className="font-mono text-[11px] uppercase tracking-widest text-quicksilver-accent">
                 Policy conflicts
               </h3>
@@ -269,7 +263,7 @@ function DecisionLogRow({ d }: { d: DecisionRow }) {
             </div>
           )}
           {reviewerFlagCount > 0 && d.reviewerNotes && (
-            <div className="mb-2 rounded border border-dashed border-quicksilver-border p-3">
+            <div className="qs-detail-section qs-detail-section--review">
               <h3 className="font-mono text-[11px] uppercase tracking-widest text-quicksilver-accent">
                 Independent review ({reviewerFlagCount} flag{reviewerFlagCount === 1 ? '' : 's'})
               </h3>
@@ -283,7 +277,7 @@ function DecisionLogRow({ d }: { d: DecisionRow }) {
             </div>
           )}
           {(d.evidenceTitles?.length ?? 0) > 0 && (
-            <div>
+            <div className="qs-detail-section">
               <h3 className="font-mono text-[11px] uppercase tracking-widest text-quicksilver-accent">
                 Supporting evidence
               </h3>
@@ -296,7 +290,8 @@ function DecisionLogRow({ d }: { d: DecisionRow }) {
               </ul>
             </div>
           )}
-        </div>
+          </div>
+        </details>
       )}
     </article>
   )

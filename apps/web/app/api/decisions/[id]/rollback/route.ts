@@ -13,6 +13,7 @@
  */
 
 import { NextResponse } from 'next/server'
+import { safeErrorName } from '@/lib/safe-log'
 import { getSanityClient } from '@/lib/sanity-client'
 import { z } from 'zod'
 import { authorizeTransition, nextAutomaticTransition } from '@quicksilver/kernel'
@@ -44,7 +45,7 @@ export async function POST(
   const { id } = await ctx.params
   // The supervisor credential before the body is read (A-3), then the
   // per-principal write limit (A-5).
-  const supervisor = verifySupervisorCredential(req, 'decision:rollback')
+  const supervisor = await verifySupervisorCredential(req, 'decision:rollback')
   if (!supervisor.ok) return NextResponse.json({ error: supervisor.reason }, { status: supervisor.status })
   const limited = takeWebRateLimit('write', supervisor.supervisorId)
   if (limited) return NextResponse.json(limited.body, { status: limited.status, headers: limited.headers })
@@ -195,9 +196,9 @@ export async function POST(
 
     return NextResponse.json({ rollbackDecisionId: rollbackId, parentDecisionId: id })
   } catch (err) {
-    console.error('[/api/decisions/[id]/rollback]', err)
+    console.error('[/api/decisions/[id]/rollback]', safeErrorName(err))
     return NextResponse.json(
-      { error: 'Rollback failed', detail: (err as Error).message },
+      { error: 'Rollback failed', detail: safeErrorName(err) },
       { status: 500 },
     )
   }

@@ -99,7 +99,7 @@ test('experiments: a human starts them, thresholds are pinned, kill applies on i
 test('the money ledger: compute is capital, entries need sources, tampering is detected', () => {
   let ledger: MoneyLedger = { runId: 'r', budgetUsd: 500, entries: [] }
   const add = (input: Parameters<typeof appendMoney>[1], actor: { id: string; kind: 'human' | 'agent' | 'service' } = founder) => {
-    const r = appendMoney(ledger, input, actor, T0)
+    const r = appendMoney(ledger, { ...input, ...((input.kind === 'spend' || input.kind === 'compute') && !input.spendAuthorization ? { spendAuthorization: { decisionId: `decision-${ledger.entries.length + 1}`, recommendation: 'execute-autonomously' as const, riskLevel: 1 as const, reasons: [], confirmedBy: actor.id, confirmedAt: T0.toISOString() } } : {}) }, actor, T0)
     assert.ok(r.ok, r.ok ? '' : r.reasons.join(' '))
     if (r.ok) ledger = r.ledger
   }
@@ -112,8 +112,13 @@ test('the money ledger: compute is capital, entries need sources, tampering is d
   assert.equal(totals.remainingUsd, 482.5)
   assert.equal(totals.netUsd, 11.5)
   assert.equal(totals.computeUsd, 7.5)
-  assert.equal(appendMoney(ledger, { kind: 'spend', amountUsd: 5, category: 'software', description: 'x', source: { type: 'receipt', ref: '' } }, founder, T0).ok, false)
+  for (const entry of ledger.entries.filter((e) => e.kind === 'spend' || e.kind === 'compute')) {
+    assert.ok(entry.spendAuthorization?.decisionId, 'spend decision id is retained in the hash-chained ledger entry')
+    assert.equal(entry.spendAuthorization?.confirmedBy, entry.recordedBy, 'confirmer is linked to the recorded actor')
+  }
+  assert.equal(appendMoney(ledger, { kind: 'spend', amountUsd: 5, category: 'software', description: 'x', source: { type: 'receipt', ref: '' }, spendAuthorization: { decisionId: 'decision-bad', recommendation: 'execute-autonomously', riskLevel: 1, reasons: [], confirmedBy: founder.id, confirmedAt: T0.toISOString() } }, founder, T0).ok, false)
   assert.equal(appendMoney(ledger, { kind: 'revenue', amountUsd: 5, category: 'sales', description: 'x', source: { type: 'manual', ref: 'note' } }, kernel, T0).ok, false, 'only a human records revenue by hand')
+  assert.equal(appendMoney(ledger, { kind: 'spend', amountUsd: 5, category: 'software', description: 'unapproved', source: { type: 'receipt', ref: 'rcpt-unapproved' } }, founder, T0).ok, false, 'spend without an immutable decision and confirmer is refused')
   assert.ok(verifyMoneyLedger(ledger).valid)
   const forged = { ...ledger, entries: ledger.entries.map((e, i) => (i === 0 ? { ...e, amountUsd: 1 } : e)) }
   assert.equal(verifyMoneyLedger(forged).valid, false)

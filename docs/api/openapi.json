@@ -1,0 +1,2011 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "version": "0.4.0",
+    "description": "Contract for the current Next.js HTTP routes. Version follows the repository release line. This project is pre-1.0: request and response details may change between releases. See api-contract.md for supported guarantees and known gaps.",
+    "title": "Nuera Quicksilver HTTP API",
+    "summary": "Pre-1.0 API contract; not a stable compatibility promise."
+  },
+  "servers": [
+    {
+      "url": "/"
+    }
+  ],
+  "security": [
+    {
+      "BearerAuth": []
+    }
+  ],
+  "paths": {
+    "/api/agents/catalog": {
+      "get": {
+        "operationId": "listAgentCatalog",
+        "tags": [
+          "Agents"
+        ],
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "401": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "403": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "404": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "409": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "500": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "503": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "2XX": {
+            "$ref": "#/components/responses/AgentCatalogResponse"
+          }
+        }
+      }
+    },
+    "/api/agents/definitions": {
+      "get": {
+        "operationId": "getAgentDefinition",
+        "tags": [
+          "Agents"
+        ],
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "401": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "403": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "404": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "409": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "500": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "503": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "2XX": {
+            "$ref": "#/components/responses/AgentDefinitionsResponse"
+          }
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/AgentId",
+            "schema": {
+              "$ref": "#/components/schemas/AgentId"
+            }
+          }
+        ]
+      }
+    },
+    "/api/agents/drafts": {
+      "post": {
+        "operationId": "createAgentDraft",
+        "tags": [
+          "Agents"
+        ],
+        "responses": {
+          "201": {
+            "$ref": "#/components/responses/AgentDefinitionResponse"
+          },
+          "400": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "401": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "403": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "404": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "409": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "500": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "503": {
+            "$ref": "#/components/responses/ErrorResponse"
+          }
+        },
+        "requestBody": {
+          "$ref": "#/components/requestBodies/CreateAgentDraft"
+        }
+      }
+    },
+    "/api/agents/drafts/submit": {
+      "post": {
+        "operationId": "submitAgentDraft",
+        "tags": [
+          "Agents"
+        ],
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "401": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "403": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "404": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "409": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "500": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "503": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "2XX": {
+            "$ref": "#/components/responses/AgentDefinitionResponse"
+          }
+        },
+        "requestBody": {
+          "$ref": "#/components/requestBodies/AgentVersionAction"
+        }
+      }
+    },
+    "/api/agents/publish": {
+      "post": {
+        "operationId": "publishAgent",
+        "tags": [
+          "Agents"
+        ],
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "401": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "403": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "404": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "409": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "500": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "503": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "2XX": {
+            "$ref": "#/components/responses/AgentDefinitionResponse"
+          }
+        },
+        "requestBody": {
+          "$ref": "#/components/requestBodies/AgentVersionAction"
+        }
+      }
+    },
+    "/api/agents/review": {
+      "post": {
+        "operationId": "reviewAgent",
+        "tags": [
+          "Agents"
+        ],
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "401": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "403": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "404": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "409": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "500": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "503": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "2XX": {
+            "$ref": "#/components/responses/AgentDefinitionResponse"
+          }
+        },
+        "requestBody": {
+          "$ref": "#/components/requestBodies/ReviewAgentDefinition"
+        }
+      }
+    },
+    "/api/agents/rollback": {
+      "post": {
+        "operationId": "rollbackAgent",
+        "tags": [
+          "Agents"
+        ],
+        "responses": {
+          "201": {
+            "$ref": "#/components/responses/AgentDefinitionResponse"
+          },
+          "400": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "401": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "403": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "404": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "409": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "500": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "503": {
+            "$ref": "#/components/responses/ErrorResponse"
+          }
+        },
+        "requestBody": {
+          "$ref": "#/components/requestBodies/RollbackAgentDefinition"
+        }
+      }
+    },
+    "/api/decisions/{id}/action": {
+      "post": {
+        "operationId": "approveDecisionAction",
+        "description": "For action=approve, expectedActionFingerprint is required and must equal the fingerprint returned with the reviewed plan decision. Missing fingerprints are a 400; stale action or policy snapshots are a 409.",
+        "tags": [
+          "Decisions"
+        ],
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "401": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "403": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "409": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimitResponse"
+          },
+          "503": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "2XX": {
+            "$ref": "#/components/responses/JsonResponse"
+          }
+        },
+        "requestBody": {
+          "$ref": "#/components/requestBodies/JsonObject"
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/DecisionId"
+          }
+        ]
+      }
+    },
+    "/api/decisions/{id}/execute": {
+      "post": {
+        "operationId": "executeDecision",
+        "tags": [
+          "Decisions"
+        ],
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "401": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "403": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimitResponse"
+          },
+          "503": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "2XX": {
+            "$ref": "#/components/responses/JsonResponse"
+          }
+        },
+        "requestBody": {
+          "$ref": "#/components/requestBodies/JsonObject"
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/DecisionId"
+          }
+        ]
+      }
+    },
+    "/api/decisions/{id}/observe": {
+      "post": {
+        "operationId": "observeDecision",
+        "tags": [
+          "Decisions"
+        ],
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "401": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "403": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimitResponse"
+          },
+          "503": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "2XX": {
+            "$ref": "#/components/responses/JsonResponse"
+          }
+        },
+        "requestBody": {
+          "$ref": "#/components/requestBodies/JsonObject"
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/DecisionId"
+          }
+        ]
+      }
+    },
+    "/api/decisions/{id}/resume": {
+      "post": {
+        "operationId": "resumeDecision",
+        "tags": [
+          "Decisions"
+        ],
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "401": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "403": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimitResponse"
+          },
+          "503": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "2XX": {
+            "$ref": "#/components/responses/JsonResponse"
+          }
+        },
+        "requestBody": {
+          "$ref": "#/components/requestBodies/JsonObject"
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/DecisionId"
+          }
+        ]
+      }
+    },
+    "/api/decisions/{id}/rollback": {
+      "post": {
+        "operationId": "rollbackDecision",
+        "tags": [
+          "Decisions"
+        ],
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "401": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "403": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimitResponse"
+          },
+          "503": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "2XX": {
+            "$ref": "#/components/responses/JsonResponse"
+          }
+        },
+        "requestBody": {
+          "$ref": "#/components/requestBodies/JsonObject"
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/DecisionId"
+          }
+        ]
+      }
+    },
+    "/api/monitoring/workflows": {
+      "get": {
+        "operationId": "getWorkflowMonitoring",
+        "tags": [
+          "Monitoring"
+        ],
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "401": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "403": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "503": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "2XX": {
+            "$ref": "#/components/responses/JsonResponse"
+          }
+        }
+      }
+    },
+    "/api/dashboard/finance": {
+      "get": {
+        "operationId": "getDashboardFinance",
+        "tags": [
+          "Dashboard"
+        ],
+        "responses": {
+          "401": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "403": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "503": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "2XX": {
+            "$ref": "#/components/responses/DashboardFinanceResponse"
+          }
+        }
+      }
+    },
+    "/api/dashboard/overview": {
+      "get": {
+        "operationId": "getDashboardOverview",
+        "tags": [
+          "Dashboard"
+        ],
+        "responses": {
+          "401": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "403": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "503": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "2XX": {
+            "$ref": "#/components/responses/DashboardOverviewResponse"
+          }
+        }
+      }
+    },
+    "/api/plan": {
+      "post": {
+        "operationId": "createPlan",
+        "tags": [
+          "Planning"
+        ],
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "401": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "403": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "503": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "2XX": {
+            "$ref": "#/components/responses/JsonResponse"
+          }
+        },
+        "requestBody": {
+          "$ref": "#/components/requestBodies/JsonObject"
+        }
+      }
+    },
+    "/api/query": {
+      "post": {
+        "operationId": "queryQuicksilver",
+        "tags": [
+          "Planning"
+        ],
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "401": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "403": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimitResponse"
+          },
+          "503": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "2XX": {
+            "$ref": "#/components/responses/JsonResponse"
+          }
+        },
+        "requestBody": {
+          "$ref": "#/components/requestBodies/JsonObject"
+        }
+      }
+    },
+    "/api/whoami": {
+      "get": {
+        "operationId": "whoAmI",
+        "tags": [
+          "Identity"
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/WhoamiResponse"
+          },
+          "400": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "401": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "403": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "503": {
+            "$ref": "#/components/responses/ErrorResponse"
+          }
+        }
+      }
+    },
+    "/api/workflows/diff": {
+      "get": {
+        "operationId": "diffWorkflowVersions",
+        "tags": [
+          "Workflows"
+        ],
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "401": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "403": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "503": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "2XX": {
+            "$ref": "#/components/responses/JsonResponse"
+          }
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/WorkflowId"
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ]
+      }
+    },
+    "/api/workflows/drafts": {
+      "post": {
+        "operationId": "saveWorkflowDraft",
+        "tags": [
+          "Workflows"
+        ],
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "401": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "403": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimitResponse"
+          },
+          "503": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "2XX": {
+            "$ref": "#/components/responses/JsonResponse"
+          }
+        },
+        "requestBody": {
+          "$ref": "#/components/requestBodies/JsonObject"
+        }
+      }
+    },
+    "/api/workflows/drafts/submit": {
+      "post": {
+        "operationId": "submitWorkflowDraft",
+        "tags": [
+          "Workflows"
+        ],
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "401": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "403": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimitResponse"
+          },
+          "503": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "2XX": {
+            "$ref": "#/components/responses/JsonResponse"
+          }
+        },
+        "requestBody": {
+          "$ref": "#/components/requestBodies/JsonObject"
+        }
+      }
+    },
+    "/api/workflows/executions": {
+      "get": {
+        "operationId": "listWorkflowExecutions",
+        "tags": [
+          "Workflows"
+        ],
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "401": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "403": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "503": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "2XX": {
+            "$ref": "#/components/responses/JsonResponse"
+          }
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/WorkflowId"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 25
+            }
+          }
+        ]
+      }
+    },
+    "/api/workflows/publications": {
+      "get": {
+        "operationId": "listWorkflowPublications",
+        "tags": [
+          "Workflows"
+        ],
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "401": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "403": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "503": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "2XX": {
+            "$ref": "#/components/responses/JsonResponse"
+          }
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/WorkflowId"
+          }
+        ]
+      }
+    },
+    "/api/workflows/publish": {
+      "post": {
+        "operationId": "publishWorkflow",
+        "tags": [
+          "Workflows"
+        ],
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "401": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "403": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimitResponse"
+          },
+          "503": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "2XX": {
+            "$ref": "#/components/responses/JsonResponse"
+          }
+        },
+        "requestBody": {
+          "$ref": "#/components/requestBodies/JsonObject"
+        }
+      }
+    },
+    "/api/workflows/review": {
+      "post": {
+        "operationId": "reviewWorkflow",
+        "tags": [
+          "Workflows"
+        ],
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "401": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "403": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimitResponse"
+          },
+          "503": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "2XX": {
+            "$ref": "#/components/responses/JsonResponse"
+          }
+        },
+        "requestBody": {
+          "$ref": "#/components/requestBodies/JsonObject"
+        }
+      }
+    },
+    "/api/workflows/rollback": {
+      "post": {
+        "operationId": "rollbackWorkflow",
+        "tags": [
+          "Workflows"
+        ],
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "401": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "403": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimitResponse"
+          },
+          "503": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "2XX": {
+            "$ref": "#/components/responses/JsonResponse"
+          }
+        },
+        "requestBody": {
+          "$ref": "#/components/requestBodies/JsonObject"
+        }
+      }
+    },
+    "/api/workflows/run": {
+      "post": {
+        "operationId": "runWorkflow",
+        "tags": [
+          "Workflows"
+        ],
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "401": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "403": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "409": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "413": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "422": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimitResponse"
+          },
+          "503": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "2XX": {
+            "$ref": "#/components/responses/WorkflowRunResponse"
+          }
+        },
+        "requestBody": {
+          "$ref": "#/components/requestBodies/WorkflowRunRequest"
+        }
+      }
+    },
+    "/api/workflows/simulate": {
+      "post": {
+        "operationId": "simulateWorkflow",
+        "tags": [
+          "Workflows"
+        ],
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "401": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "403": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "413": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "503": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "2XX": {
+            "$ref": "#/components/responses/WorkflowSimulationResponse"
+          }
+        },
+        "requestBody": {
+          "$ref": "#/components/requestBodies/WorkflowGraphRequest"
+        }
+      }
+    },
+    "/api/workflows/validate": {
+      "post": {
+        "operationId": "validateWorkflow",
+        "tags": [
+          "Workflows"
+        ],
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "401": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "403": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "413": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "503": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "2XX": {
+            "$ref": "#/components/responses/WorkflowValidationResponse"
+          }
+        },
+        "requestBody": {
+          "$ref": "#/components/requestBodies/WorkflowGraphRequest"
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string"
+          },
+          "retryAfterSeconds": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "code": {
+            "type": "string"
+          },
+          "needs": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "issues": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          }
+        },
+        "description": "Common error fields where emitted; validation issues are present on some 400 responses. Fields are not guaranteed across all routes.",
+        "additionalProperties": true
+      },
+      "JsonObject": {
+        "type": "object",
+        "description": "Route-specific shape not exhaustively captured yet.",
+        "additionalProperties": true
+      },
+      "DashboardOverview": {
+        "type": "object",
+        "required": ["observedAt", "decisionCounts", "recentDecisions", "metrics", "experiments"],
+        "properties": {
+          "observedAt": { "type": "string", "format": "date-time" },
+          "decisionCounts": {
+            "type": "object",
+            "required": ["total", "awaitingApproval", "approved", "executed", "blocked", "failed"],
+            "properties": {
+              "total": { "type": "integer", "minimum": 0 },
+              "awaitingApproval": { "type": "integer", "minimum": 0 },
+              "approved": { "type": "integer", "minimum": 0 },
+              "executed": { "type": "integer", "minimum": 0 },
+              "blocked": { "type": "integer", "minimum": 0 },
+              "failed": { "type": "integer", "minimum": 0 }
+            },
+            "additionalProperties": false
+          },
+          "recentDecisions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["id", "title", "status", "riskLevel", "requiredApproval", "safetyDecision", "createdAt"],
+              "properties": {
+                "id": { "type": "string" },
+                "title": { "type": "string" },
+                "status": { "type": "string" },
+                "riskLevel": { "type": ["number", "null"] },
+                "requiredApproval": { "type": "boolean" },
+                "safetyDecision": { "type": ["string", "null"] },
+                "createdAt": { "type": ["string", "null"], "format": "date-time" }
+              },
+              "additionalProperties": false
+            }
+          },
+          "metrics": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["id", "name", "value", "unit", "baseline", "direction", "updatedAt"],
+              "properties": {
+                "id": { "type": "string" },
+                "name": { "type": "string" },
+                "value": { "type": "number" },
+                "unit": { "type": ["string", "null"] },
+                "baseline": { "type": ["number", "null"] },
+                "direction": { "type": ["string", "null"], "enum": ["higher-better", "lower-better", null] },
+                "updatedAt": { "type": ["string", "null"], "format": "date-time" }
+              },
+              "additionalProperties": false
+            }
+          },
+          "experiments": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["id", "hypothesis", "status", "budgetUsd", "endsAt"],
+              "properties": {
+                "id": { "type": "string" },
+                "hypothesis": { "type": "string" },
+                "status": { "type": "string" },
+                "budgetUsd": { "type": ["number", "null"] },
+                "endsAt": { "type": ["string", "null"], "format": "date-time" }
+              },
+              "additionalProperties": false
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "DashboardFinance": {
+        "type": "object",
+        "required": ["observedAt", "ledger"],
+        "properties": {
+          "observedAt": { "type": "string", "format": "date-time" },
+          "ledger": {
+            "type": "object",
+            "required": ["entryCount", "spendUsd", "computeUsd", "revenueUsd", "refundsUsd"],
+            "properties": {
+              "entryCount": { "type": "integer", "minimum": 0 },
+              "spendUsd": { "type": "number" },
+              "computeUsd": { "type": "number" },
+              "revenueUsd": { "type": "number" },
+              "refundsUsd": { "type": "number" }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      "Whoami": {
+        "type": "object",
+        "properties": {
+          "credential": {
+            "type": "string",
+            "enum": [
+              "principal",
+              "shared-supervisor"
+            ]
+          },
+          "permissions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "tenantId": {
+            "type": "string"
+          },
+          "principalId": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "principalId",
+          "kind",
+          "tenantId",
+          "permissions",
+          "credential"
+        ]
+      },
+      "WorkflowGraph": {
+        "type": "object",
+        "required": [
+          "schemaVersion",
+          "id",
+          "version",
+          "entryNodeId",
+          "nodes",
+          "edges"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "const": 1
+          },
+          "id": {
+            "type": "string"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "entryNodeId": {
+            "type": "string"
+          },
+          "nodes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WorkflowNode"
+            }
+          },
+          "edges": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WorkflowEdge"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "WorkflowNode": {
+        "type": "object",
+        "required": [
+          "id",
+          "kind",
+          "label"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "trigger",
+              "agent",
+              "tool",
+              "condition",
+              "output"
+            ]
+          },
+          "label": {
+            "type": "string"
+          },
+          "config": {
+            "$ref": "#/components/schemas/WorkflowNodeConfig"
+          }
+        },
+        "additionalProperties": false
+      },
+      "WorkflowNodeConfig": {
+        "type": "object",
+        "properties": {
+          "agentId": {
+            "type": "string"
+          },
+          "toolId": {
+            "type": "string"
+          },
+          "conditionExpression": {
+            "type": "string"
+          },
+          "impact": {
+            "type": "string",
+            "enum": [
+              "low",
+              "moderate",
+              "high",
+              "critical"
+            ]
+          },
+          "evaluationRequired": {
+            "type": "boolean"
+          },
+          "sideEffect": {
+            "type": "boolean"
+          },
+          "supervisorApprovalRequired": {
+            "type": "boolean"
+          },
+          "maxAttempts": {
+            "type": "integer"
+          },
+          "timeoutMs": {
+            "type": "integer"
+          }
+        },
+        "additionalProperties": false
+      },
+      "WorkflowEdge": {
+        "type": "object",
+        "required": [
+          "id",
+          "from",
+          "to"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "from": {
+            "type": "string"
+          },
+          "to": {
+            "type": "string"
+          },
+          "branch": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "WorkflowGraphRequest": {
+        "type": "object",
+        "required": [
+          "graph"
+        ],
+        "properties": {
+          "graph": {
+            "$ref": "#/components/schemas/WorkflowGraph"
+          }
+        },
+        "additionalProperties": false
+      },
+      "WorkflowRunRequest": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": [
+              "graph",
+              "input"
+            ],
+            "properties": {
+              "graph": {
+                "$ref": "#/components/schemas/WorkflowGraph"
+              },
+              "input": {
+                "type": "string",
+                "minLength": 3,
+                "maxLength": 2000
+              }
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": [
+              "workflowId",
+              "input"
+            ],
+            "properties": {
+              "workflowId": {
+                "$ref": "#/components/schemas/WorkflowId"
+              },
+              "version": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "input": {
+                "type": "string",
+                "minLength": 3,
+                "maxLength": 2000
+              }
+            },
+            "additionalProperties": false
+          }
+        ],
+        "description": "Exactly one input form: inline graph or published workflow reference."
+      },
+      "WorkflowId": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128,
+        "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$"
+      },
+      "WorkflowValidationResponse": {
+        "type": "object",
+        "required": [
+          "schemaVersion",
+          "valid",
+          "errors",
+          "topologicalOrder"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "const": 1
+          },
+          "valid": {
+            "type": "boolean"
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "topologicalOrder": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "WorkflowSimulationResponse": {
+        "type": "object",
+        "required": [
+          "mode",
+          "externalEffectsEnabled"
+        ],
+        "properties": {
+          "mode": {
+            "const": "simulation"
+          },
+          "externalEffectsEnabled": {
+            "const": false
+          }
+        },
+        "additionalProperties": true,
+        "description": "Runtime result fields depend on the workflow graph; only the fixed safety fields are specified."
+      },
+      "WorkflowRunResponse": {
+        "type": "object",
+        "required": [
+          "mode",
+          "externalEffectsEnabled"
+        ],
+        "properties": {
+          "mode": {
+            "const": "live-read-only"
+          },
+          "externalEffectsEnabled": {
+            "const": false
+          },
+          "publishedWorkflow": {
+            "type": "object",
+            "required": [
+              "workflowId",
+              "version",
+              "digest"
+            ],
+            "properties": {
+              "workflowId": {
+                "type": "string"
+              },
+              "version": {
+                "type": "integer"
+              },
+              "digest": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          },
+          "historyPersisted": {
+            "type": "boolean"
+          },
+          "evaluations": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "audit": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "additionalProperties": true,
+        "description": "Runtime result fields depend on graph and runner outcome."
+      },
+      "AgentManifest": {
+        "type": "object",
+        "required": [
+          "id",
+          "version",
+          "authority",
+          "tasks",
+          "maximumImpact",
+          "requiresEvaluation"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^nuera-quicksilver:[a-z][a-z0-9-]{0,62}$"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "authority": {
+            "type": "string",
+            "enum": [
+              "propose",
+              "review"
+            ]
+          },
+          "tasks": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 10,
+            "items": {
+              "type": "string",
+              "enum": [
+                "reasoning",
+                "code",
+                "bulk",
+                "planning",
+                "routing",
+                "tool",
+                "memory",
+                "hydraulic",
+                "evaluation",
+                "other"
+              ]
+            }
+          },
+          "maximumImpact": {
+            "type": "string",
+            "enum": [
+              "low",
+              "moderate",
+              "high",
+              "critical"
+            ]
+          },
+          "requiresEvaluation": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "AgentDefinitionInput": {
+        "type": "object",
+        "required": [
+          "displayName",
+          "description",
+          "manifest"
+        ],
+        "properties": {
+          "displayName": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 100
+          },
+          "description": {
+            "type": "string",
+            "minLength": 10,
+            "maxLength": 1000
+          },
+          "manifest": {
+            "$ref": "#/components/schemas/AgentManifest"
+          }
+        },
+        "additionalProperties": false
+      },
+      "AgentVersionAction": {
+        "type": "object",
+        "required": [
+          "agentId",
+          "version"
+        ],
+        "properties": {
+          "agentId": {
+            "$ref": "#/components/schemas/AgentId"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "additionalProperties": false
+      },
+      "ReviewAgentDefinition": {
+        "type": "object",
+        "required": [
+          "agentId",
+          "version",
+          "note"
+        ],
+        "properties": {
+          "agentId": {
+            "$ref": "#/components/schemas/AgentId"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "note": {
+            "type": "string",
+            "minLength": 10,
+            "maxLength": 500
+          }
+        },
+        "additionalProperties": false
+      },
+      "RollbackAgentDefinition": {
+        "type": "object",
+        "required": [
+          "agentId",
+          "sourceVersion"
+        ],
+        "properties": {
+          "agentId": {
+            "$ref": "#/components/schemas/AgentId"
+          },
+          "sourceVersion": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "additionalProperties": false
+      },
+      "AgentId": {
+        "type": "string",
+        "pattern": "^nuera-quicksilver:[a-z][a-z0-9-]{0,62}$"
+      },
+      "AgentDefinition": {
+        "type": "object",
+        "required": [
+          "agentId",
+          "displayName",
+          "description",
+          "version",
+          "manifest",
+          "digest",
+          "authoredBy",
+          "createdAt",
+          "lifecycle"
+        ],
+        "properties": {
+          "agentId": {
+            "$ref": "#/components/schemas/AgentId"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "manifest": {
+            "$ref": "#/components/schemas/AgentManifest"
+          },
+          "digest": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "authoredBy": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "integer"
+          },
+          "lifecycle": {
+            "type": "string",
+            "enum": [
+              "draft",
+              "in-review",
+              "published",
+              "archived"
+            ]
+          },
+          "reviewedBy": {
+            "type": "string"
+          },
+          "reviewNote": {
+            "type": "string"
+          },
+          "reviewedAt": {
+            "type": "integer"
+          },
+          "publishedAt": {
+            "type": "integer"
+          },
+          "rollbackFrom": {
+            "type": "object",
+            "required": [
+              "version",
+              "digest"
+            ],
+            "properties": {
+              "version": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "digest": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              }
+            },
+            "additionalProperties": false
+          },
+          "builtIn": {
+            "const": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "AgentCatalogAudit": {
+        "type": "object",
+        "required": [
+          "event",
+          "agentId",
+          "version",
+          "actorId",
+          "at",
+          "digest"
+        ],
+        "properties": {
+          "event": {
+            "type": "string"
+          },
+          "agentId": {
+            "$ref": "#/components/schemas/AgentId"
+          },
+          "version": {
+            "type": "integer"
+          },
+          "actorId": {
+            "type": "string"
+          },
+          "at": {
+            "type": "integer"
+          },
+          "digest": {
+            "type": "string"
+          },
+          "detail": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "AgentCatalog": {
+        "type": "object",
+        "required": [
+          "agents",
+          "drafts",
+          "reviewQueue",
+          "audit"
+        ],
+        "properties": {
+          "agents": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AgentDefinition"
+            }
+          },
+          "drafts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AgentDefinition"
+            }
+          },
+          "reviewQueue": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AgentDefinition"
+            }
+          },
+          "audit": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AgentCatalogAudit"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "AgentDefinitions": {
+        "type": "object",
+        "required": [
+          "versions",
+          "audit"
+        ],
+        "properties": {
+          "versions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AgentDefinition"
+            }
+          },
+          "audit": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AgentCatalogAudit"
+            }
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "requestBodies": {
+      "JsonObject": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/JsonObject"
+            }
+          }
+        },
+        "required": true
+      },
+      "WorkflowGraphRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/WorkflowGraphRequest"
+            }
+          }
+        }
+      },
+      "WorkflowRunRequest": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/WorkflowRunRequest"
+            }
+          }
+        }
+      },
+      "CreateAgentDraft": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/AgentDefinitionInput"
+            }
+          }
+        }
+      },
+      "AgentVersionAction": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/AgentVersionAction"
+            }
+          }
+        }
+      },
+      "ReviewAgentDefinition": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ReviewAgentDefinition"
+            }
+          }
+        }
+      },
+      "RollbackAgentDefinition": {
+        "required": true,
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/RollbackAgentDefinition"
+            }
+          }
+        }
+      }
+    },
+    "securitySchemes": {
+      "BearerAuth": {
+        "bearerFormat": "opaque principal or configured supervisor token",
+        "type": "http",
+        "scheme": "bearer"
+      }
+    },
+    "responses": {
+      "RateLimitResponse": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        },
+        "description": "Rate limited by the current in-process token bucket.",
+        "headers": {
+          "Retry-After": {
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        }
+      },
+      "JsonResponse": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/JsonObject"
+            }
+          }
+        },
+        "description": "Successful JSON response; exact route-specific fields are not yet fully specified."
+      },
+      "DashboardOverviewResponse": {
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/DashboardOverview" }
+          }
+        },
+        "description": "Authenticated operating snapshot of decisions, company metrics, and experiments."
+      },
+      "DashboardFinanceResponse": {
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/DashboardFinance" }
+          }
+        },
+        "description": "Recorded ledger totals; requires the finance:read permission."
+      },
+      "ErrorResponse": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        },
+        "description": "Route-specific error; status and body vary by failure."
+      },
+      "WhoamiResponse": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Whoami"
+            }
+          }
+        },
+        "description": "Authenticated principal identity and effective permissions."
+      },
+      "WorkflowValidationResponse": {
+        "description": "Stateless graph validation result.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/WorkflowValidationResponse"
+            }
+          }
+        }
+      },
+      "WorkflowSimulationResponse": {
+        "description": "Safe simulation response; live tools/models and external effects are disabled.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/WorkflowSimulationResponse"
+            }
+          }
+        }
+      },
+      "WorkflowRunResponse": {
+        "description": "Live read-only query-agent workflow result. Execution is gated to trusted non-production environments.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/WorkflowRunResponse"
+            }
+          }
+        }
+      },
+      "AgentDefinitionResponse": {
+        "description": "Created or updated agent definition returned by the lifecycle operation.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/AgentDefinition"
+            }
+          }
+        }
+      },
+      "AgentCatalogResponse": {
+        "description": "Built-in and published agents plus caller-visible drafts, review queue, and bounded audit entries.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/AgentCatalog"
+            }
+          }
+        }
+      },
+      "AgentDefinitionsResponse": {
+        "description": "Versions and bounded audit entries for one agent.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/AgentDefinitions"
+            }
+          }
+        }
+      }
+    },
+    "parameters": {
+      "DecisionId": {
+        "schema": {
+          "type": "string",
+          "minLength": 1
+        },
+        "required": true,
+        "name": "id",
+        "in": "path"
+      },
+      "AgentId": {
+        "schema": {
+          "type": "string",
+          "pattern": "^nuera-quicksilver:[a-z][a-z0-9-]{0,62}$"
+        },
+        "required": true,
+        "name": "agentId",
+        "in": "query"
+      },
+      "WorkflowId": {
+        "schema": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$"
+        },
+        "required": true,
+        "name": "workflowId",
+        "in": "query"
+      }
+    }
+  }
+}

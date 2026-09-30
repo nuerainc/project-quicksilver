@@ -6,7 +6,7 @@
  */
 import { copyFile, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
-import { dirname, join, relative, resolve } from 'node:path'
+import { dirname, join, relative, resolve, sep } from 'node:path'
 import { randomBytes } from 'node:crypto'
 
 import type { CheckpointStore } from './types.ts'
@@ -40,8 +40,11 @@ export class FileCheckpointStore implements CheckpointStore {
 
   async snapshot(runId: string, path: string): Promise<string> {
     const abs = resolve(this.workspace, path)
-    const rel = relative(this.workspace, abs)
-    if (rel.startsWith('..')) throw new Error('Checkpoints cover workspace files only.')
+    const nativeRel = relative(this.workspace, abs)
+    if (nativeRel === '..' || nativeRel.startsWith(`..${sep}`) || resolve(this.workspace, nativeRel) !== abs) throw new Error('Checkpoints cover workspace files only.')
+    // Keep persisted checkpoint paths portable so a run can be inspected or
+    // restored on another platform without leaking host-specific separators.
+    const rel = nativeRel.split(sep).join('/')
     const dir = this.dir(runId)
     await mkdir(join(dir, 'files'), { recursive: true, mode: 0o700 })
     const id = `${Date.now().toString(36)}-${randomBytes(4).toString('hex')}`

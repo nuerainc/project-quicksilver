@@ -41,7 +41,7 @@ async function seedOperate(dir: string) {
   for (let p = 5; p >= 0; p--) {
     for (const [kind, amountUsd, offset] of [['revenue', 2000 + p * 50, 20], ['spend', 900, 15], ['compute', 300, 10]] as const) {
       const at = new Date(now - (p * 30 + offset) * DAY)
-      const r = appendMoney(l, { kind, amountUsd, category: kind === 'revenue' ? 'sales' : 'hosting', description: kind, source: { type: 'bank', ref: `p${p}${kind}` }, occurredAt: at.toISOString() }, founder, at)
+      const r = appendMoney(l, { kind, amountUsd, category: kind === 'revenue' ? 'sales' : 'hosting', description: kind, source: { type: 'bank', ref: `p${p}${kind}` }, occurredAt: at.toISOString(), ...((kind === 'spend' || kind === 'compute') ? { spendAuthorization: { decisionId: `decision-p${p}-${kind}`, recommendation: 'execute-autonomously' as const, riskLevel: 1 as const, reasons: [], confirmedBy: founder.id, confirmedAt: at.toISOString() } } : {}) }, founder, at)
       assert.ok(r.ok)
       if (r.ok) l = r.ledger
     }
@@ -130,7 +130,7 @@ test('genesis: reads data/genesis/<runId>/ledger.json with weekly periods and sa
     let l: MoneyLedger = { runId: config.runId, budgetUsd: config.budgetUsd, entries: [] }
     for (const [kind, amountUsd, ago] of [['spend', 40, 9], ['revenue', 25, 3]] as const) {
       const at = new Date(now - ago * DAY)
-      const r = appendMoney(l, { kind, amountUsd, category: kind === 'revenue' ? 'sales' : 'advertising', description: kind, source: { type: 'bank', ref: `g${ago}` }, occurredAt: at.toISOString() }, founder, at)
+      const r = appendMoney(l, { kind, amountUsd, category: kind === 'revenue' ? 'sales' : 'advertising', description: kind, source: { type: 'bank', ref: `g${ago}` }, occurredAt: at.toISOString(), ...(kind === 'spend' ? { spendAuthorization: { decisionId: `decision-g${ago}-${kind}`, recommendation: 'execute-autonomously' as const, riskLevel: 1 as const, reasons: [], confirmedBy: founder.id, confirmedAt: at.toISOString() } } : {}) }, founder, at)
       assert.ok(r.ok)
       if (r.ok) l = r.ledger
     }

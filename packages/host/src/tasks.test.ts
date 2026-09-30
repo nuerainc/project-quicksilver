@@ -100,6 +100,7 @@ async function start(options: StartOptions = {}) {
   const b = await clients.add('client-b', 'entity-founder')
   const shadow = new MemoryShadowStore()
   const store = options.store ?? (options.dir ? new FileTaskStore(options.dir) : new MemoryTaskStore())
+  const auditDir = await mkdtemp(join(tmpdir(), 'qs-task-audit-'))
   const webhookSecret = generateWebhookSecret()
   const host = new QuicksilverHost(parseHostConfig({
     tenantId: TENANT,
@@ -112,7 +113,7 @@ async function start(options: StartOptions = {}) {
     ...(options.rateLimit ? { tasks: { rateLimit: options.rateLimit } } : {}),
   }), {
     principals: [founder.config, viewer.config, agent.config],
-    env: { FORM_WEBHOOK_SECRET: webhookSecret },
+    env: { FORM_WEBHOOK_SECRET: webhookSecret, QUICKSILVER_AUTHORIZATION_AUDIT_PATH: join(auditDir, 'authorization.jsonl') },
     logger: new Logger({ level: 'error', sink: { write: () => {} } }),
     agentRunner: stubRunner,
     tasks: {
@@ -140,7 +141,7 @@ async function start(options: StartOptions = {}) {
   return {
     host, base, call, shadow, store, clients, webhookSecret,
     tokens: { founder: founder.token, viewer: viewer.token, agent: agent.token, a: a.token, b: b.token },
-    close: () => host.stop({ abort: true }),
+    close: async () => { await host.stop({ abort: true }); await rm(auditDir, { recursive: true, force: true }) },
   }
 }
 
@@ -481,6 +482,12 @@ test('the CLI uses the same intake: a founder submits, lists and denies', async 
     const submitted = await run('submit', 'Look into late invoices.')
     const id = /task-[0-9a-f]{20}/.exec(submitted.stdout)![0]
     assert.match(submitted.stdout, /awaiting-approval/)
+    const second = await run('submit', 'Review the monthly close.')
+    assert.match(second.stdout, /task-[0-9a-f]{20}/)
+    const limited = await run('list', '--limit', '1')
+    assert.equal(new Set(limited.stdout.match(/task-[0-9a-f]{20}/g) ?? []).size, 1, 'CLI list honors the same 1–200 result limit as GET /api/tasks?limit=')
+    const clamped = await run('list', '--limit', '-1')
+    assert.equal(new Set(clamped.stdout.match(/task-[0-9a-f]{20}/g) ?? []).size, 1, 'CLI list mirrors the API lower bound of one result')
     const refused = await run('submit', 'Summarize the patent claims.', '--capability', 'reports.brief')
     assert.match(refused.stdout, /refused/)
     assert.match((await run('list', '--status', 'awaiting-approval')).stdout, new RegExp(id))

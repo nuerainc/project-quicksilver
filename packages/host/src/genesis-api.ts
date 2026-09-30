@@ -1,4 +1,5 @@
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
+import { randomUUID } from 'node:crypto'
 import { join } from 'node:path'
 
 import type { AccessController, Permission, Principal } from '@quicksilver/kernel/identity'
@@ -350,7 +351,19 @@ export async function handleGenesisRoute(ctx: GenesisApiContext, deps: GenesisAp
         if (decision.recommendation === 'reject') return { status: 422, body: { error: 'Not recorded: the rules refuse this spend. If the money already moved outside the rules, stop the run and review it.', reasons: decision.reasons, decision, executed: false } }
         if (decision.recommendation === 'request-approval' && !confirm) return { status: 409, body: { error: 'Not recorded: this needs your decision. Send it again with confirm: true to approve it as yourself.', reasons: decision.reasons, decision, executed: false } }
       }
-      const r = appendMoney(s.ledger, input, actor, at)
+      const r = appendMoney(s.ledger, {
+        ...input,
+        ...((input.kind === 'spend' || input.kind === 'compute') && decision
+          ? { spendAuthorization: {
+              decisionId: `spend-${randomUUID()}`,
+              recommendation: decision.recommendation as 'execute-autonomously' | 'request-approval',
+              riskLevel: decision.riskLevel,
+              reasons: decision.reasons,
+              confirmedBy: principal.id,
+              confirmedAt: at.toISOString(),
+            } }
+          : {}),
+      }, actor, at)
       if (!r.ok) return { status: 422, body: { error: 'Not recorded.', reasons: r.reasons, executed: false } }
       await store.saveLedger(config.runId, r.ledger)
       return {

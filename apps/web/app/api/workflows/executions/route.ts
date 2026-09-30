@@ -8,7 +8,7 @@ const workflowIdSchema = z.string().min(1).max(128).regex(/^[a-zA-Z0-9][a-zA-Z0-
 
 /** List metadata-only execution history for one tenant and workflow. */
 export async function GET(request: Request) {
-  const caller = guardWebRoute(request, 'workflows/executions')
+  const caller = await guardWebRoute(request, 'workflows/executions')
   if (!caller.ok) return publicationRefusal(caller)
   const url = new URL(request.url)
   const workflowId = workflowIdSchema.safeParse(url.searchParams.get('workflowId'))

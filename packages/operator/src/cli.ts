@@ -13,6 +13,9 @@
  *   --max-steps <n>     model steps (default 40)
  *   --rollback <runId>  undo every file change a run made, then exit
  *   --memory review     confirm or reject profile entries the agent proposed, then exit
+ *   --memory export --memory-file <path>  export a verified plaintext backup (never overwrites)
+ *   --memory restore --memory-file <path> restore a verified backup into an empty memory book
+ *   --memory feedback --memory-id <id> --outcome useful|stale|harmful
  *   --remember "<fact>" add a fact about you (stated), then exit
  *   --skills review     accept or reject skills the agent proposed (shows the diff), then exit
  *   --skills import <dir>  scan a skill folder (for example from a hub) and hold it for review
@@ -31,7 +34,9 @@
  * The audit log is <workspace>/.qs-audit/operator.jsonl.
  */
 import { createInterface } from 'node:readline/promises'
-import { join } from 'node:path'
+import { link, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { randomUUID } from 'node:crypto'
+import { dirname, join, resolve } from 'node:path'
 
 import { loadRepoEnv } from '@quicksilver/agent/decision-predictor'
 import { modelForRole } from '@quicksilver/agent/models'
@@ -41,7 +46,7 @@ import { FileAuditSink, verifyAudit } from './audit.ts'
 import { FileCheckpointStore } from './checkpoints.ts'
 import { Gate, type Approver } from './gate.ts'
 import { runOperator } from './loop.ts'
-import { loadProjectContext, MemoryBook, memoryTools, SessionArchive } from './memory.ts'
+import { loadProjectContext, MemoryBook, memoryTools, SessionArchive, type MemoryEffectivenessOutcome, type MemoryExportBundle } from './memory.ts'
 import { lineDiff, SkillLibrary, skillTools } from './skills.ts'
 import { homedir } from 'node:os'
 import { DockerSandbox } from './sandbox/docker.ts'
@@ -93,6 +98,37 @@ if (o.memory === 'review') {
     await book.review(e.id, a === 'y' || a === 'yes', approverId)
   }
   r.close()
+  process.exit(0)
+}
+if (o.memory === 'feedback') {
+  const id = String(o['memory-id'] ?? '')
+  const outcome = String(o.outcome ?? '') as MemoryEffectivenessOutcome
+  if (!id || !['useful', 'stale', 'harmful'].includes(outcome)) throw new Error('Usage: --memory feedback --memory-id <id> --outcome useful|stale|harmful')
+  if (!await book.recordEffectiveness(id, outcome, approverId)) throw new Error(`Feedback was not recorded for active memory "${id}". Check the id, reviewer, and whether this version already has feedback.`)
+  console.log(`Recorded ${outcome} feedback for ${id}.`)
+  process.exit(0)
+}
+if (o.memory === 'export') {
+  const file = String(o['memory-file'] ?? '')
+  if (!file) throw new Error('Usage: --memory export --memory-file <path>. The backup contains plaintext memory.')
+  const target = resolve(root, file)
+  await mkdir(dirname(target), { recursive: true, mode: 0o700 })
+  const temporary = `${target}.${randomUUID()}.tmp`
+  try {
+    await writeFile(temporary, JSON.stringify(await book.exportData(), null, 2), { encoding: 'utf8', mode: 0o600, flag: 'wx' })
+    await link(temporary, target)
+  } finally {
+    await rm(temporary, { force: true })
+  }
+  console.log(`Exported memory backup to ${target}. Protect it as sensitive plaintext.`)
+  process.exit(0)
+}
+if (o.memory === 'restore') {
+  const file = String(o['memory-file'] ?? '')
+  if (!file) throw new Error('Usage: --memory restore --memory-file <path>.')
+  const bundle = JSON.parse(await readFile(resolve(root, file), 'utf8')) as MemoryExportBundle
+  if (!await book.restore(bundle, approverId)) throw new Error('Restore requires an empty memory book; existing entries were left unchanged.')
+  console.log(`Restored verified memory into ${join(workspace, '.qs-memory')}.`)
   process.exit(0)
 }
 

@@ -31,20 +31,25 @@ and remaining owner/evidence checklist are tracked in [`V1-SCOPE.md`](V1-SCOPE.m
 Gate 0 remains open until the parity classification and operational decisions
 are completed.
 
-The parity document currently lists P-017–P-031 as the platform baseline:
-agent runtime, memory, skills, automation, delegation, channels, compute,
-web/browser, media, hosting, commerce, integrations, governance, interfaces,
-and research tooling. The product owner selected the literal baseline, so every
-P-017–P-031 capability is required before 1.0.0. The M8–M9 decision also
-commits all capabilities in the authoritative enterprise specification by M9.
-Any exception requires an explicit owner, rationale, replacement behavior,
-evidence, and product-owner approval; nothing may be silently moved post-1.0.0.
+The product owner has decided that **all requirements P-001–P-123 are required
+for v1.0.0**. P-017–P-031 are the platform-baseline group within that complete
+scope, not the only parity rows gated on the release. P-122 and P-123 are also
+in scope by explicit product-owner direction. Any exception requires an
+explicit owner, rationale, replacement behavior, evidence, and product-owner
+approval; nothing may be silently moved post-1.0.0.
+
+Keep verification categories distinct: P-014, P-081, P-089, P-096, and P-121
+require operational evidence and remain release blockers until that evidence
+is recorded. P-064–P-066 measure Aura's separate charter ladder and, as stated
+in the parity register, do not gate a Quicksilver release. Tests alone do not
+satisfy operational-evidence requirements.
 
 ### Gate 0 checklist
 
 - [x] Record the literal-baseline choice in `docs/V1-SCOPE.md`.
 - [x] Record the literal-baseline release-scope decision in `docs/NUERA-QUICKSILVER-PRODUCT.md`.
-- [ ] Mark each P-001–P-121 as `v1`, `post-v1`, or `not applicable with rationale`.
+- [x] Include every P-001–P-123 requirement in the v1.0.0 release scope.
+- [x] Define P-122/P-123 acceptance evidence: responsive rendered-app checks and task-based usability/accessibility review remain required before release.
 - [ ] Name product, security, operations, data, and finance owners.
 - [ ] Choose supported Node, browsers, database, deployment platform, model providers, and Sanity dataset.
 - [ ] Decide whether WAES is a service or whether manual founder review remains allowed.

@@ -14,7 +14,7 @@ const manifestSchema = z.object({
 const requestSchema = z.object({ displayName: z.string().min(2).max(100), description: z.string().min(10).max(1000), manifest: manifestSchema }).strict()
 
 export async function POST(request: Request) {
-  const caller = guardPublicationActor(request, 'agents/drafts')
+  const caller = await guardPublicationActor(request, 'agents/drafts')
   if (!caller.ok) return publicationRefusal(caller.refusal)
   const body = await readPublicationBody(request)
   if (!body.ok) return body.response

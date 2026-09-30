@@ -9,7 +9,7 @@ const requestSchema = z.object({
 }).strict()
 
 export async function POST(request: Request) {
-  const caller = guardPublicationActor(request, 'workflows/publish')
+  const caller = await guardPublicationActor(request, 'workflows/publish')
   if (!caller.ok) return publicationRefusal(caller.refusal)
   const body = await readPublicationBody(request)
   if (!body.ok) return body.response

@@ -42,6 +42,7 @@ export function newPairingCode(): string {
 export class PairingRegistry {
   private readonly path: string
   private state: PairingState | undefined
+  private saveQueue: Promise<void> = Promise.resolve()
   private readonly attempts = new TokenBucketLimiter({ burst: 5, perMinute: 2 })
   private readonly now: () => Date
 
@@ -57,10 +58,14 @@ export class PairingRegistry {
     return this.state
   }
 
-  private async save(): Promise<void> {
-    await mkdir(dirname(this.path), { recursive: true, mode: 0o700 })
-    await writeFile(`${this.path}.tmp`, JSON.stringify(this.state, null, 1), { mode: 0o600 })
-    await rename(`${this.path}.tmp`, this.path)
+  private save(): Promise<void> {
+    const operation = this.saveQueue.then(async () => {
+      await mkdir(dirname(this.path), { recursive: true, mode: 0o700 })
+      await writeFile(`${this.path}.tmp`, JSON.stringify(this.state, null, 1), { mode: 0o600 })
+      await rename(`${this.path}.tmp`, this.path)
+    })
+    this.saveQueue = operation.catch(() => {})
+    return operation
   }
 
   async addPerson(p: Person): Promise<void> {

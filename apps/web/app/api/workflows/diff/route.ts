@@ -8,7 +8,7 @@ const workflowIdSchema = z.string().min(1).max(128).regex(/^[a-zA-Z0-9][a-zA-Z0-
 
 /** Compare two verified immutable versions without exposing config values. */
 export async function GET(request: Request) {
-  const caller = guardWebRoute(request, 'workflows/diff')
+  const caller = await guardWebRoute(request, 'workflows/diff')
   if (!caller.ok) return publicationRefusal(caller)
   const query = new URL(request.url).searchParams
   const workflowId = workflowIdSchema.safeParse(query.get('workflowId'))

@@ -50,7 +50,7 @@ async function seedLedger(dir: string) {
   let l: MoneyLedger = { runId: RUN, budgetUsd: 0, entries: [] }
   for (const [kind, amountUsd, daysAgo] of [['revenue', 2000, 5], ['spend', 300, 4], ['compute', 100, 3], ['refund', 50, 2]] as const) {
     const at = new Date(now - daysAgo * 86_400_000)
-    const r = appendMoney(l, { kind, amountUsd, category: kind === 'revenue' ? 'sales' : 'hosting', description: kind, source: { type: 'bank', ref: `s${daysAgo}` }, occurredAt: at.toISOString() }, founder, at)
+    const r = appendMoney(l, { kind, amountUsd, category: kind === 'revenue' ? 'sales' : 'hosting', description: kind, source: { type: 'bank', ref: `s${daysAgo}` }, occurredAt: at.toISOString(), ...((kind === 'spend' || kind === 'compute') ? { spendAuthorization: { decisionId: `decision-${daysAgo}`, recommendation: 'execute-autonomously' as const, riskLevel: 1 as const, reasons: [], confirmedBy: founder.id, confirmedAt: at.toISOString() } } : {}) }, founder, at)
     assert.ok(r.ok)
     if (r.ok) l = r.ledger
   }

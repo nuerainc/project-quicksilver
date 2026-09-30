@@ -246,7 +246,11 @@ Produce dated, redacted, reproducible evidence for:
 
 ### M9-D — parity closure
 
-For every P-001–P-121:
+The approved release scope is P-001–P-123, as recorded in
+[`V1-SCOPE.md`](V1-SCOPE.md). The product owner explicitly included P-122 and
+P-123 in the 1.0.0 acceptance matrix.
+
+For every P-001–P-123:
 
 1. Identify implementation and owner.
 2. Run the automated test or manual check.
@@ -257,6 +261,13 @@ For every P-001–P-121:
    post-M9 exception.
 
 No row may remain silently partial or missing.
+
+Keep evidence categories distinct: P-014, P-081, P-089, P-096, and P-121
+require operational evidence and block release until their specified deployment,
+pilot, or live-system evidence is recorded. P-064–P-066 fall within the
+P-001–P-121 ID range but are Aura charter ladder measures and, per the parity
+register, do not gate a Quicksilver release. Automated test results do not
+replace required operational evidence.
 
 ### M9-E — release and hand-off
 

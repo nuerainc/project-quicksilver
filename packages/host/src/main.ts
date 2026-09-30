@@ -12,6 +12,7 @@
  *   QUICKSILVER_HOST_CONFIG   path to the host config JSON (default ./quicksilver.host.json)
  *   QUICKSILVER_PRINCIPALS    bearer-token principals (same format as the web app)
  *   QUICKSILVER_VAULT_KEY     vault master key (name configurable in the config)
+ *   QUICKSILVER_AUTHORIZATION_AUDIT_PATH   durable JSONL audit path when no vault/file store path can supply a default
  *   DATABASE_URL              Postgres URL when store.kind is "postgres" (name configurable)
  *   Model provider and SANITY_CONTEXT_* variables enable the read-only query agent.
  *   NEXT_PUBLIC_SANITY_PROJECT_ID + SANITY_WRITE_TOKEN (legacy: SANITY_AUTH_TOKEN) enable durable evaluation records.
@@ -29,6 +30,7 @@ import { dirname, isAbsolute, join, resolve } from 'node:path'
 
 import { buildEvaluationRecord } from '@quicksilver/kernel'
 import { AccessController } from '@quicksilver/kernel/identity'
+import { FileAuthorizationAuditStore, resolveAuthorizationAuditPath } from './authorization-audit.ts'
 import { principalsFromJson } from '@quicksilver/kernel/identity/tokens'
 import { InMemoryWorkflowRunStore, type WorkflowRunStore } from '@quicksilver/kernel/runtime'
 
@@ -42,6 +44,7 @@ import { SanityShadowStore } from './shadow-store-sanity.ts'
 import { FileGenesisStore, MemoryGenesisStore, type GenesisApiDeps } from './genesis-api.ts'
 import { SecretsVault, generateMasterKey } from './vault.ts'
 import { taskSetup } from './tasks-setup.ts'
+import { createShutdownHandler } from './shutdown.ts'
 
 /** Where the command was run from (npm sets INIT_CWD; workspace scripts run inside packages/host). */
 const baseDir = process.env.INIT_CWD ?? process.cwd()
@@ -274,7 +277,8 @@ async function vaultCommand(config: HostConfig, args: string[]): Promise<void> {
   // named tenant admin so every change is attributed in the audit log.
   const admin = { id: `cli:${userInfo().username.replace(/[^a-zA-Z0-9._-]/g, '_')}`, kind: 'human' as const, tenantId: config.tenantId, roles: ['tenant-admin'] }
   const log = new Logger({ bindings: { service: 'quicksilver-vault-cli' } })
-  const vault = new SecretsVault({ path: config.vault.path, masterKey, tenantId: config.tenantId, access: new AccessController(), audit: (e) => log.info('vault access', { ...e }) })
+  const authorizationAudit = new FileAuthorizationAuditStore(resolveAuthorizationAuditPath(config))
+  const vault = new SecretsVault({ path: config.vault.path, masterKey, tenantId: config.tenantId, access: new AccessController({ audit: (decision) => authorizationAudit.append(decision) }), audit: (e) => log.info('vault access', { ...e }) })
   await vault.open()
   const [op, name] = args
   if (op === 'list') {
@@ -367,22 +371,12 @@ async function main(): Promise<void> {
   }
 
   await host.start()
-  let stopping = false
-  const shutdown = (signal: string) => {
-    if (stopping) {
-      log.warn('second signal; aborting in-flight runs', { signal })
-      void host.stop({ abort: true }).finally(() => process.exit(1))
-      return
-    }
-    stopping = true
-    log.info('shutdown requested', { signal })
-    const timer = setTimeout(() => {
-      log.error('graceful shutdown timed out; aborting in-flight runs')
-      void host.stop({ abort: true }).finally(() => process.exit(1))
-    }, 60_000)
-    timer.unref()
-    void host.stop().then(() => process.exit(0), () => process.exit(1))
-  }
+  const shutdown = createShutdownHandler({
+    stop: (options) => host.stop(options),
+    exit: (code) => process.exit(code),
+    schedule: (callback, delay) => setTimeout(callback, delay),
+    log,
+  })
   process.on('SIGTERM', () => shutdown('SIGTERM'))
   process.on('SIGINT', () => shutdown('SIGINT'))
 }

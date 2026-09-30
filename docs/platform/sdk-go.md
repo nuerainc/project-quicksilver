@@ -20,6 +20,7 @@ Context MCP credentials. Tool dispatch remains disabled on these workflow
 endpoints.
 
 This is an internal foundation, not a published package or stable API. CI runs
-`go vet ./...` and `go build ./...`; request/response contract tests,
+`go vet ./...`, `go test ./...`, and `go build ./...`. Contract regression tests
+cover requests, response validation, errors, bounds, and cancellation; API
 compatibility guarantees, publishing, and a local harness remain future work.
 See the [Go module README](../../packages/sdk-go/README.md) for a usage example.

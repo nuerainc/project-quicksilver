@@ -8,7 +8,7 @@ const requestSchema = z.object({ graph: z.record(z.string(), z.unknown()) }).str
 
 /** Save a validated immutable draft version in the dedicated Nuera Sanity project. */
 export async function POST(request: Request) {
-  const caller = guardPublicationActor(request, 'workflows/drafts')
+  const caller = await guardPublicationActor(request, 'workflows/drafts')
   if (!caller.ok) return publicationRefusal(caller.refusal)
   const parsedBody = await readPublicationBody(request)
   if (!parsedBody.ok) return parsedBody.response

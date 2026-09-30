@@ -90,68 +90,65 @@ export default function WorkflowMonitoringPage() {
   }, [executions])
 
   return (
-    <main className="mx-auto max-w-7xl px-6 py-10">
-      <header className="mb-8">
-        <nav aria-label="Main navigation" className="mb-6 flex flex-wrap gap-4 font-mono text-[10px] uppercase tracking-widest text-quicksilver-accent">
-          <a href="/" className="hover:text-quicksilver-signal">← Console</a>
-          <a href="/workflows" className="hover:text-quicksilver-signal">Workflow builder →</a>
-        </nav>
-        <div className="flex flex-wrap items-end justify-between gap-4">
-          <div>
-            <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-quicksilver-accent">Operations</p>
-            <h1 className="mt-2 font-mono text-2xl uppercase tracking-[0.14em] text-quicksilver-quicksilver">Workflow monitoring</h1>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-quicksilver-accent">Recent tenant-scoped workflow outcomes and runtimes. This view reads metadata only; it never loads request or response bodies.</p>
+    <main className="app-main space-y-6">
+      <header className="qs-page-heading">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="max-w-3xl">
+            <p className="qs-eyebrow">Operations</p>
+            <h1 className="mt-2">Workflow monitoring</h1>
+            <p className="qs-page-heading__summary mt-3">Recent workflow outcomes for this tenant. This view uses execution metadata only and never loads request or response bodies.</p>
           </div>
-          <button onClick={() => void refresh()} disabled={loading} className="rounded border border-quicksilver-border px-4 py-2 font-mono text-[10px] uppercase tracking-widest text-quicksilver-signal hover:border-quicksilver-quicksilver disabled:opacity-50">
-            {loading ? 'Refreshing…' : 'Refresh'}
+          <button onClick={() => void refresh()} disabled={loading} className="qs-action-secondary">
+            {loading ? 'Refreshing…' : 'Refresh activity'}
           </button>
         </div>
       </header>
 
       {error && <div role="alert" className="mb-6 rounded border border-amber-300/40 bg-amber-300/5 p-4 text-sm text-amber-100">{error}</div>}
 
-      <section aria-label="Recent workflow metrics" className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+      <section aria-label="Recent workflow metrics" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
         {[
           ['Sampled runs', stats.total, `Latest ${sampleLimit} records maximum`],
           ['Success rate', `${stats.successRate}%`, `${stats.succeeded} successful`],
           ['Blocked', stats.blocked, 'Stopped by governance'],
           ['Failed', stats.failed, 'Unsuccessful executions'],
           ['Median duration', duration(stats.medianDuration), `${stats.workflows} workflows in sample`],
-        ].map(([label, value, note]) => <article key={label} className="rounded border border-quicksilver-border bg-quicksilver-panel p-4">
-          <p className="font-mono text-[9px] uppercase tracking-widest text-quicksilver-accent">{label}</p>
-          <p className="mt-3 font-mono text-2xl text-quicksilver-signal">{loading ? '—' : value}</p>
-          <p className="mt-2 text-[10px] text-quicksilver-accent">{note}</p>
+        ].map(([label, value, note]) => <article key={label} className="qs-panel">
+          <p className="text-sm text-white/65">{label}</p>
+          <p className="mt-3 text-3xl font-semibold tracking-tight text-white">{loading ? '—' : value}</p>
+          <p className="mt-2 text-xs leading-5 text-white/55">{note}</p>
         </article>)}
       </section>
 
-      <section className="mt-8 rounded border border-quicksilver-border bg-quicksilver-panel p-5">
-        <div className="flex flex-wrap items-end justify-between gap-4">
+      <section aria-labelledby="execution-history-title" className="qs-panel">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
           <div>
-            <h2 className="font-mono text-xs uppercase tracking-widest text-quicksilver-accent">Execution history</h2>
-            <p className="mt-1 text-[10px] text-quicksilver-accent">{observedAt ? `Updated ${displayDate(observedAt)} · ${executions.length} of at most ${sampleLimit} recent runs` : 'Waiting for data'}</p>
+            <p className="qs-eyebrow">Activity</p>
+            <h2 id="execution-history-title" className="mt-1 text-xl font-semibold text-white">Execution history</h2>
+            <p className="mt-2 text-sm text-white/55">{observedAt ? `Updated ${displayDate(observedAt)} · showing ${executions.length} of at most ${sampleLimit} recent runs` : 'Waiting for data'}</p>
           </div>
-          <div className="flex flex-wrap gap-3">
+          <div className="grid w-full gap-3 sm:grid-cols-[minmax(12rem,1fr)_auto] xl:w-auto">
             <label className="sr-only" htmlFor="workflow-monitor-search">Filter workflows or requesters</label>
-            <input id="workflow-monitor-search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Filter workflow or requester" className="rounded border border-quicksilver-border bg-quicksilver-bg px-3 py-2 text-xs text-quicksilver-signal placeholder:text-quicksilver-accent/60" />
+            <input id="workflow-monitor-search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search workflow or requester" className="qs-field" />
             <label className="sr-only" htmlFor="workflow-monitor-status">Filter status</label>
-            <select id="workflow-monitor-status" value={status} onChange={(event) => setStatus(event.target.value as StatusFilter)} className="rounded border border-quicksilver-border bg-quicksilver-bg px-3 py-2 font-mono text-[10px] uppercase text-quicksilver-signal">
+            <select id="workflow-monitor-status" value={status} onChange={(event) => setStatus(event.target.value as StatusFilter)} className="qs-field sm:min-w-40">
               <option value="all">All statuses</option><option value="succeeded">Succeeded</option><option value="blocked">Blocked</option><option value="failed">Failed</option>
             </select>
           </div>
         </div>
 
-        {loading && executions.length === 0 ? <p className="py-12 text-center text-sm text-quicksilver-accent">Loading recent executions…</p>
-          : filtered.length === 0 ? <p className="py-12 text-center text-sm text-quicksilver-accent">{executions.length ? 'No executions match these filters.' : 'No published workflow executions are recorded for this tenant yet.'}</p>
-            : <div className="mt-4 overflow-x-auto"><table className="w-full min-w-[760px] border-collapse text-left text-xs">
-              <thead><tr className="border-b border-quicksilver-border font-mono text-[9px] uppercase tracking-widest text-quicksilver-accent"><th className="py-3 pr-4">Workflow</th><th className="py-3 pr-4">Outcome</th><th className="py-3 pr-4">Duration</th><th className="py-3 pr-4">Evaluations</th><th className="py-3 pr-4">Requester</th><th className="py-3">Completed</th></tr></thead>
-              <tbody>{filtered.map((run) => <tr key={run.runId} className="border-b border-quicksilver-border/60 text-quicksilver-signal last:border-0">
-                <td className="py-3 pr-4"><span className="font-mono text-quicksilver-signal">{run.workflowId}</span><span className="ml-2 text-[10px] text-quicksilver-accent">v{run.version}</span></td>
-                <td className="py-3 pr-4"><span className={run.status === 'succeeded' ? 'text-emerald-300' : run.status === 'blocked' ? 'text-amber-200' : 'text-rose-300'}>{run.status}</span></td>
-                <td className="py-3 pr-4 font-mono">{duration(run.durationMs)}</td><td className="py-3 pr-4">{run.evaluationCount}</td><td className="py-3 pr-4">{run.requestedBy}</td><td className="py-3 text-quicksilver-accent">{displayDate(run.completedAt)}</td>
+        {loading && executions.length === 0 ? <p role="status" className="py-12 text-center text-sm text-white/60">Loading recent executions…</p>
+          : filtered.length === 0 ? <p className="py-12 text-center text-sm text-white/60">{executions.length ? 'No executions match these filters.' : 'No published workflow executions are recorded for this tenant yet.'}</p>
+            : <><div className="mt-5 space-y-3 lg:hidden">{filtered.map((run) => <article key={run.runId} className="grid min-w-0 gap-4 rounded-xl border border-white/10 bg-black/10 p-4"><div className="flex flex-wrap items-start justify-between gap-2"><div className="min-w-0"><h3 className="break-words font-semibold text-white">{run.workflowId}</h3><p className="mt-1 text-xs text-white/55">Version {run.version}</p></div><span className={`rounded-full px-3 py-1 text-xs font-medium ${run.status === 'succeeded' ? 'bg-emerald-400/10 text-emerald-200' : run.status === 'blocked' ? 'bg-amber-300/10 text-amber-100' : 'bg-rose-400/10 text-rose-200'}`}>{run.status}</span></div><dl className="grid grid-cols-2 gap-4 text-sm"><div><dt className="text-xs text-white/50">Duration</dt><dd className="mt-1">{duration(run.durationMs)}</dd></div><div><dt className="text-xs text-white/50">Evaluations</dt><dd className="mt-1">{run.evaluationCount}</dd></div><div className="min-w-0"><dt className="text-xs text-white/50">Requester</dt><dd className="mt-1 break-words">{run.requestedBy}</dd></div><div><dt className="text-xs text-white/50">Completed</dt><dd className="mt-1 break-words">{displayDate(run.completedAt)}</dd></div></dl></article>)}</div><div className="mt-5 hidden overflow-x-auto lg:block"><table className="w-full min-w-[760px] border-collapse text-left text-sm">
+              <thead><tr className="border-b border-white/10 text-left text-xs font-medium text-white/55"><th scope="col" className="py-3 pr-4">Workflow</th><th scope="col" className="py-3 pr-4">Outcome</th><th scope="col" className="py-3 pr-4">Duration</th><th scope="col" className="py-3 pr-4">Evaluations</th><th scope="col" className="py-3 pr-4">Requester</th><th scope="col" className="py-3">Completed</th></tr></thead>
+              <tbody>{filtered.map((run) => <tr key={run.runId} className="border-b border-white/10 text-white/85 last:border-0">
+                <td className="py-4 pr-4"><span className="break-all font-medium">{run.workflowId}</span><span className="ml-2 text-xs text-white/50">v{run.version}</span></td>
+                <td className="py-4 pr-4"><span className={run.status === 'succeeded' ? 'text-emerald-200' : run.status === 'blocked' ? 'text-amber-100' : 'text-rose-200'}>{run.status}</span></td>
+                <td className="py-4 pr-4">{duration(run.durationMs)}</td><td className="py-4 pr-4">{run.evaluationCount}</td><td className="py-4 pr-4">{run.requestedBy}</td><td className="py-4 text-white/60">{displayDate(run.completedAt)}</td>
               </tr>)}</tbody>
-            </table></div>}
+            </table></div></>}
       </section>
-      <p className="mt-4 text-[10px] leading-5 text-quicksilver-accent">Metrics are calculated from the latest {sampleLimit} metadata records, not a complete historical time series. This dashboard does not yet include host queue depth, model traces, alerting, or retention controls.</p>
+      <p className="qs-helper px-1">Summary values cover the latest {sampleLimit} metadata records and are not a complete historical time series. Host queue depth, model traces, alerting, and retention controls are not yet available in this view.</p>
     </main>
   )
 }

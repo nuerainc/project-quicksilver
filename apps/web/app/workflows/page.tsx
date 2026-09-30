@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { WorkflowEdge, WorkflowGraph, WorkflowNode, WorkflowNodeKind } from '@quicksilver/kernel'
 import { authFailureMessage, consoleHeaders, readConsoleToken, type ConsoleRoute } from '@/lib/console-auth'
+import { graphLayout } from '@/lib/workflow-layout'
 
 type ValidationResponse = { valid: boolean; errors: string[]; topologicalOrder: string[] }
 type PublicationVersion = { workflowId: string; version: number; graph: WorkflowGraph; digest: string; authoredBy: string; createdAt: number; status: 'draft' | 'in-review' | 'published' | 'deprecated'; reviewedBy?: string; reviewNote?: string; publishedAt?: number }
@@ -94,40 +95,6 @@ function nextSequence(graphNodes: WorkflowNode[], graphEdges: WorkflowEdge[]) {
   }, 0)
 }
 
-function graphLayout(graphNodes: WorkflowNode[], graphEdges: WorkflowEdge[]) {
-  const depths = new Map<string, number>()
-  const entryId = graphNodes.find((node) => node.kind === 'trigger')?.id
-  if (entryId) depths.set(entryId, 0)
-  for (let pass = 0; pass < graphNodes.length; pass += 1) {
-    let changed = false
-    for (const edge of graphEdges) {
-      const sourceDepth = depths.get(edge.from)
-      if (sourceDepth === undefined) continue
-      const nextDepth = Math.min(sourceDepth + 1, graphNodes.length - 1)
-      if ((depths.get(edge.to) ?? -1) < nextDepth) {
-        depths.set(edge.to, nextDepth)
-        changed = true
-      }
-    }
-    if (!changed) break
-  }
-  for (const node of graphNodes) if (!depths.has(node.id)) depths.set(node.id, 0)
-
-  const layers = new Map<number, WorkflowNode[]>()
-  for (const node of graphNodes) {
-    const depth = depths.get(node.id) ?? 0
-    layers.set(depth, [...(layers.get(depth) ?? []), node])
-  }
-  const positions = new Map<string, { x: number; y: number }>()
-  let maxRows = 1
-  for (const [depth, layer] of layers) {
-    maxRows = Math.max(maxRows, layer.length)
-    layer.forEach((node, row) => positions.set(node.id, { x: 32 + depth * 230, y: 24 + row * 88 }))
-  }
-  const maxDepth = Math.max(0, ...layers.keys())
-  return { positions, width: 64 + (maxDepth + 1) * 230, height: 48 + maxRows * 88 }
-}
-
 export default function WorkflowBuilderPage() {
   const [nodes, setNodes] = useState<WorkflowNode[]>(initialNodes)
   const [edges, setEdges] = useState<WorkflowEdge[]>(initialEdges)
@@ -164,6 +131,33 @@ export default function WorkflowBuilderPage() {
     edges,
   }
   const map = graphLayout(nodes, edges)
+  const diagramViewport = useRef<HTMLDivElement>(null)
+  const [diagramSize, setDiagramSize] = useState({ width: 0, height: 0 })
+
+  useEffect(() => {
+    const viewport = diagramViewport.current
+    if (!viewport) return
+    const measure = () => {
+      // clientWidth/clientHeight include the viewport padding. Measure the
+      // actual SVG content box so the rendered map never gets clipped at a
+      // breakpoint or when the browser is resized.
+      const styles = window.getComputedStyle(viewport)
+      const horizontalPadding = Number.parseFloat(styles.paddingLeft) + Number.parseFloat(styles.paddingRight)
+      const verticalPadding = Number.parseFloat(styles.paddingTop) + Number.parseFloat(styles.paddingBottom)
+      setDiagramSize({
+        width: Math.max(0, viewport.clientWidth - horizontalPadding),
+        height: Math.max(0, viewport.clientHeight - verticalPadding),
+      })
+    }
+    measure()
+    if (typeof ResizeObserver === 'undefined') {
+      window.addEventListener('resize', measure)
+      return () => window.removeEventListener('resize', measure)
+    }
+    const observer = new ResizeObserver(measure)
+    observer.observe(viewport)
+    return () => observer.disconnect()
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -466,31 +460,35 @@ export default function WorkflowBuilderPage() {
   }
 
   return (
-    <main className="mx-auto max-w-7xl px-6 py-10">
-      <header className="mb-8 flex flex-wrap items-start justify-between gap-4">
+    <main className="app-main">
+      <header className="mb-8 flex flex-wrap items-end justify-between gap-5">
         <div>
-          <a href="/" className="font-mono text-xs uppercase tracking-widest text-quicksilver-accent hover:text-quicksilver-signal">← Nuera Quicksilver</a>
-          <h1 className="mt-3 font-mono text-2xl tracking-[0.18em] text-quicksilver-signal">Workflow builder</h1>
-          <p className="mt-2 max-w-2xl text-sm text-quicksilver-accent">Arrange agent, tool, and decision steps, then check the workflow against NQC safety rules.</p>
+          <p className="qs-eyebrow mb-2">Workflow studio <span aria-hidden="true">/</span> Draft workspace</p>
+          <h1 className="qs-page-heading">Build a workflow</h1>
+          <p className="qs-helper mt-2 max-w-2xl">Connect agents, tools, and decisions. Validate the flow before sharing a version for review.</p>
         </div>
-        <span className="rounded border border-quicksilver-border px-3 py-2 font-mono text-[10px] uppercase tracking-widest text-quicksilver-accent">{!persistenceReady ? 'Restoring browser draft…' : storageAvailable ? 'Autosaved in this browser · not executable' : 'Browser saving unavailable'}</span>
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="qs-status-pill">{!persistenceReady ? 'Restoring draft…' : storageAvailable ? 'Saved on this device' : 'Device save unavailable'}</span>
+          <button onClick={validateDraft} disabled={validating} className="qs-action-primary disabled:cursor-wait disabled:opacity-50">{validating ? 'Checking workflow…' : 'Validate workflow'}</button>
+        </div>
       </header>
 
-      <section className="mb-6 rounded border border-quicksilver-border bg-quicksilver-panel p-5">
+      <section aria-label="Add workflow step" className="qs-panel mb-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div><h2 className="font-mono text-xs uppercase tracking-widest text-quicksilver-accent">Add a step</h2><p className="mt-1 text-xs text-quicksilver-accent">Start with the trigger and finish with an output.</p></div>
-          <div className="flex flex-wrap gap-2">
-            {(['agent', 'tool', 'condition', 'output'] as WorkflowNodeKind[]).map((kind) => <button key={kind} onClick={() => addNode(kind)} className="rounded border border-quicksilver-border px-3 py-2 font-mono text-[10px] uppercase tracking-widest text-quicksilver-signal hover:border-quicksilver-accent">+ {nodeTitles[kind]}</button>)}
+          <div><h2 className="text-sm font-semibold text-quicksilver-signal">Add to your flow</h2><p className="qs-helper mt-1">Choose a step. It will be added to the end of the canvas.</p></div>
+          <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto">
+            {(['agent', 'tool', 'condition', 'output'] as WorkflowNodeKind[]).map((kind) => <button key={kind} onClick={() => addNode(kind)} className="qs-action-secondary w-full sm:w-auto">＋ {nodeTitles[kind]}</button>)}
           </div>
         </div>
       </section>
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.65fr)]">
-        <section aria-label="Workflow graph" className="rounded border border-quicksilver-border bg-quicksilver-panel p-5">
-          <div className="mb-5 flex items-center justify-between"><h2 className="font-mono text-xs uppercase tracking-widest text-quicksilver-accent">Workflow graph</h2><span className="font-mono text-[10px] text-quicksilver-accent">{nodes.length} steps · {edges.length} connections</span></div>
-          <h3 className="mb-3 font-mono text-[10px] uppercase tracking-widest text-quicksilver-accent">Visual flow · connections and branches</h3>
-          <div className="mb-6 max-h-[440px] overflow-auto rounded border border-quicksilver-border bg-quicksilver-bg" role="img" aria-label={`Workflow diagram with ${nodes.length} steps and ${edges.length} connections`}>
-            <svg width={map.width} height={map.height} viewBox={`0 0 ${map.width} ${map.height}`} className="min-w-full">
+      <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1.2fr)_minmax(18rem,0.8fr)] 2xl:gap-7">
+        <section aria-label="Workflow graph" className="qs-panel">
+          <div className="mb-5 flex flex-wrap items-center justify-between gap-3"><div><p className="qs-eyebrow">Canvas</p><h2 className="mt-1 text-lg font-semibold text-quicksilver-signal">Your workflow</h2></div><span className="qs-status-pill">{nodes.length} steps <span aria-hidden="true">·</span> {edges.length} connections</span></div>
+          <div className="mb-6 overflow-hidden rounded-xl border border-quicksilver-border bg-quicksilver-bg">
+            <div className="flex items-center justify-between gap-3 border-b border-quicksilver-border px-4 py-3"><span className="text-sm font-medium text-quicksilver-signal">Workflow map</span><span className="text-xs text-quicksilver-accent">Auto-fit · updates as you edit</span></div>
+            <div ref={diagramViewport} className="flex h-[min(56svh,44rem)] min-h-32 w-full items-center justify-center overflow-hidden p-3 sm:p-5" role="img" aria-label={`Workflow diagram with ${nodes.length} steps and ${edges.length} connections`}>
+            <svg width={diagramSize.width || map.width} height={diagramSize.height || map.height} viewBox={`0 0 ${map.width} ${map.height}`} preserveAspectRatio="xMidYMid meet" className="block h-full w-full min-w-0">
               <defs><marker id="workflow-arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#56d7e7" /></marker></defs>
               {edges.map((edge) => {
                 const from = map.positions.get(edge.from)
@@ -511,15 +509,16 @@ export default function WorkflowBuilderPage() {
                 return <g key={node.id}><rect x={point.x} y={point.y} width="180" height="58" rx="5" fill="#0b1119" stroke={stroke} strokeWidth="1.5" /><text x={point.x + 10} y={point.y + 19} fill={stroke} fontSize="9" letterSpacing="1">{node.kind.toUpperCase()}</text><text x={point.x + 10} y={point.y + 39} fill="#edf4fa" fontSize="12">{node.label.length > 22 ? `${node.label.slice(0, 21)}…` : node.label}</text></g>
               })}
             </svg>
+            </div>
           </div>
-          <h3 className="mb-3 font-mono text-[10px] uppercase tracking-widest text-quicksilver-accent">Step settings</h3>
+          <div className="mb-3 flex items-end justify-between gap-3"><div><p className="qs-eyebrow">Configuration</p><h3 className="mt-1 text-base font-semibold text-quicksilver-signal">Step settings</h3></div><span className="text-xs text-quicksilver-accent">Select a field to edit</span></div>
           <div className="space-y-3">
             {nodes.map((node, index) => (
-              <div key={node.id} className="relative rounded border border-quicksilver-border bg-quicksilver-bg p-4">
+              <div key={node.id} className="relative rounded-xl border border-quicksilver-border bg-quicksilver-bg p-4 sm:p-5">
                 {index > 0 && <div aria-hidden="true" className="absolute -top-4 left-8 h-4 border-l border-quicksilver-accent/50" />}
-                <div className="mb-3 flex items-center gap-3"><span className="flex h-7 w-7 items-center justify-center rounded-full border border-quicksilver-accent/50 font-mono text-[10px] text-quicksilver-signal">{index + 1}</span><span className="font-mono text-[10px] uppercase tracking-widest text-quicksilver-accent">{nodeTitles[node.kind]}</span><span className="ml-auto font-mono text-[10px] text-quicksilver-accent">{node.id}</span>{node.kind !== 'trigger' && <button onClick={() => removeNode(node.id)} aria-label={`Remove ${node.label}`} className="font-mono text-[10px] text-quicksilver-accent hover:text-red-300">Remove</button>}</div>
-                <label className="block text-xs text-quicksilver-accent">Step name<input value={node.label} onChange={(event) => updateNode(node.id, { label: event.target.value })} className="mt-1 w-full rounded border border-quicksilver-border bg-quicksilver-panel px-3 py-2 text-sm text-quicksilver-signal focus:border-quicksilver-accent focus:outline-none" /></label>
-                {node.kind === 'condition' && <label className="mt-3 block text-xs text-quicksilver-accent">Condition<input value={node.config?.conditionExpression ?? ''} onChange={(event) => updateConfig(node.id, { conditionExpression: event.target.value })} placeholder={'$nqc.agent-1.reasoningScore >= 70'} className="mt-1 w-full rounded border border-quicksilver-border bg-quicksilver-panel px-3 py-2 text-sm text-quicksilver-signal" /><span className="mt-1 block text-[10px]">Use $input, $steps.&lt;node-id&gt;.&lt;field&gt;, or $nqc.&lt;agent-node-id&gt;.reasoningScore with comparisons or exists.</span></label>}
+                <div className="mb-3 flex flex-wrap items-center gap-3"><span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-quicksilver-accent/10 text-sm font-semibold text-quicksilver-signal">{index + 1}</span><span className="text-sm font-semibold text-quicksilver-signal">{nodeTitles[node.kind]}</span><span className="min-w-0 break-all rounded-full border border-quicksilver-border px-2 py-1 text-[11px] text-quicksilver-accent">{node.id}</span>{node.kind !== 'trigger' && <button onClick={() => removeNode(node.id)} aria-label={`Remove ${node.label}`} className="qs-action-secondary ml-auto min-h-9 px-3 py-1 text-xs">Remove step</button>}</div>
+                <label className="block text-sm font-medium text-quicksilver-signal">Step name<input value={node.label} onChange={(event) => updateNode(node.id, { label: event.target.value })} className="qs-field mt-2 text-sm focus:border-quicksilver-accent focus:outline-none" /></label>
+                {node.kind === 'condition' && <label className="mt-3 block text-xs text-quicksilver-accent">Condition<input value={node.config?.conditionExpression ?? ''} onChange={(event) => updateConfig(node.id, { conditionExpression: event.target.value })} placeholder={'$nqc.agent-1.reasoningScore >= 70'} className="qs-field mt-1" /><span className="mt-1 block text-[10px]">Use $input, $steps.&lt;node-id&gt;.&lt;field&gt;, or $nqc.&lt;agent-node-id&gt;.reasoningScore with comparisons or exists.</span></label>}
                 {node.kind === 'agent' && <div className="mt-3 grid gap-3 sm:grid-cols-2"><label className="text-xs text-quicksilver-accent">Agent configuration key<input value={node.config?.agentId ?? ''} onChange={(event) => updateConfig(node.id, { agentId: event.target.value })} className="mt-1 w-full rounded border border-quicksilver-border bg-quicksilver-panel px-3 py-2 text-sm text-quicksilver-signal" /></label><ImpactField value={node.config?.impact ?? 'low'} onChange={(impact) => updateConfig(node.id, { impact })} /><ExecutionPolicyFields config={node.config ?? {}} onChange={(patch) => updateConfig(node.id, patch)} allowRetries />{(node.config?.impact === 'high' || node.config?.impact === 'critical') && <SafetyGates config={node.config} onChange={(patch) => updateConfig(node.id, patch)} />}</div>}
                 {node.kind === 'tool' && <div className="mt-3 grid gap-3 sm:grid-cols-2"><label className="text-xs text-quicksilver-accent">Tool contract key<input value={node.config?.toolId ?? ''} onChange={(event) => updateConfig(node.id, { toolId: event.target.value })} className="mt-1 w-full rounded border border-quicksilver-border bg-quicksilver-panel px-3 py-2 text-sm text-quicksilver-signal" /></label><ImpactField value={node.config?.impact ?? 'low'} onChange={(impact) => updateConfig(node.id, { impact })} /><ExecutionPolicyFields config={node.config ?? {}} onChange={(patch) => updateConfig(node.id, patch)} /> <label className="flex items-center gap-2 text-xs text-quicksilver-accent"><input type="checkbox" checked={node.config?.sideEffect ?? false} onChange={(event) => updateConfig(node.id, { sideEffect: event.target.checked, evaluationRequired: event.target.checked || node.config?.evaluationRequired, supervisorApprovalRequired: event.target.checked || node.config?.supervisorApprovalRequired })} /> Tool changes external state</label>{(node.config?.sideEffect || node.config?.impact === 'high' || node.config?.impact === 'critical') && <SafetyGates config={node.config} onChange={(patch) => updateConfig(node.id, patch)} />}</div>}
               </div>
@@ -527,25 +526,30 @@ export default function WorkflowBuilderPage() {
           </div>
 
           <div className="mt-6 border-t border-quicksilver-border pt-5">
-            <h3 className="mb-3 font-mono text-[10px] uppercase tracking-widest text-quicksilver-accent">Connections</h3>
-            <div className="grid gap-3 sm:grid-cols-[1fr_1fr_0.7fr_auto]">
-              <select aria-label="Connection source" value={connection.from} onChange={(event) => setConnection({ ...connection, from: event.target.value })} className="rounded border border-quicksilver-border bg-quicksilver-bg px-3 py-2 text-xs text-quicksilver-signal">{nodes.map((node) => <option key={node.id} value={node.id}>{node.label || node.id}</option>)}</select>
-              <select aria-label="Connection destination" value={connection.to} onChange={(event) => setConnection({ ...connection, to: event.target.value })} className="rounded border border-quicksilver-border bg-quicksilver-bg px-3 py-2 text-xs text-quicksilver-signal">{nodes.map((node) => <option key={node.id} value={node.id}>{node.label || node.id}</option>)}</select>
-              <select aria-label="Condition branch" value={connection.branch} onChange={(event) => setConnection({ ...connection, branch: event.target.value })} className="rounded border border-quicksilver-border bg-quicksilver-bg px-3 py-2 text-xs text-quicksilver-signal"><option value="">Unbranched</option><option value="true">True</option><option value="false">False</option></select>
-              <button onClick={addConnection} className="rounded border border-quicksilver-border px-3 py-2 font-mono text-[10px] uppercase tracking-widest hover:border-quicksilver-accent">Connect</button>
+            <details>
+            <summary className="min-h-11 cursor-pointer text-sm font-semibold text-quicksilver-signal">Edit connections <span className="ml-2 text-xs font-normal text-quicksilver-accent">{edges.length} routes</span></summary>
+            <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_1fr_0.7fr_auto]">
+              <select aria-label="Connection source" value={connection.from} onChange={(event) => setConnection({ ...connection, from: event.target.value })} className="qs-field text-sm">{nodes.map((node) => <option key={node.id} value={node.id}>{node.label || node.id}</option>)}</select>
+              <select aria-label="Connection destination" value={connection.to} onChange={(event) => setConnection({ ...connection, to: event.target.value })} className="qs-field text-sm">{nodes.map((node) => <option key={node.id} value={node.id}>{node.label || node.id}</option>)}</select>
+              <select aria-label="Condition branch" value={connection.branch} onChange={(event) => setConnection({ ...connection, branch: event.target.value })} className="qs-field text-sm"><option value="">Unbranched</option><option value="true">True</option><option value="false">False</option></select>
+              <button onClick={addConnection} className="qs-action-secondary">Connect</button>
             </div>
-            <ul className="mt-3 space-y-2">{edges.map((edge) => <li key={edge.id} className="flex items-center gap-2 text-xs text-quicksilver-accent"><span>{nodes.find((node) => node.id === edge.from)?.label ?? edge.from} → {nodes.find((node) => node.id === edge.to)?.label ?? edge.to}{edge.branch ? ` · ${edge.branch}` : ''}</span><button onClick={() => removeConnection(edge.id)} aria-label={`Remove connection ${edge.id}`} className="ml-auto text-quicksilver-accent hover:text-red-300">Remove</button></li>)}</ul>
+            <ul className="mt-3 space-y-2">{edges.map((edge) => <li key={edge.id} className="flex flex-wrap items-center gap-2 rounded-lg border border-quicksilver-border px-3 py-2 text-sm text-quicksilver-accent"><span>{nodes.find((node) => node.id === edge.from)?.label ?? edge.from} <span aria-hidden="true">→</span> {nodes.find((node) => node.id === edge.to)?.label ?? edge.to}{edge.branch ? ` · ${edge.branch}` : ''}</span><button onClick={() => removeConnection(edge.id)} aria-label={`Remove connection ${edge.id}`} className="ml-auto text-xs font-medium text-quicksilver-accent underline decoration-transparent underline-offset-2 hover:text-red-300 hover:decoration-current">Remove</button></li>)}</ul>
+            </details>
           </div>
         </section>
 
-        <aside className="space-y-4">
-          <section className="rounded border border-quicksilver-border bg-quicksilver-panel p-5">
-            <h2 className="font-mono text-xs uppercase tracking-widest text-quicksilver-accent">Shared workflow lifecycle</h2>
-            <p className="mt-2 text-xs leading-5 text-quicksilver-accent">Save immutable versions to the dedicated Nuera Quicksilver project. Authors submit for review; a different human reviewer and publisher are required before a version becomes active.</p><label className="mt-3 block text-xs text-quicksilver-accent">Reviewer rationale (10–500 characters)<textarea value={reviewRationale} onChange={(event) => setReviewRationale(event.target.value.slice(0, 500))} maxLength={500} rows={3} className="mt-1 w-full rounded border border-quicksilver-border bg-quicksilver-bg px-3 py-2 text-xs text-quicksilver-signal" placeholder="Record the evidence and remaining concerns behind this review." /></label>
-            <button onClick={savePlatformDraft} disabled={publicationBusy || !persistenceReady} className="mt-4 w-full rounded border border-quicksilver-quicksilver bg-quicksilver-quicksilver/5 px-4 py-3 font-mono text-xs uppercase tracking-widest text-quicksilver-signal hover:bg-quicksilver-quicksilver/15 disabled:opacity-40">{publicationBusy ? 'Saving…' : `Save ${graph.id} v${graph.version} to platform`}</button>
+        <aside aria-label="Workflow tools" className="space-y-4 xl:sticky xl:top-24 xl:self-start">
+          <section aria-labelledby="release-heading" className="qs-panel">
+            <p className="qs-eyebrow">Release</p>
+            <h2 id="release-heading" className="mt-1 text-lg font-semibold text-quicksilver-signal">Share and publish</h2>
+            <p className="qs-helper mt-2">Create an immutable version, then move it through independent review before publication.</p><label className="mt-4 block text-sm font-medium text-quicksilver-signal">Review rationale <span className="font-normal text-quicksilver-accent">(10–500 characters)</span><textarea value={reviewRationale} onChange={(event) => setReviewRationale(event.target.value.slice(0, 500))} maxLength={500} rows={3} className="qs-field mt-2 text-sm" placeholder="Evidence and remaining concerns behind this review." /></label>
+            <button onClick={savePlatformDraft} disabled={publicationBusy || !persistenceReady} className="qs-action-primary mt-4 w-full disabled:opacity-40">{publicationBusy ? 'Saving…' : `Save ${graph.id} v${graph.version}`}</button>
             {publicationNotice && <p role="status" className="mt-3 text-xs text-emerald-300">{publicationNotice}</p>}
             {publicationError && <p role="alert" className="mt-3 text-xs text-red-300">{publicationError}</p>}
-            <div className="mt-4 space-y-3">
+            <details className="mt-4">
+            <summary className="min-h-11 cursor-pointer text-sm font-semibold text-quicksilver-signal">Version history <span className="ml-2 text-xs font-normal text-quicksilver-accent">{publication.versions.length} versions</span></summary>
+            <div className="mt-3 space-y-3">
               {publication.versions.map((version) => <article key={`${version.workflowId}@${version.version}`} className="rounded border border-quicksilver-border p-3">
                 <div className="flex items-center justify-between gap-3"><p className="font-mono text-xs text-quicksilver-signal">v{version.version} · {version.status}</p>{version.status === 'published' && <span className="font-mono text-[9px] uppercase tracking-widest text-emerald-300">active</span>}</div>
                 <p className="mt-1 break-all font-mono text-[9px] text-quicksilver-accent">{version.digest.slice(0, 24)}… · authored by {version.authoredBy}</p>
@@ -560,11 +564,12 @@ export default function WorkflowBuilderPage() {
               </article>)}
               {publication.versions.length === 0 && <p className="text-xs text-quicksilver-accent">No shared versions for this workflow yet.</p>}
             </div>
+            </details>
             {versionDiff && <section className="mt-4 rounded border border-quicksilver-accent/40 bg-quicksilver-bg p-3"><div className="flex items-center justify-between gap-2"><h3 className="font-mono text-[10px] uppercase tracking-widest">Version diff · v{versionDiff.fromVersion} → v{versionDiff.toVersion}</h3><button onClick={() => setVersionDiff(null)} className="text-[10px] text-quicksilver-accent">Clear</button></div><p className="mt-1 break-all font-mono text-[9px] text-quicksilver-accent">{versionDiff.fromDigest.slice(0, 16)}… → {versionDiff.toDigest.slice(0, 16)}…</p>{versionDiff.entryNodeChanged && <p className="mt-2 text-xs text-amber-200">Entry node changed.</p>}<ul className="mt-2 space-y-1 text-[10px] text-quicksilver-accent">{versionDiff.nodes.map((change) => <li key={`node-${change.id}`}>Node {change.change}: {change.id}{change.changedFields.length ? ` · ${change.changedFields.join(', ')}` : ''}</li>)}{versionDiff.edges.map((change) => <li key={`edge-${change.id}`}>Edge {change.change}: {change.id}{change.changedFields.length ? ` · ${change.changedFields.join(', ')}` : ''}</li>)}</ul>{versionDiff.riskChanges.length > 0 && <div className="mt-3 rounded border border-amber-800/60 p-2"><p className="font-mono text-[9px] uppercase tracking-widest text-amber-200">Safety-relevant changes</p><ul className="mt-1 space-y-1 text-[10px] text-amber-100">{versionDiff.riskChanges.map((change) => <li key={`${change.nodeId}-${change.field}`}>{change.nodeId} · {change.field}: {String(change.from)} → {String(change.to)}</li>)}</ul></div>}{versionDiff.nodes.length === 0 && versionDiff.edges.length === 0 && !versionDiff.entryNodeChanged && versionDiff.riskChanges.length === 0 && <p className="mt-2 text-xs text-emerald-200">No workflow graph changes detected.</p>}</section>}
             {publication.audit.length > 0 && <details className="mt-4"><summary className="cursor-pointer font-mono text-[10px] uppercase tracking-widest text-quicksilver-accent">Publication history ({publication.audit.length})</summary><ol className="mt-2 space-y-2 text-[10px] text-quicksilver-accent">{publication.audit.slice(0, 12).map((event, index) => <li key={`${event.event}-${event.version}-${event.at}-${index}`}>{new Date(event.at).toLocaleString()} · {event.event} v{event.version} · {event.actorId}{event.detail ? ` · ${event.detail}` : ''}</li>)}</ol></details>}
           </section>
-          <section className="rounded border border-quicksilver-border bg-quicksilver-panel p-5"><h2 className="font-mono text-xs uppercase tracking-widest text-quicksilver-accent">Safety check</h2><p className="mt-2 text-xs leading-5 text-quicksilver-accent">Validation checks graph structure, branches, step limits, evaluation, and supervisor approval requirements.</p><input ref={fileInput} type="file" accept=".json,application/json" onChange={importDraft} className="hidden" /><button onClick={() => fileInput.current?.click()} disabled={!persistenceReady} className="mb-2 w-full rounded border border-quicksilver-border px-4 py-3 font-mono text-xs uppercase tracking-widest text-quicksilver-signal hover:border-quicksilver-accent disabled:opacity-40">Import workflow JSON</button><button onClick={exportDraft} className="w-full rounded border border-quicksilver-border px-4 py-3 font-mono text-xs uppercase tracking-widest text-quicksilver-signal hover:border-quicksilver-accent">Export workflow draft</button><button onClick={validateDraft} disabled={validating} className="mt-4 w-full rounded border border-quicksilver-quicksilver bg-quicksilver-quicksilver/5 px-4 py-3 font-mono text-xs uppercase tracking-widest text-quicksilver-signal hover:bg-quicksilver-quicksilver/15 disabled:opacity-40">{validating ? 'Checking…' : 'Validate workflow'}</button>{error && <p role="alert" className="mt-3 text-xs text-red-300">{error}</p>}{validation && <div className={`mt-4 rounded border p-3 ${validation.valid ? 'border-emerald-800 bg-emerald-950/20' : 'border-amber-800 bg-amber-950/20'}`}><p className="font-mono text-xs uppercase tracking-widest">{validation.valid ? 'Ready for review' : 'Needs changes'}</p>{validation.errors.length > 0 && <ul className="mt-2 list-disc space-y-1 pl-4 text-xs text-quicksilver-accent">{validation.errors.map((item) => <li key={item}>{item}</li>)}</ul>}{validation.valid && <p className="mt-2 text-xs text-quicksilver-accent">Topological order: {validation.topologicalOrder.join(' → ')}</p>}</div>}</section>
-          <section className="rounded border border-quicksilver-border bg-quicksilver-panel p-5"><h2 className="font-mono text-xs uppercase tracking-widest text-quicksilver-accent">Run read-only workflow</h2><p className="mt-2 text-xs leading-5 text-quicksilver-accent">Calls the Nuera Quicksilver query agent and evaluates its result with the NQC Kernel. Tool steps remain blocked. This requires the server live-run flag, model credentials, and read-only Sanity Context MCP credentials.</p><label className="mt-3 block text-xs text-quicksilver-accent">Request<input value={liveInput} onChange={(event) => setLiveInput(event.target.value)} maxLength={2000} className="mt-1 w-full rounded border border-quicksilver-border bg-quicksilver-bg px-3 py-2 text-sm text-quicksilver-signal" /></label><button onClick={() => runReadOnlyWorkflow(false)} disabled={liveRunning || !persistenceReady || liveInput.trim().length < 3} className="mt-4 w-full rounded border border-quicksilver-quicksilver bg-quicksilver-quicksilver/5 px-4 py-3 font-mono text-xs uppercase tracking-widest text-quicksilver-signal hover:bg-quicksilver-quicksilver/15 disabled:opacity-40">{liveRunning ? 'Running read-only steps…' : 'Run editable draft'}</button><button onClick={() => runReadOnlyWorkflow(true)} disabled={liveRunning || !publication.versions.some((version) => version.status === 'published') || liveInput.trim().length < 3} className="mt-2 w-full rounded border border-emerald-700 px-4 py-3 font-mono text-xs uppercase tracking-widest text-emerald-200 disabled:opacity-40">Run active published version</button>{liveRun && (liveRun.graphKey === JSON.stringify(graph) || liveRun.graphKey.startsWith(`published:${graphId}:`)) && <div role="status" className="mt-4 rounded border border-quicksilver-border p-3"><p className="font-mono text-xs uppercase tracking-widest">Live read-only run · {liveRun.result.status}{liveRun.result.publishedWorkflow ? ` · published v${liveRun.result.publishedWorkflow.version}` : ` · editable draft`}</p>{liveRun.result.publishedWorkflow && <p className="mt-1 break-all text-[10px] text-quicksilver-accent">Pinned digest {liveRun.result.publishedWorkflow.digest}</p>}{liveRun.result.error && <p className="mt-2 text-xs text-amber-200">{liveRun.result.error}</p>}<ul className="mt-3 space-y-3 text-xs text-quicksilver-accent">{liveRun.result.steps.map((step) => { const evaluation = liveRun.result.evaluations[step.nodeId]; return <li key={step.nodeId}><span className="font-mono">{nodes.find((node) => node.id === step.nodeId)?.label ?? step.nodeId}</span> · {step.status}{step.safetyDecision ? ` · ${step.safetyDecision}` : ''}{step.detail ? <span className="block">{step.detail}</span> : null}{evaluation && <span className="mt-1 block">NQC score {evaluation.reasoningScore}/100 · hallucination risk {evaluation.hallucinationRisk} · brittleness {evaluation.brittleness}{evaluation.issues.length > 0 ? ` · ${evaluation.issues.join(' ')}` : ''}</span>}</li> })}</ul><p className="mt-3 text-[10px] leading-4 text-quicksilver-accent">Live model-backed query only. No workflow tool dispatch or external state changes are enabled.</p></div>}</section>          <details className="mt-4"><summary className="cursor-pointer font-mono text-[10px] uppercase tracking-widest text-quicksilver-accent">Execution history ({executions.length})</summary>{executionHistoryError ? <p className="mt-2 text-xs text-amber-200">{executionHistoryError}</p> : <ol className="mt-2 space-y-2 text-[10px] text-quicksilver-accent">{executions.map((execution) => <li key={execution.runId}>{new Date(execution.completedAt).toLocaleString()} · v{execution.version} · {execution.status} · {execution.durationMs} ms · {execution.evaluationCount} evaluations · {execution.requestedBy}</li>)}</ol>}</details><section className="rounded border border-quicksilver-border bg-quicksilver-panel p-5"><h2 className="font-mono text-xs uppercase tracking-widest text-quicksilver-accent">Run preview</h2><p className="mt-2 text-xs leading-5 text-quicksilver-accent">Simulation only: agent results are placeholders. No model, live evaluator, tool, or supervisor approval is called, and no external action can run.</p><button onClick={previewWorkflow} disabled={!persistenceReady} className="mt-4 w-full rounded border border-quicksilver-quicksilver bg-quicksilver-quicksilver/5 px-4 py-3 font-mono text-xs uppercase tracking-widest text-quicksilver-signal hover:bg-quicksilver-quicksilver/15 disabled:opacity-40">Preview workflow path</button>{simulation?.graphKey === JSON.stringify(graph) && <div role="status" className="mt-4 rounded border border-quicksilver-border p-3"><p className="font-mono text-xs uppercase tracking-widest">Simulation · {simulation.result.status}</p>{simulation.result.error && <p className="mt-2 text-xs text-amber-200">{simulation.result.error}</p>}<ul className="mt-3 space-y-2 text-xs text-quicksilver-accent">{simulation.result.steps.map((step) => <li key={step.nodeId}><span className="font-mono">{nodes.find((node) => node.id === step.nodeId)?.label ?? step.nodeId}</span> · {step.status}{step.safetyDecision ? ` · ${step.safetyDecision}` : ''}{step.detail ? <span className="block">{step.detail}</span> : null}</li>)}</ul><p className="mt-3 text-[10px] leading-4 text-quicksilver-accent">A preview is not a live evaluation or approval. Tool steps stop before dispatch.</p></div>}</section>          <section className="rounded border border-quicksilver-border bg-quicksilver-panel p-5"><h2 className="font-mono text-xs uppercase tracking-widest text-quicksilver-accent">What happens next</h2><p className="mt-2 text-xs leading-5 text-quicksilver-accent">Published versions can run through the gated read-only path and their release and run history is visible above. Hosted execution, team workspaces, scheduled deployment, and effectful tools remain in progress.</p></section>
+          <section className="qs-panel"><h2 className="text-base font-semibold text-quicksilver-signal">Safety check</h2><p className="qs-helper mt-2">Validation checks graph structure, branches, step limits, evaluation, and supervisor approval requirements.</p><input ref={fileInput} type="file" accept=".json,application/json" onChange={importDraft} className="hidden" /><button onClick={() => fileInput.current?.click()} disabled={!persistenceReady} className="qs-action-secondary mb-2 w-full disabled:opacity-40">Import workflow JSON</button><button onClick={exportDraft} className="qs-action-secondary w-full">Export workflow draft</button><button onClick={validateDraft} disabled={validating} className="qs-action-primary mt-4 w-full disabled:opacity-40">{validating ? 'Checking…' : 'Validate workflow'}</button>{error && <p role="alert" className="mt-3 text-xs text-red-300">{error}</p>}{validation && <div className={`mt-4 rounded border p-3 ${validation.valid ? 'border-emerald-800 bg-emerald-950/20' : 'border-amber-800 bg-amber-950/20'}`}><p className="font-mono text-xs uppercase tracking-widest">{validation.valid ? 'Ready for review' : 'Needs changes'}</p>{validation.errors.length > 0 && <ul className="mt-2 list-disc space-y-1 pl-4 text-xs text-quicksilver-accent">{validation.errors.map((item) => <li key={item}>{item}</li>)}</ul>}{validation.valid && <p className="mt-2 text-xs text-quicksilver-accent">Topological order: {validation.topologicalOrder.join(' → ')}</p>}</div>}</section>
+          <section className="qs-panel"><h2 className="text-base font-semibold text-quicksilver-signal">Run a read-only workflow</h2><p className="qs-helper mt-2">Calls the query agent and NQC Kernel evaluator. Tool steps remain blocked. Requires the server live-run flag, model credentials, and read-only Sanity Context MCP credentials.</p><label className="mt-3 block text-sm font-medium text-quicksilver-signal">Request<input value={liveInput} onChange={(event) => setLiveInput(event.target.value)} maxLength={2000} className="qs-field mt-1" /></label><button onClick={() => runReadOnlyWorkflow(false)} disabled={liveRunning || !persistenceReady || liveInput.trim().length < 3} className="qs-action-primary mt-4 w-full disabled:opacity-40">{liveRunning ? 'Running read-only steps…' : 'Run editable draft'}</button><button onClick={() => runReadOnlyWorkflow(true)} disabled={liveRunning || !publication.versions.some((version) => version.status === 'published') || liveInput.trim().length < 3} className="qs-action-secondary mt-2 w-full disabled:opacity-40">Run active published version</button>{liveRun && (liveRun.graphKey === JSON.stringify(graph) || liveRun.graphKey.startsWith(`published:${graphId}:`)) && <div role="status" className="mt-4 rounded border border-quicksilver-border p-3"><p className="font-mono text-xs uppercase tracking-widest">Live read-only run · {liveRun.result.status}{liveRun.result.publishedWorkflow ? ` · published v${liveRun.result.publishedWorkflow.version}` : ` · editable draft`}</p>{liveRun.result.publishedWorkflow && <p className="mt-1 break-all text-[10px] text-quicksilver-accent">Pinned digest {liveRun.result.publishedWorkflow.digest}</p>}{liveRun.result.error && <p className="mt-2 text-xs text-amber-200">{liveRun.result.error}</p>}<ul className="mt-3 space-y-3 text-xs text-quicksilver-accent">{liveRun.result.steps.map((step) => { const evaluation = liveRun.result.evaluations[step.nodeId]; return <li key={step.nodeId}><span className="font-mono">{nodes.find((node) => node.id === step.nodeId)?.label ?? step.nodeId}</span> · {step.status}{step.safetyDecision ? ` · ${step.safetyDecision}` : ''}{step.detail ? <span className="block">{step.detail}</span> : null}{evaluation && <span className="mt-1 block">NQC score {evaluation.reasoningScore}/100 · hallucination risk {evaluation.hallucinationRisk} · brittleness {evaluation.brittleness}{evaluation.issues.length > 0 ? ` · ${evaluation.issues.join(' ')}` : ''}</span>}</li> })}</ul><p className="mt-3 text-[10px] leading-4 text-quicksilver-accent">Live model-backed query only. No workflow tool dispatch or external state changes are enabled.</p></div>}</section>          <details className="mt-4"><summary className="cursor-pointer font-mono text-[10px] uppercase tracking-widest text-quicksilver-accent">Execution history ({executions.length})</summary>{executionHistoryError ? <p className="mt-2 text-xs text-amber-200">{executionHistoryError}</p> : <ol className="mt-2 space-y-2 text-[10px] text-quicksilver-accent">{executions.map((execution) => <li key={execution.runId}>{new Date(execution.completedAt).toLocaleString()} · v{execution.version} · {execution.status} · {execution.durationMs} ms · {execution.evaluationCount} evaluations · {execution.requestedBy}</li>)}</ol>}</details><section className="rounded border border-quicksilver-border bg-quicksilver-panel p-5"><h2 className="font-mono text-xs uppercase tracking-widest text-quicksilver-accent">Run preview</h2><p className="mt-2 text-xs leading-5 text-quicksilver-accent">Simulation only: agent results are placeholders. No model, live evaluator, tool, or supervisor approval is called, and no external action can run.</p><button onClick={previewWorkflow} disabled={!persistenceReady} className="mt-4 w-full rounded border border-quicksilver-quicksilver bg-quicksilver-quicksilver/5 px-4 py-3 font-mono text-xs uppercase tracking-widest text-quicksilver-signal hover:bg-quicksilver-quicksilver/15 disabled:opacity-40">Preview workflow path</button>{simulation?.graphKey === JSON.stringify(graph) && <div role="status" className="mt-4 rounded border border-quicksilver-border p-3"><p className="font-mono text-xs uppercase tracking-widest">Simulation · {simulation.result.status}</p>{simulation.result.error && <p className="mt-2 text-xs text-amber-200">{simulation.result.error}</p>}<ul className="mt-3 space-y-2 text-xs text-quicksilver-accent">{simulation.result.steps.map((step) => <li key={step.nodeId}><span className="font-mono">{nodes.find((node) => node.id === step.nodeId)?.label ?? step.nodeId}</span> · {step.status}{step.safetyDecision ? ` · ${step.safetyDecision}` : ''}{step.detail ? <span className="block">{step.detail}</span> : null}</li>)}</ul><p className="mt-3 text-[10px] leading-4 text-quicksilver-accent">A preview is not a live evaluation or approval. Tool steps stop before dispatch.</p></div>}</section>          <section className="rounded border border-quicksilver-border bg-quicksilver-panel p-5"><h2 className="font-mono text-xs uppercase tracking-widest text-quicksilver-accent">What happens next</h2><p className="mt-2 text-xs leading-5 text-quicksilver-accent">Published versions can run through the gated read-only path and their release and run history is visible above. Hosted execution, team workspaces, scheduled deployment, and effectful tools remain in progress.</p></section>
         </aside>
       </div>
     </main>

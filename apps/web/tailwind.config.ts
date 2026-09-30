@@ -1,22 +1,22 @@
 import type { Config } from 'tailwindcss'
 
 export default {
-  content: ['./app/**/*.{ts,tsx}'],
+  content: ['./app/**/*.{ts,tsx}', './components/**/*.{ts,tsx}'],
   theme: {
     extend: {
       colors: {
         quicksilver: {
-          bg: '#0a0a0f',
-          panel: '#13131a',
-          border: '#1f1f2a',
-          accent: '#a8a8b3',
-          signal: '#e6e6ed',
-          quicksilver: '#c8c8d0',
+          bg: '#0b1220',
+          panel: '#111c2e',
+          border: '#29394f',
+          accent: '#a7bacd',
+          signal: '#e7eef7',
+          quicksilver: '#69c9c1',
         },
       },
       fontFamily: {
         mono: ['ui-monospace', 'SFMono-Regular', 'Menlo', 'Monaco', 'monospace'],
-        sans: ['system-ui', '-apple-system', 'Segoe UI', 'sans-serif'],
+        sans: ['Inter', 'ui-sans-serif', 'system-ui', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'sans-serif'],
       },
     },
   },

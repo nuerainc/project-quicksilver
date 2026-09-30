@@ -1,5 +1,7 @@
 import './globals.css'
-import type { Metadata } from 'next'
+import type { Metadata, Viewport } from 'next'
+import { AppNavigation } from '@/components/app-navigation'
+import { AgentChatWidget } from '@/components/agent-chat-widget'
 
 // Render per request so each page gets the CSP nonce middleware.ts sets
 // (threat model T-67); a prerendered page would carry no nonce and its
@@ -11,6 +13,12 @@ export const metadata: Metadata = {
   description: 'The NQC Kernel, Quicksilver Engine, governed agents, and enterprise workflows.',
 }
 
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  viewportFit: 'cover',
+}
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
@@ -20,7 +28,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             Public demo · synthetic company data only · resets regularly
           </div>
         )}
-        {children}
+        <a className="app-skip-link" href="#main-content">Skip to main content</a>
+        <AppNavigation />
+        <div id="main-content" tabIndex={-1}>
+          {children}
+        </div>
+        <AgentChatWidget />
       </body>
     </html>
   )

@@ -159,6 +159,15 @@ export interface MoneyEntryInput {
   description: string
   experimentId?: string
   source: { type: (typeof MONEY_SOURCES)[number]; ref: string }
+  /** Immutable lineage for spend/compute: the policy verdict and the human who confirmed the ledger entry. */
+  spendAuthorization?: {
+    decisionId: string
+    recommendation: 'execute-autonomously' | 'request-approval'
+    riskLevel: RiskLevel
+    reasons: string[]
+    confirmedBy: string
+    confirmedAt: string
+  }
   /** When the money moved (defaults to the recording time). */
   occurredAt?: string
 }
@@ -191,6 +200,12 @@ export function appendMoney(ledger: MoneyLedger, input: MoneyEntryInput, actor: 
   if (!input.description?.trim() || input.description.length > 500) reasons.push('description must be 1 to 500 characters.')
   if (!MONEY_SOURCES.includes(input.source?.type as never) || !input.source?.ref?.trim()) reasons.push('Every entry names its source (type and reference).')
   if (input.experimentId !== undefined && !ID.test(input.experimentId)) reasons.push('experimentId is invalid.')
+  if (input.kind === 'spend' || input.kind === 'compute') {
+    const authorization = input.spendAuthorization
+    if (!authorization || !ID.test(authorization.decisionId ?? '') || !ID.test(authorization.confirmedBy ?? '') || authorization.confirmedBy !== actor.id || !Number.isInteger(authorization.riskLevel) || authorization.riskLevel < 0 || authorization.riskLevel > 5 || !['execute-autonomously', 'request-approval'].includes(authorization.recommendation) || !Array.isArray(authorization.reasons) || authorization.reasons.some((reason) => typeof reason !== 'string') || !Number.isFinite(Date.parse(authorization.confirmedAt))) {
+      reasons.push('Every spend and compute entry needs a valid spend decision and the confirming actor.')
+    }
+  }
   if (input.kind === 'revenue' && input.source?.type === 'manual' && actor.kind !== 'human') reasons.push('Only a human records revenue by hand.')
   const v = verifyMoneyLedger(ledger)
   if (!v.valid) reasons.push(`The ledger does not verify: ${v.errors.join(' ')}`)
