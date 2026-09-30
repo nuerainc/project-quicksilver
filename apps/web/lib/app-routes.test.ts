@@ -15,17 +15,43 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { register } from 'node:module'
-import { readdirSync, statSync } from 'node:fs'
+import { readFileSync, readdirSync, statSync } from 'node:fs'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { join, relative, sep } from 'node:path'
 
 import { digestToken } from '../../../packages/kernel/src/identity/tokens.ts'
+import { setAuthorizationAuditAppender } from './authorization-audit-store.ts'
+
+// This route contract suite clears Sanity credentials and verifies auth before
+// data access. Isolate its durable audit boundary; append semantics are covered
+// by authorization-audit-store.test.ts.
+setAuthorizationAuditAppender(async () => 'test-authorization-audit-record')
 
 // Lets Node import Next.js route modules: the "@/" alias and extensionless imports.
 register('./route-test-loader.mjs', import.meta.url)
 
 const API_DIR = fileURLToPath(new URL('../app/api/', import.meta.url))
 const HTTP_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'] as const
+
+test('OpenAPI contract (P-118): paths and methods match exported API route handlers', () => {
+  const contractPath = fileURLToPath(new URL('../../../docs/api/openapi.json', import.meta.url))
+  const contract = JSON.parse(readFileSync(contractPath, 'utf8')) as { openapi: string; info: { version: string }; paths: Record<string, Record<string, unknown>> }
+  assert.equal(contract.openapi, '3.1.0')
+  assert.match(contract.info.version, /^0\./, 'pre-1.0 contract version must not claim 1.0 stability')
+
+  const declared = Object.entries(contract.paths).flatMap(([path, methods]) =>
+    Object.keys(methods).map((method) => `${method.toUpperCase()} ${path}`),
+  ).sort()
+  const implemented = findRouteFiles(API_DIR).flatMap((file) => {
+    const rel = relative(API_DIR, file).split(sep).slice(0, -1).join('/')
+    const path = `/api/${rel}`.replace(/\[([^\]]+)\]/g, '{$1}')
+    const source = readFileSync(file, 'utf8')
+    const methods = [...source.matchAll(/export\s+(?:async\s+)?function\s+(GET|POST|PUT|PATCH|DELETE)|export\s+const\s+(GET|POST|PUT|PATCH|DELETE)\s*=/g)]
+      .map((match) => match[1] ?? match[2])
+    return methods.map((method) => `${method} ${path}`)
+  }).sort()
+  assert.deepEqual(declared, implemented, 'update docs/api/openapi.json when a route method is added, removed, or moved')
+})
 
 /** Routes a valid principal with no permission may call, and why (a reviewed list). */
 const REVIEWED_ANY_PRINCIPAL: Record<string, string> = {
@@ -176,6 +202,20 @@ test('agent catalog routes validate bodies before any Sanity access', async () =
   assert.equal(response.status, 400)
   const draft = routes.find((item) => item.key === 'POST /api/agents/drafts')!
   assert.equal((await call(draft, supervisor, JSON.stringify({ displayName: 'Compliance', description: 'A definition that is structurally invalid.', manifest: { id: 'wrong', version: 1, authority: 'admin', tasks: [], maximumImpact: 'critical', requiresEvaluation: false } }))).status, 400)
+})
+
+test('decision approval route refuses a missing or malformed review fingerprint before Sanity access', async () => {
+  setEnv(principalEnv)
+  const routes = await loadHandlers()
+  const action = routes.find((item) => item.key === 'POST /api/decisions/[id]/action')!
+  const supervisor = `Bearer ${TOKENS.supervisor}`
+  for (const body of [
+    { action: 'approve' },
+    { action: 'approve', expectedActionFingerprint: 'sha256:stale' },
+  ]) {
+    const response = await call(action, supervisor, JSON.stringify(body))
+    assert.equal(response.status, 400, JSON.stringify(body))
+  }
 })
 
 test('web rate limits (A-5): model and write routes return 429 with Retry-After per principal; the default and bad settings', async () => {

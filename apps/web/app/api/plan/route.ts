@@ -47,7 +47,7 @@ import { NextResponse } from 'next/server'
 import { safeErrorName } from '@/lib/safe-log'
 import { getSanityClient } from '@/lib/sanity-client'
 import { z } from 'zod'
-import { policySnapshotVersion } from '@/lib/nqc-approval'
+import { decisionActionFingerprint, policySnapshotVersion } from '@/lib/nqc-approval'
 import { guardWebRoute } from '@/lib/route-guard'
 import {
   executeGovernedAgent,
@@ -260,7 +260,7 @@ export async function POST(req: Request) {
   // A principal with decision:propose, before the body is read (A-3); it is the
   // requester recorded on every decision, never anything in the body. Then the
   // per-principal model-route limit (A-5).
-  const requester = guardWebRoute(req, 'plan')
+  const requester = await guardWebRoute(req, 'plan')
   if (!requester.ok) return NextResponse.json(requester.body, { status: requester.status, headers: requester.headers })
 
   let body: unknown
@@ -470,6 +470,13 @@ export async function POST(req: Request) {
       safetyDecision: r.safetyDecision,
       review: r.review,
       decisionDocId: r.doc?._id ?? null,
+      approvalFingerprint: r.doc ? decisionActionFingerprint({
+        decisionId: r.doc._id,
+        selectedAction: r.doc.selectedAction,
+        policySnapshotVersion: r.doc.policySnapshotVersion,
+        riskLevel: r.doc.riskLevel,
+        requiredApproval: r.doc.requiredApproval,
+      }) : null,
       status: (r.doc as { status?: string } | null)?.status ?? null,
       process: r.doc ? processByDoc.get(r.doc._id) ?? null : null,
       resolvedReferences: {

@@ -15,8 +15,8 @@ export type PublicationActorResult =
   | { ok: true; actor: PublicationActor }
   | { ok: false; refusal: GuardRefusal }
 
-export function guardPublicationActor(request: Request, route: PublicationMutationRoute): PublicationActorResult {
-  const guarded = guardWebRoute(request, route)
+export async function guardPublicationActor(request: Request, route: PublicationMutationRoute): Promise<PublicationActorResult> {
+  const guarded = await guardWebRoute(request, route)
   if (!guarded.ok) return { ok: false, refusal: guarded }
 
   // The shared route guard intentionally exposes only an id. Publication also

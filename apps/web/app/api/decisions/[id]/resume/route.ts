@@ -33,7 +33,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   const { id } = await ctx.params
   if (!id) return NextResponse.json({ error: 'Missing decision id' }, { status: 400 })
   // A valid principal with decision:read or decision:propose, before any read or write.
-  const caller = authorizeDecisionRoute(req, 'resume')
+  const caller = await authorizeDecisionRoute(req, 'resume')
   if (!caller.ok) return NextResponse.json({ error: caller.reason }, { status: caller.status })
   const limited = takeWebRateLimit('write', caller.principalId)
   if (limited) return NextResponse.json(limited.body, { status: limited.status, headers: limited.headers })

@@ -8,7 +8,7 @@ const limitSchema = z.coerce.number().int().min(1).max(100).default(100)
 
 /** Returns only the latest tenant-scoped workflow execution metadata. */
 export async function GET(request: Request) {
-  const caller = guardWebRoute(request, 'monitoring/workflows')
+  const caller = await guardWebRoute(request, 'monitoring/workflows')
   if (!caller.ok) return publicationRefusal(caller)
 
   const limit = limitSchema.safeParse(new URL(request.url).searchParams.get('limit') ?? undefined)

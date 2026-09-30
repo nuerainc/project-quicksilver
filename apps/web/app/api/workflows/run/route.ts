@@ -20,7 +20,7 @@ const MAX_QUERY_AGENT_STEPS = 3
 export async function POST(request: Request) {
   // A principal with run:enqueue before anything else (A-3), then the
   // per-principal model-route limit (A-5).
-  const requester = guardWebRoute(request, 'workflows/run')
+  const requester = await guardWebRoute(request, 'workflows/run')
   if (!requester.ok) return NextResponse.json(requester.body, { status: requester.status, headers: requester.headers })
 
   // Off unless switched on, and never in production (A-10).

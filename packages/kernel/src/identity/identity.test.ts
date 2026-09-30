@@ -115,7 +115,7 @@ test('RBAC: custom roles are tenant-scoped and cannot shadow built-ins', () => {
   assert.throws(() => access.defineRole({ id: 'release-manager', tenantId: 'acme', description: 'x', permissions: ['run:read'] }), /already exists/)
 })
 
-test('RBAC: every decision reaches the audit sink, and a failing sink changes nothing', () => {
+test('RBAC: every decision reaches the audit sink, and a failing sink denies access', () => {
   const log: AccessDecision[] = []
   const access = new AccessController({ audit: (d) => log.push(d), now: () => 42 })
   access.authorize(ana, 'run:redrive', { ...acme, id: 'run-9', kind: 'workflow-run' })
@@ -123,7 +123,9 @@ test('RBAC: every decision reaches the audit sink, and a failing sink changes no
   assert.deepEqual(log.map((d) => [d.principalId, d.permission, d.allowed, d.at]), [[ana.id, 'run:redrive', true, 42], [viewer.id, 'run:redrive', false, 42]])
   assert.equal(log[0]!.resourceId, 'run-9')
   const noisy = new AccessController({ audit: () => { throw new Error('sink down') } })
-  assert.equal(noisy.authorize(ana, 'run:read', acme).allowed, true)
+  const refused = noisy.authorize(ana, 'run:read', acme)
+  assert.equal(refused.allowed, false)
+  assert.match(refused.reasons.at(-1)!, /audit persistence failed/i)
 })
 
 test('RBAC: assert throws AccessDeniedError carrying the decision', () => {

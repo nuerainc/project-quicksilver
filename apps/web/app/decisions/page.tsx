@@ -141,15 +141,9 @@ export default async function DecisionLogPage() {
   const { decisions, error } = await loadDecisions()
 
   return (
-    <main className="mx-auto max-w-6xl px-6 py-12">
+    <main className="app-main app-main--narrow">
       <header className="mb-10">
-        <a
-          href="/"
-          className="font-mono text-xs uppercase tracking-widest text-quicksilver-accent transition hover:text-quicksilver-signal"
-        >
-          ← Back to console
-        </a>
-        <h1 className="qs-glow mt-4 font-mono text-3xl tracking-[0.3em] text-quicksilver-quicksilver">
+        <h1 className="qs-glow font-mono text-3xl tracking-[0.3em] text-quicksilver-quicksilver">
           DECISION LOG
         </h1>
         <p className="mt-2 max-w-2xl text-sm text-quicksilver-accent">

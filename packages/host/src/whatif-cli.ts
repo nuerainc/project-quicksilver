@@ -35,12 +35,10 @@ import {
 
 import { genesisStoresFromEnv } from './genesis-store.ts'
 import { loadShadowLogs, OperateStore } from './operate-store.ts'
+import { CLI_VALUE_FLAGS, parseCommandArgs } from './cli-args.ts'
 
 const root = process.env.INIT_CWD ?? process.cwd()
-const [cmd, ...args] = process.argv.slice(2)
-const flag = (name: string) => { const i = args.indexOf(name); return i >= 0 ? args[i + 1] : undefined }
-const VALUE_FLAGS = ['--run', '--horizon', '--runs', '--seed', '--cash', '--scenario', '--period-days', '--reserve', '--block', '--noise', '--department']
-const positional = args.filter((a, i) => !a.startsWith('--') && !(i > 0 && VALUE_FLAGS.includes(args[i - 1]!)))
+const { command: cmd, args, flag, positional } = parseCommandArgs(process.argv.slice(2), { valueFlags: CLI_VALUE_FLAGS.whatif })
 
 function fail(message: string): never { console.error(message); process.exit(1) }
 const usd = (n: number) => `${n < 0 ? '-' : ''}$${Math.abs(n).toFixed(2)}`

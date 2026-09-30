@@ -45,7 +45,7 @@ export async function POST(
   const { id } = await ctx.params
   // The supervisor credential before the body is read (A-3), then the
   // per-principal write limit (A-5).
-  const supervisor = verifySupervisorCredential(req, 'decision:rollback')
+  const supervisor = await verifySupervisorCredential(req, 'decision:rollback')
   if (!supervisor.ok) return NextResponse.json({ error: supervisor.reason }, { status: supervisor.status })
   const limited = takeWebRateLimit('write', supervisor.supervisorId)
   if (limited) return NextResponse.json(limited.body, { status: limited.status, headers: limited.headers })

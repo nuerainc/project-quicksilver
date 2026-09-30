@@ -12,7 +12,17 @@ import { MIN_SOLE_OPERATOR_JUSTIFICATION, type SeparationOfDutiesResult } from '
 export const DecisionActionBody = z.object({
   action: z.enum(['approve', 'reject', 'request-evidence']),
   comment: z.string().optional(),
-}).strict()
+  /** Must match the action and policy snapshot the approver reviewed. */
+  expectedActionFingerprint: z.string().regex(/^sha256:[a-f0-9]{64}$/).optional(),
+}).strict().superRefine((body, context) => {
+  if (body.action === 'approve' && !body.expectedActionFingerprint) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['expectedActionFingerprint'],
+      message: 'Approval requires the exact action fingerprint shown to the reviewer.',
+    })
+  }
+})
 
 /** The 403 body when separation of duties refuses an approval. */
 export interface SeparationRefusalBody {

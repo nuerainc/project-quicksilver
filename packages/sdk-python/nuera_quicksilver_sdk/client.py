@@ -34,6 +34,7 @@ class WorkflowStep:
     status: str
     safety_decision: str | None = None
     detail: str | None = None
+    retry_after_ms: int | None = None
 
 
 @dataclass(frozen=True)
@@ -75,7 +76,8 @@ class QuicksilverClient:
         transport: _Transport | None = None,
     ):
         parsed = urlparse(base_url)
-        if parsed.scheme != "https" and parsed.hostname not in {"localhost", "127.0.0.1", "::1"}:
+        loopback = parsed.hostname in {"localhost", "127.0.0.1", "::1"}
+        if parsed.scheme != "https" and not (parsed.scheme == "http" and loopback):
             raise ValueError("Quicksilver API URLs must use HTTPS outside localhost.")
         if not parsed.scheme or not parsed.netloc:
             raise ValueError("Provide a complete Quicksilver API URL.")
@@ -143,8 +145,14 @@ def _is_run(mode: str) -> Callable[[Any], bool]:
             and isinstance(step.get("nodeId"), str)
             and isinstance(step.get("status"), str)
             and step.get("status") in {"completed", "skipped", "blocked", "failed", "cancelled"}
-            and (step.get("safetyDecision") is None or (isinstance(step.get("safetyDecision"), str) and step.get("safetyDecision") in {"ALLOW", "BLOCK", "ESCALATE"}))
+            and (step.get("safetyDecision") is None or (isinstance(step.get("safetyDecision"), str) and step.get("safetyDecision") in {"ALLOW", "BLOCK", "ESCALATE", "SKIPPED"}))
             and (step.get("detail") is None or isinstance(step.get("detail"), str))
+            and (step.get("retryAfterMs") is None or (
+                isinstance(step.get("retryAfterMs"), (int, float))
+                and not isinstance(step.get("retryAfterMs"), bool)
+                and math.isfinite(step.get("retryAfterMs"))
+                and step.get("retryAfterMs") >= 0
+            ))
             for step in steps
         ):
             return False
@@ -153,7 +161,8 @@ def _is_run(mode: str) -> Callable[[Any], bool]:
             if not isinstance(evaluations, dict):
                 return False
             for evaluation in evaluations.values():
-                if not isinstance(evaluation, dict) or not isinstance(evaluation.get("reasoningScore"), (int, float)):
+                score = evaluation.get("reasoningScore") if isinstance(evaluation, dict) else None
+                if not isinstance(evaluation, dict) or not isinstance(score, (int, float)) or isinstance(score, bool) or not math.isfinite(score) or not 0 <= score <= 100:
                     return False
                 if not isinstance(evaluation.get("hallucinationRisk"), str) or evaluation.get("hallucinationRisk") not in {"low", "med", "high"}:
                     return False
@@ -177,6 +186,7 @@ def _run_response(body: dict[str, Any]) -> WorkflowRunResponse:
             status=step["status"],
             safety_decision=step.get("safetyDecision"),
             detail=step.get("detail"),
+            retry_after_ms=step.get("retryAfterMs"),
         )
         for step in body["steps"]
     )

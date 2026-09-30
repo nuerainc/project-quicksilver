@@ -14,3 +14,8 @@ agent creation, and broader hosted-run APIs depend on the platform identity and
 authorization design. The internal Python client and `qs` CLI are documented
 in the [Python SDK guide](sdk-python.md), and the dependency-free Go client
 foundation is documented in the [Go SDK guide](sdk-go.md).
+
+Run the offline client contract suite with `npm run sdk:test`. It checks URL
+transport policy, request and response shapes, safety-mode invariants, NQC
+evaluation fields, structured errors, and cancellation forwarding. The suite is
+also part of `npm run verify` and the Ubuntu/Windows CI matrix.

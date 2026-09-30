@@ -15,6 +15,99 @@ body {
   background: var(--bg);
   color: var(--signal);
   font-feature-settings: 'ss01', 'cv11';
+  min-height: 100%;
+}
+
+html { scroll-behavior: smooth; }
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after { scroll-behavior: auto !important; animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
+}
+
+:where(a, button, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid #e6e6ed;
+  outline-offset: 3px;
+}
+
+button, input, select, textarea { min-height: 2.75rem; }
+
+.app-main {
+  width: min(100% - 2rem, 88rem);
+  min-width: 0;
+  margin-inline: auto;
+  padding-block: clamp(1.5rem, 4vw, 3rem);
+}
+
+.app-main--narrow { max-width: 72rem; }
+
+.app-topbar {
+  border-bottom: 1px solid var(--border);
+  background: rgb(19 19 26 / 0.94);
+}
+
+.app-topbar__inner {
+  width: min(100% - 2rem, 88rem);
+  margin-inline: auto;
+  padding-block: clamp(0.75rem, 2vw, 1.25rem);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: clamp(0.75rem, 2vw, 2rem);
+}
+
+.app-brand {
+  display: grid;
+  gap: 0.2rem;
+  min-width: 0;
+  color: var(--signal);
+  text-decoration: none;
+}
+
+.app-brand__name { font-family: ui-monospace, monospace; font-size: clamp(0.9rem, 2vw, 1.1rem); letter-spacing: 0.04em; }
+.app-brand__tagline { color: var(--accent); font-size: 0.72rem; }
+.app-primary-nav { min-width: 0; }
+.app-primary-nav--desktop { display: none; }
+.app-primary-nav__list { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 0.35rem; list-style: none; margin: 0; padding: 0; }
+.app-primary-nav__link {
+  display: flex;
+  min-height: 2.75rem;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  border-radius: 0.25rem;
+  padding: 0.5rem 0.75rem;
+  color: var(--accent);
+  font-size: 0.8rem;
+  text-decoration: none;
+}
+.app-primary-nav__link:hover,
+.app-primary-nav__link[aria-current='page'] { border-color: var(--border); background: rgb(255 255 255 / 0.06); color: var(--signal); }
+.app-mobile-menu { position: relative; }
+.app-mobile-menu__summary { display: flex; min-height: 2.75rem; align-items: center; justify-content: space-between; gap: 1rem; border: 1px solid var(--border); border-radius: 0.25rem; padding: 0.5rem 0.75rem; color: var(--signal); cursor: pointer; list-style: none; }
+.app-mobile-menu__summary::-webkit-details-marker { display: none; }
+.app-mobile-menu__summary::after { content: '⌄'; color: var(--accent); }
+.app-mobile-menu[open] .app-mobile-menu__summary::after { content: '⌃'; }
+.app-mobile-menu__current { margin-inline-start: auto; color: var(--accent); font-size: 0.8rem; }
+.app-mobile-menu__panel { position: absolute; z-index: 40; inset-block-start: calc(100% + 0.35rem); inset-inline-end: 0; width: min(23rem, calc(100vw - 2rem)); display: grid; grid-template-columns: 1fr; gap: 0.75rem; border: 1px solid var(--border); border-radius: 0.35rem; background: #13131a; padding: 0.75rem; box-shadow: 0 16px 36px rgb(0 0 0 / 0.45); }
+.app-mobile-menu__group h2 { margin: 0 0 0.3rem; padding-inline: 0.75rem; color: var(--accent); font: 600 0.68rem/1.4 ui-monospace, monospace; letter-spacing: 0.1em; text-transform: uppercase; }
+.app-mobile-menu__group ul { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.2rem; margin: 0; padding: 0; list-style: none; }
+.app-mobile-menu__group .app-primary-nav__link { justify-content: flex-start; }
+.app-skip-link { position: absolute; z-index: 50; inset-block-start: 0.5rem; inset-inline-start: 0.5rem; transform: translateY(-150%); border-radius: 0.25rem; background: #fff; color: #111; padding: 0.75rem 1rem; }
+.app-skip-link:focus { transform: translateY(0); }
+
+@media (min-width: 42rem) {
+  .app-primary-nav--desktop { display: block; }
+  .app-mobile-menu { display: none; }
+  .app-topbar__inner, .app-main { width: min(100% - 3rem, 88rem); }
+}
+
+@media (max-width: 34rem) {
+  .app-topbar__inner { align-items: stretch; flex-direction: column; }
+  .app-brand__tagline { font-size: 0.68rem; }
+  .app-mobile-menu__panel { position: static; width: 100%; margin-top: 0.4rem; box-shadow: none; }
+  .app-mobile-menu__group:first-child ul { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .app-mobile-menu__group:last-child ul { grid-template-columns: 1fr; }
 }
 
 .qs-glow {

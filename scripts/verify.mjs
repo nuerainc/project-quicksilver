@@ -6,6 +6,7 @@ const commands = [
   ['host:test', 'Host regression suite'],
   ['aura:test', 'Aura regression suite'],
   ['seed:test', 'Seed and web security suite'],
+  ['sdk:test', 'TypeScript SDK contract suite'],
   ['typecheck', 'TypeScript checks'],
 ]
 

@@ -3,6 +3,7 @@ import type { SanityClient } from '@sanity/client'
 import { AccessController, PERMISSIONS, type Permission, type PrincipalKind } from '@quicksilver/kernel'
 import { StaticTokenIdentityProvider, digestToken, principalsFromJson } from '@quicksilver/kernel/identity/tokens'
 import { DEMO_PRINCIPALS, demoModeOn, demoModeProblems } from './demo-mode.ts'
+import { appendAuthorizationDecision } from './authorization-audit-store.ts'
 
 export interface PolicyRevision {
   id: string
@@ -141,8 +142,15 @@ export function soleOperatorId(): string | null {
  * entity id of that human supervisor. Otherwise the interim single
  * `NQC_SUPERVISOR_TOKEN` credential is used.
  */
-export function verifySupervisorCredential(request: Request, permission: Permission = 'decision:approve'): SupervisorCredentialResult {
-  return checkSupervisorCredential(request.headers.get('authorization'), permission, process.env)
+export async function verifySupervisorCredential(request: Request, permission: Permission = 'decision:approve'): Promise<SupervisorCredentialResult> {
+  const result = checkSupervisorCredential(request.headers.get('authorization'), permission, process.env)
+  try {
+    await appendAuthorizationDecision({ tenantId: tenantOf(process.env), route: 'decision/supervisor', permissions: [permission], ...(result.ok ? { actorId: result.supervisorId } : {}), outcome: result.ok ? 'allow' : 'deny', httpStatus: result.ok ? 200 : result.status, at: new Date().toISOString(), decisionCode: result.ok ? 'authorized' : `http-${result.status}` })
+  } catch (error) {
+    console.error('[authorization-audit] durable append failed', error instanceof Error ? error.name : 'UnknownError')
+    return { ok: false, status: 503, reason: 'Authorization audit storage is unavailable.' }
+  }
+  return result
 }
 
 /** The pure core of `verifySupervisorCredential`: the Authorization header value and the environment in, a verdict out. */
@@ -206,8 +214,95 @@ export type DecisionRouteAuthResult =
  * reads or writes anything (threat model F-2). Request-level wrapper over
  * `checkDecisionRouteCaller` with `process.env`.
  */
-export function authorizeDecisionRoute(request: Request, route: DecisionRoute): DecisionRouteAuthResult {
-  return checkDecisionRouteCaller(route, request.headers.get('authorization'), process.env)
+export async function authorizeDecisionRoute(request: Request, route: DecisionRoute): Promise<DecisionRouteAuthResult> {
+  const result = checkDecisionRouteCaller(route, request.headers.get('authorization'), process.env)
+  const permissions = DECISION_ROUTE_PERMISSIONS[route]
+  try {
+    await appendAuthorizationDecision({ tenantId: tenantOf(process.env), route: `decision/${route}`, permissions, ...(result.ok ? { actorId: result.principalId } : {}), outcome: result.ok ? 'allow' : 'deny', httpStatus: result.ok ? 200 : result.status, at: new Date().toISOString(), decisionCode: result.ok ? 'authorized' : `http-${result.status}` })
+  } catch (error) {
+    console.error('[authorization-audit] durable append failed', error instanceof Error ? error.name : 'UnknownError')
+    return { ok: false, status: 503, reason: 'Authorization audit storage is unavailable.' }
+  }
+  return result
+}
+
+export function approvalFingerprintWasReviewed(expected: string | undefined, current: string | null): boolean {
+  return current !== null && expected !== undefined && expected === current
+}
+
+export interface DecisionApprovalRecord {
+  id?: string
+  requestId?: string
+  actionFingerprint?: string
+  policySnapshotVersion?: string
+  supervisorId?: string
+  grantedAt?: string
+}
+
+/** True only when the stored approval still binds this exact decision snapshot. */
+export function approvalMatchesDecision(input: {
+  decisionId: string
+  selectedAction: string
+  policySnapshotVersion: string | null | undefined
+  riskLevel: number | null | undefined
+  requiredApproval: boolean | null | undefined
+  approvedById: string | null | undefined
+  approval: DecisionApprovalRecord | null | undefined
+}): boolean {
+  const { approval } = input
+  if (!input.policySnapshotVersion || !approval?.id || !approval.supervisorId || !approval.grantedAt) return false
+  return approval.requestId === input.decisionId
+    && approval.actionFingerprint === decisionActionFingerprint({
+      decisionId: input.decisionId,
+      selectedAction: input.selectedAction,
+      policySnapshotVersion: input.policySnapshotVersion,
+      riskLevel: input.riskLevel ?? 0,
+      requiredApproval: input.requiredApproval ?? false,
+    })
+    && approval.policySnapshotVersion === input.policySnapshotVersion
+    && input.approvedById === approval.supervisorId
+}
+
+export type DecisionExecutionGate =
+  | { allowed: true; approvalRequired: boolean; actionFingerprint: string }
+  | { allowed: false; reason: 'kernel-blocked' | 'policy-changed' | 'approval-required' }
+
+/** The pure gate used immediately before decision execution side effects. */
+export function evaluateDecisionExecutionGate(input: {
+  decisionId: string
+  selectedAction: string
+  riskLevel: number | null | undefined
+  requiredApproval: boolean | null | undefined
+  safetyDecision: string | null | undefined
+  policySnapshotVersion: string | null | undefined
+  livePolicySnapshotVersion: string | null | undefined
+  approvedById: string | null | undefined
+  approval: DecisionApprovalRecord | null | undefined
+}): DecisionExecutionGate {
+  if (input.safetyDecision === 'BLOCK') return { allowed: false, reason: 'kernel-blocked' }
+  if (!input.policySnapshotVersion || input.livePolicySnapshotVersion !== input.policySnapshotVersion) {
+    return { allowed: false, reason: 'policy-changed' }
+  }
+  const approvalRequired = input.requiredApproval === true
+    || input.safetyDecision === 'ESCALATE'
+    || (input.riskLevel ?? 0) >= 4
+  const actionFingerprint = decisionActionFingerprint({
+    decisionId: input.decisionId,
+    selectedAction: input.selectedAction,
+    policySnapshotVersion: input.policySnapshotVersion,
+    riskLevel: input.riskLevel ?? 0,
+    requiredApproval: input.requiredApproval ?? false,
+  })
+  if (approvalRequired && !approvalMatchesDecision({
+    decisionId: input.decisionId,
+    selectedAction: input.selectedAction,
+    policySnapshotVersion: input.policySnapshotVersion,
+    riskLevel: input.riskLevel,
+    requiredApproval: input.requiredApproval,
+    approvedById: input.approvedById,
+    approval: input.approval,
+  })) return { allowed: false, reason: 'approval-required' }
+  return { allowed: true, approvalRequired, actionFingerprint }
 }
 
 /**

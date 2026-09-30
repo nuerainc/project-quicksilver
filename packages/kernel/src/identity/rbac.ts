@@ -254,7 +254,14 @@ export class AccessController {
     try {
       this.audit?.(decision)
     } catch {
-      // Audit sinks must not change access decisions.
+      // An unavailable audit sink must never turn an unrecorded grant into
+      // access. Durable adapters may fail synchronously; deny closed.
+      return {
+        ...decision,
+        allowed: false,
+        grantedBy: [],
+        reasons: [...decision.reasons, 'Authorization audit persistence failed.'],
+      }
     }
     return decision
   }

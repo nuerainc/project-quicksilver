@@ -49,6 +49,7 @@ export async function runForPerson(envr: OperatorEnvironment, run: PersonRun): P
   const used: string[] = []
   const project = await loadProjectContext(envr.workspace)
   try {
+    await book.purgeExpired()
     const gate = new Gate([...FILE_TOOLS, ...EXEC_TOOLS, ...memoryTools(book, archive), ...skillTools(envr.skills, used), ...(envr.extraTools ?? [])], { mode: run.mode, workspace: envr.workspace, audit: envr.audit })
     const result = await runOperator(
       { gate, sandbox: envr.sandbox, checkpoints: envr.checkpoints, audit: envr.audit, workspace: envr.workspace, model: envr.model, approver: run.approver },

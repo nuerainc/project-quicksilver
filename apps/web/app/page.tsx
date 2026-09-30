@@ -79,6 +79,7 @@ type DecisionResponse = {
   decision: DecisionDecision | null
   review: ReviewResult | null
   decisionDocId: string | null
+  approvalFingerprint: string | null
   resolvedReferences: {
     actor: { id: string; name: string; entityType: string } | null
     capability: { id: string; name: string; riskLevel: number } | null
@@ -145,7 +146,7 @@ export default function HomePage() {
   const [token, setToken] = useState<string | null>(null)
   // An approval separation of duties refused, where the sole-operator override
   // is open to the signed-in person: ask for the written justification.
-  const [override, setOverride] = useState<{ decisionId: string; prompt: SoleOperatorPrompt } | null>(null)
+  const [override, setOverride] = useState<{ decisionId: string; prompt: SoleOperatorPrompt; expectedActionFingerprint: string } | null>(null)
   const [who, setWho] = useState<ConsoleWhoami | null>(null)
   const [authNote, setAuthNote] = useState<string | null>(null)
 
@@ -267,13 +268,22 @@ export default function HomePage() {
     decisionDocId: string,
     action: 'approve' | 'reject' | 'request-evidence',
     justification?: string,
+    expectedActionFingerprint?: string | null,
   ) {
+    if (action === 'approve' && !expectedActionFingerprint) {
+      setError('Refresh the current plan before approving; its action fingerprint is unavailable.')
+      return
+    }
     setActingId(decisionDocId)
     try {
       const data = await callDecisionRoute<{ status?: string; process?: ProcessInfo }>(
         decisionDocId,
         'action',
-        justification ? { action, comment: justification } : { action },
+        {
+          action,
+          ...(justification ? { comment: justification } : {}),
+          ...(action === 'approve' && expectedActionFingerprint ? { expectedActionFingerprint } : {}),
+        },
       )
       setOverride((o) => (o?.decisionId === decisionDocId ? null : o))
       startTransition(() => {
@@ -290,7 +300,7 @@ export default function HomePage() {
       // written justification instead of stopping here.
       const prompt = action === 'approve' && err instanceof ConsoleCallError ? soleOperatorPrompt(err.status, err.body) : null
       if (prompt) {
-        setOverride({ decisionId: decisionDocId, prompt })
+        setOverride({ decisionId: decisionDocId, prompt, expectedActionFingerprint: expectedActionFingerprint! })
         setError(null)
       } else {
         setError((err as Error).message)
@@ -395,16 +405,10 @@ export default function HomePage() {
   }
 
   return (
-    <main className="mx-auto max-w-6xl px-6 py-12">
+    <main className="app-main app-main--narrow">
       <header className="mb-12">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <h1 className="qs-glow font-mono text-2xl tracking-[0.18em] text-quicksilver-quicksilver sm:text-3xl">NUERA QUICKSILVER</h1>
-          <nav aria-label="Main navigation" className="flex gap-4 font-mono text-xs uppercase tracking-widest text-quicksilver-accent">
-            <a href="/monitoring" className="transition hover:text-quicksilver-signal">Monitoring →</a>
-            <a href="/agents" className="transition hover:text-quicksilver-signal">Agents →</a>
-            <a href="/workflows" className="transition hover:text-quicksilver-signal">Workflow builder →</a>
-            <a href="/decisions" className="transition hover:text-quicksilver-signal">Decision log →</a>
-          </nav>
         </div>
         <p className="mt-2 text-sm uppercase tracking-widest text-quicksilver-accent">
           Cognitive + automation platform
@@ -443,7 +447,7 @@ export default function HomePage() {
           decisionId={override.decisionId}
           prompt={override.prompt}
           busy={actingId === override.decisionId}
-          onSubmit={(text) => handleAct(override.decisionId, 'approve', text)}
+          onSubmit={(text) => handleAct(override.decisionId, 'approve', text, override.expectedActionFingerprint)}
           onCancel={() => setOverride(null)}
         />
       )}
@@ -662,7 +666,7 @@ function PlanAndDecisions({
   processes: Record<string, ProcessInfo | undefined>
   actingId: string | null
   onPlan: () => Promise<void>
-  onAct: (id: string, a: 'approve' | 'reject' | 'request-evidence') => Promise<void>
+  onAct: (id: string, a: 'approve' | 'reject' | 'request-evidence', justification?: string, expectedActionFingerprint?: string | null) => Promise<void>
   onExecute: (id: string) => Promise<void>
   onObserve: (id: string) => Promise<void>
   onRollback: (id: string) => Promise<void>
@@ -780,7 +784,7 @@ function DecisionCard({
   process: ProcessInfo | undefined
   rollbackStatus: DecisionStatus | undefined
   actingId: string | null
-  onAct: (id: string, a: 'approve' | 'reject' | 'request-evidence') => Promise<void>
+  onAct: (id: string, a: 'approve' | 'reject' | 'request-evidence', justification?: string, expectedActionFingerprint?: string | null) => Promise<void>
   onExecute: (id: string) => Promise<void>
   onObserve: (id: string) => Promise<void>
   onRollback: (id: string) => Promise<void>
@@ -861,6 +865,19 @@ function DecisionCard({
         <Reference label="Kernel" value={decision?.recommendation ?? 'pending'} />
       </dl>
 
+      {docId && status === 'awaiting-approval' && (
+        <details className="mb-4 rounded border border-quicksilver-border px-3 py-2 text-sm">
+          <summary className="min-h-11 cursor-pointer py-2 font-mono text-xs uppercase tracking-widest text-quicksilver-accent">
+            Approval basis <span className="normal-case tracking-normal">· review the action snapshot before approving</span>
+          </summary>
+          <div className="space-y-2 border-t border-quicksilver-border pt-3">
+            <p className="text-sm text-quicksilver-signal">Approval is bound to this action and its current policy snapshot. If either changes, review the updated decision before approving.</p>
+            <p className="font-mono text-xs text-quicksilver-accent">Action fingerprint</p>
+            <code className="block break-all rounded bg-black/20 p-2 font-mono text-xs text-quicksilver-signal">{d.approvalFingerprint ?? 'Unavailable — refresh the decision before approving.'}</code>
+          </div>
+        </details>
+      )}
+
       {process && <ProcessStrip process={process} />}
 
       {/* Lifecycle buttons — always visible, never behind the expand toggle,
@@ -871,7 +888,7 @@ function DecisionCard({
 
         {docId && status === 'awaiting-approval' && (
           <>
-            <ActionButton label="Approve" onClick={() => onAct(docId, 'approve')} busy={actingId === docId} tone="primary" />
+            <ActionButton label="Approve reviewed action" onClick={() => onAct(docId, 'approve', undefined, d.approvalFingerprint)} busy={actingId === docId} tone="primary" />
             <ActionButton label="Reject" onClick={() => onAct(docId, 'reject')} busy={actingId === docId} tone="secondary" />
             <ActionButton label="Request more evidence" onClick={() => onAct(docId, 'request-evidence')} busy={actingId === docId} tone="tertiary" />
           </>

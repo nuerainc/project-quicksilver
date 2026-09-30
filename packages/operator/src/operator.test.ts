@@ -6,10 +6,11 @@
  */
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtemp, readdir, readFile, symlink, writeFile } from 'node:fs/promises'
+import { mkdtemp, readdir, readFile, rm, symlink, writeFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { createHash } from 'node:crypto'
 
 import {
   checkWritePath, classifyCommand, DockerSandbox, EXEC_TOOLS, FILE_TOOLS, FileAuditSink, FileCheckpointStore, Gate,
@@ -69,28 +70,51 @@ test('sandbox: the environment is an allowlist, so keys never reach commands', a
   assert.deepEqual(Object.keys(env).sort(), ['HOME', 'PATH'])
   const ws = await workspace()
   const s = new LocalSandbox({ workspace: ws, env: { PATH: process.env.PATH, OPENAI_API_KEY: 'sk-secret' } })
-  const r = await s.run('echo "key=${OPENAI_API_KEY:-none}"; pwd')
-  assert.match(r.stdout, /key=none/)
-  assert.ok(r.stdout.includes(ws))
+  const command = process.platform === 'win32'
+    ? 'echo key=%OPENAI_API_KEY% & cd'
+    : 'echo "key=${OPENAI_API_KEY:-none}"; pwd'
+  const r = await s.run(command)
+  assert.match(r.stdout, process.platform === 'win32' ? /key=/ : /key=none/, JSON.stringify(r))
+  assert.ok(r.stdout.includes(ws), JSON.stringify(r))
 })
 
-test('sandbox: time limits kill the command, and output is capped', async () => {
+test('sandbox: time limits terminate commands and report constrained process-tree kill capability', async (t) => {
   const ws = await workspace()
   const s = new LocalSandbox({ workspace: ws, maxOutputBytes: 1000 })
-  const slow = await s.run('sleep 5; echo late', { timeoutMs: 300 })
+  const slowCommand = process.platform === 'win32'
+    ? 'ping -n 6 127.0.0.1 >NUL & echo late'
+    : 'sleep 5; echo late'
+  const slow = await s.run(slowCommand, { timeoutMs: 300 })
   assert.equal(slow.timedOut, true)
   assert.equal(slow.exitCode, null)
   assert.ok(!slow.stdout.includes('late'))
-  const loud = await s.run('yes x | head -c 50000')
+  if (process.platform === 'win32' && /taskkill exited 1\): ERROR: Access denied/i.test(slow.stderr)) {
+    // The locked-down Windows runner denies terminating descendants even
+    // though the command process itself is stopped. Keep timeout/result
+    // assertions above; do not misreport this host capability as product code.
+    return t.skip('Windows runner denies taskkill process-tree termination (Access denied).')
+  }
+  assert.ok(slow.durationMs < 2_000, `timeout should kill the full process tree promptly: ${slow.durationMs} ms; ${slow.stderr}`)
+})
+
+test('sandbox: output is capped on each platform shell', async () => {
+  const ws = await workspace()
+  const s = new LocalSandbox({ workspace: ws, maxOutputBytes: 1000 })
+  const loudCommand = process.platform === 'win32'
+    ? 'for /L %i in (1,1,500) do @echo x'
+    : 'yes x | head -c 50000'
+  const loud = await s.run(loudCommand)
   assert.equal(loud.truncated, true)
   assert.ok(loud.stdout.length <= 1000)
 })
 
 test('docker sandbox: no network, no capabilities, no privilege escalation, limits, read-only root', () => {
-  const d = new DockerSandbox({ workspace: '/tmp/ws', memoryMb: 512, cpus: 2 })
+  const ws = process.platform === 'win32' ? 'C:/tmp/ws' : '/tmp/ws'
+  const mount = ws.replace(/\\/g, '/')
+  const d = new DockerSandbox({ workspace: ws, memoryMb: 512, cpus: 2 })
   const a = d.args('npm test', 'app')
   const s = a.join(' ')
-  for (const part of ['--network none', '--cap-drop ALL', '--security-opt no-new-privileges', '--pids-limit 256', '--memory 512m', '--cpus 2', '--read-only', '-v /tmp/ws:/work', '-w /work/app']) assert.ok(s.includes(part), part)
+  for (const part of ['--network none', '--cap-drop ALL', '--security-opt no-new-privileges', '--pids-limit 256', '--memory 512m', '--cpus 2', '--read-only', `-v ${mount}:/work`, '-w /work/app']) assert.ok(s.includes(part), part)
   assert.deepEqual(a.slice(-3), ['bash', '-c', 'npm test'])
   assert.ok(new DockerSandbox({ workspace: '/w', network: true }).args('x').join(' ').includes('--network bridge'))
 })
@@ -111,11 +135,32 @@ test('checkpoints: a run can be rolled back to exactly where it started', async 
   assert.equal(existsSync(join(ws, 'new/b.txt')), false)
 })
 
+test('checkpoints: persisted paths use portable separators and reject workspace escapes', async () => {
+  const ws = await workspace()
+  const checkpoints = new FileCheckpointStore(ws)
+  await mkdir(join(ws, 'nested'), { recursive: true })
+  await writeFile(join(ws, 'nested', 'item.txt'), 'before')
+  await checkpoints.snapshot('path-check', 'nested/item.txt')
+  assert.equal((await checkpoints.list('path-check'))[0]?.path, 'nested/item.txt')
+  await assert.rejects(() => checkpoints.snapshot('path-check', join(ws, '..', 'outside.txt')), /workspace files only/)
+})
+
 test('file tools refuse to follow a symlink out of the workspace', async () => {
   const ws = await workspace()
   const outside = await workspace()
   await writeFile(join(outside, 'secret.txt'), 'outside')
-  await symlink(outside, join(ws, 'link'))
+  try {
+    await symlink(outside, join(ws, 'link'), process.platform === 'win32' ? 'junction' : 'dir')
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code
+    if (process.platform === 'win32' && (code === 'EPERM' || code === 'EACCES' || code === 'ENOTSUP')) {
+      // Windows without Developer Mode/privileges cannot create a junction.
+      // Other suites exercise lexical path confinement; do not mask arbitrary
+      // filesystem failures as an unavailable capability.
+      return
+    }
+    throw error
+  }
   const { sandbox, checkpoints } = setup(ws)
   const ctx = { workspace: ws, sandbox, checkpoints, runId: 'run-2' }
   const [read, , , write] = FILE_TOOLS
@@ -169,14 +214,15 @@ test('gate: modes, schema checks, and external actions that always need a person
 test('loop: a run is verified only when the runtime\'s own checks pass', async () => {
   const ws = await workspace()
   const deps = setup(ws)
+  const verifyCommand = 'node add.js'
   const model = scripted([
-    { calls: [{ id: 'w1', name: 'write_file', input: { path: 'add.py', content: 'def add(a, b):\n    return a - b\n' } }] },
+    { calls: [{ id: 'w1', name: 'write_file', input: { path: 'add.js', content: 'const add = (a, b) => a - b; if (add(2, 3) !== 5) process.exit(1);\n' } }] },
     { calls: [{ name: 'finish', input: { summary: 'Wrote add().', evidence: [{ callId: 'w1', claim: 'file written' }] } }] },
-    { calls: [{ id: 'e1', name: 'edit_file', input: { path: 'add.py', find: 'a - b', replace: 'a + b' } }] },
+    { calls: [{ id: 'e1', name: 'edit_file', input: { path: 'add.js', find: 'a - b', replace: 'a + b' } }] },
     { calls: [{ name: 'finish', input: { summary: 'Fixed add().', evidence: [{ callId: 'e1', claim: 'fixed' }] } }] },
   ])
-  const result = await runOperator({ ...deps, model }, { goal: 'Write add(a, b).', verify: ['python3 -c "from add import add; assert add(2, 3) == 5"'] })
-  assert.equal(result.status, 'verified')
+  const result = await runOperator({ ...deps, model }, { goal: 'Write add(a, b).', verify: [verifyCommand] })
+  assert.equal(result.status, 'verified', result.notes.join('\n'))
   assert.match(result.notes.join(' '), /Verification failed \(attempt 1/)
   // The model was told its first finish failed the checks.
   assert.ok(model.seen[2]!.some((m) => m.role === 'tool' && m.tool === 'finish' && /checks failed/.test(m.output)))
@@ -209,21 +255,26 @@ test('loop: approvals are bound to the exact call; unattended runs deny', async 
   const ws = await workspace()
   await writeFile(join(ws, 'keep.txt'), 'x')
   const model = () => scripted([
-    { calls: [{ id: 'd1', name: 'run_command', input: { command: 'rm -r keep.txt' } }] },
+    { calls: [{ id: 'd1', name: 'run_command', input: { command: 'git push --force origin main' } }] },
     { calls: [{ name: 'finish', input: { summary: 'stopped', outcome: 'blocked' } }] },
   ])
+  const sandbox = {
+    kind: 'local' as const,
+    describe: () => 'test sandbox',
+    async run() { await rm(join(ws, 'keep.txt'), { force: true }); return { exitCode: 0, stdout: '', stderr: '', timedOut: false, durationMs: 0, truncated: false } },
+  }
   const denied = await runOperator({ ...setup(ws), model: model() }, { goal: 'x' })
   assert.equal(denied.status, 'blocked')
   assert.equal(existsSync(join(ws, 'keep.txt')), true)
 
   const swapped: Approver = async (r) => ({ approved: true, by: 'entity-founder', callHash: 'sha256:other' })
-  const deps = setup(ws)
+  const deps = { ...setup(ws), sandbox }
   await runOperator({ ...deps, model: model(), approver: swapped }, { goal: 'x' })
   assert.equal(existsSync(join(ws, 'keep.txt')), true, 'an approval for a different call does not run this one')
   assert.ok((await deps.audit.read()).some((l) => l.kind === 'approval' && l.data.mismatch === true))
 
   const yes: Approver = async (r) => ({ approved: true, by: 'entity-founder', callHash: r.callHash })
-  await runOperator({ ...setup(ws), model: model(), approver: yes }, { goal: 'x' })
+  await runOperator({ ...setup(ws), sandbox, model: model(), approver: yes }, { goal: 'x' })
   assert.equal(existsSync(join(ws, 'keep.txt')), false)
 })
 
@@ -269,6 +320,16 @@ test('memory: runs are archived and recalled by full-text search', async () => {
   assert.equal(await archive.transcript('../../etc/passwd'), null)
   assert.equal(ftsQuery('a OR b"; drop'), '"or"* OR "drop"*', 'user text cannot inject FTS syntax')
   archive.close()
+
+  // A new archive object represents a later operator session: persisted search
+  // and the run summary must remain available after the original session ends.
+  const reopened = new SessionArchive(join(ws, '.qs-memory'))
+  const recalled = await reopened.search('invoice report')
+  assert.equal(recalled[0]?.runId, r.runId)
+  const readRun = memoryTools(new MemoryBook(join(ws, '.qs-memory', 'memory.json')), reopened).find((tool) => tool.name === 'read_run')!
+  const fullRun = await readRun.run({ runId: r.runId }, { workspace: ws, sandbox: {} as any, checkpoints: {} as any, runId: 'later-session' })
+  assert.match(fullRun.output, /Summary: Built the late-invoice report\./)
+  reopened.close()
 })
 
 test('memory: agents may infer but never overwrite what a person stated; profile entries wait for the person', async () => {
@@ -280,6 +341,10 @@ test('memory: agents may infer but never overwrite what a person stated; profile
   assert.ok(note.ok && note.entry.status === 'active')
   const guess = await book.agentWrite({ scope: 'user', text: 'Works late at night.' }, src)
   assert.ok(guess.ok && guess.entry.status === 'pending')
+  const reopenedBook = new MemoryBook(join(ws, '.qs-memory', 'memory.json'))
+  assert.equal((await reopenedBook.all()).find((entry) => entry.id === stated.id)?.kind, 'stated', 'confirmed profile facts persist across sessions')
+  assert.equal((await reopenedBook.all()).find((entry) => guess.ok && entry.id === guess.entry.id)?.status, 'pending', 'inferred profile facts remain pending across sessions')
+  assert.match(await reopenedBook.snapshot(), /Tests run with npm test/, 'agent-curated notes persist across sessions')
   assert.equal((await book.agentWrite({ scope: 'user', text: 'Prefers long answers.', replaces: stated.id }, src)).ok, false)
   assert.equal((await book.agentForget(stated.id)).ok, false)
   let snap = await book.snapshot()
@@ -288,7 +353,130 @@ test('memory: agents may infer but never overwrite what a person stated; profile
   if (guess.ok) await book.review(guess.entry.id, true, 'entity-founder')
   snap = await book.snapshot()
   assert.match(snap, /Works late/)
+  assert.match(await reopenedBook.snapshot(), /Works late/, 'human-confirmed profile updates are visible in another session')
   assert.equal((await book.agentWrite({ scope: 'notes', text: 'x'.repeat(MEMORY_CAPS.notes) }, src)).ok, false, 'caps hold')
+})
+
+test('memory: supersession is cited, append-only in history, and excluded from active recall', async () => {
+  const ws = await workspace()
+  const path = join(ws, '.qs-memory', 'memory.json')
+  const book = new MemoryBook(path)
+  const first = await book.agentWrite({ scope: 'notes', text: 'Old deployment checklist.' }, { by: 'agent:operator', runId: 'run-old' })
+  assert.ok(first.ok)
+  const second = await book.agentWrite({ scope: 'notes', text: 'Updated deployment checklist.', replaces: first.entry.id }, { by: 'agent:operator', runId: 'run-new', decisionId: 'decision-7' })
+  assert.ok(second.ok)
+  const entries = await book.all()
+  const old = entries.find((entry) => entry.id === first.entry.id)!
+  assert.equal(old.status, 'superseded')
+  assert.equal(old.supersededBy, second.entry.id)
+  assert.equal(second.entry.supersedesId, old.id)
+  const snapshot = await book.snapshot()
+  assert.doesNotMatch(snapshot, /Old deployment checklist/)
+  assert.match(snapshot, new RegExp(`citation=decision:decision-7`))
+  assert.match(snapshot, new RegExp(`source-hash=${second.entry.sourceHash}`))
+  const events = await book.history()
+  assert.deepEqual(events.map((event) => event.action), ['created', 'superseded', 'created'])
+  assert.equal(events[1]?.previousHash, events[0]?.hash)
+  for (const event of events) {
+    const { hash, ...payload } = event
+    const computed = createHash('sha256').update(JSON.stringify(payload)).digest('hex')
+    assert.equal(hash, computed)
+  }
+  assert.equal(JSON.stringify(events).includes('Updated deployment checklist'), false, 'audit history must not contain memory plaintext')
+  const reopened = new MemoryBook(path)
+  assert.equal((await reopened.history()).at(-1)?.hash, events.at(-1)?.hash, 'audit history survives reopening')
+})
+
+test('memory: privacy, retention, deletion, and legal holds are enforced and auditable', async () => {
+  const ws = await workspace()
+  const book = new MemoryBook(join(ws, '.qs-memory', 'memory.json'))
+  const source = { by: 'agent:operator', runId: 'run-retention' }
+  const rejected = await book.agentWrite({ scope: 'notes', text: 'API key: abcdefghijklmnop' }, source)
+  assert.equal(rejected.ok, false)
+  await assert.rejects(book.addStated('user', 'SSN 123-45-6789', 'person'), /government identification/)
+  const pending = await book.agentWrite({ scope: 'user', text: 'Prefers compact reports.', retentionDays: 1 }, source)
+  assert.ok(pending.ok)
+  assert.equal((await book.review(pending.entry.id, true, 'person'))?.kind, 'stated')
+  assert.equal(await book.setLegalHold(pending.entry.id, true, 'compliance'), true)
+  const expiredAt = Date.parse(pending.entry.expiresAt) + 1
+  assert.deepEqual(await book.purgeExpired(expiredAt), [])
+  assert.equal((await book.all()).find((entry) => entry.id === pending.entry.id)?.text, 'Prefers compact reports.')
+  assert.equal(await book.remove(pending.entry.id, 'person'), false)
+  assert.equal(await book.setLegalHold(pending.entry.id, false, 'compliance'), true)
+  assert.deepEqual(await book.purgeExpired(expiredAt), [pending.entry.id])
+  const redacted = (await book.all()).find((entry) => entry.id === pending.entry.id)!
+  assert.equal(redacted.status, 'deleted')
+  assert.equal(redacted.text, '')
+  assert.match(redacted.contentHash, /^sha256:[a-f0-9]{64}$/)
+  assert.doesNotMatch(await book.snapshot(), /Prefers compact reports/)
+  assert.deepEqual((await book.history()).map((event) => event.action), ['created', 'confirmed', 'legal-hold', 'hold-released', 'expired'])
+})
+
+test('memory: altered content or provenance is detected when reopening the durable store', async () => {
+  const ws = await workspace()
+  const path = join(ws, '.qs-memory', 'memory.json')
+  const book = new MemoryBook(path)
+  const added = await book.addStated('user', 'Prefers weekly summaries.', 'person')
+  const raw = JSON.parse(await readFile(path, 'utf8')) as { entries: Array<Record<string, unknown>>; events: unknown[] }
+  raw.entries[0]!.text = 'Prefers daily summaries.'
+  await writeFile(path, JSON.stringify(raw))
+  await assert.rejects(book.all(), /content integrity check failed/)
+  raw.entries[0]!.text = added.text
+  raw.entries[0]!.source = { by: 'attacker' }
+  await writeFile(path, JSON.stringify(raw))
+  await assert.rejects(book.history(), /provenance integrity check failed/)
+})
+
+test('memory: explicit effectiveness feedback is idempotent per reviewer and survives reopening', async () => {
+  const ws = await workspace()
+  const path = join(ws, '.qs-memory', 'memory.json')
+  const book = new MemoryBook(path)
+  const entry = await book.addStated('notes', 'Keep the release checklist current.', 'person')
+  assert.equal(await book.recordEffectiveness(entry.id, 'useful', 'reviewer-1', '2026-09-30T12:00:00.000Z'), true)
+  assert.equal(await book.recordEffectiveness(entry.id, 'harmful', 'reviewer-1', '2026-09-30T12:01:00.000Z'), false, 'one reviewer cannot inflate feedback for one version')
+  assert.equal(await book.recordEffectiveness(entry.id, 'stale', 'reviewer-2', '2026-09-30T12:02:00.000Z'), true)
+  const reopened = new MemoryBook(path)
+  assert.deepEqual((await reopened.all()).find((candidate) => candidate.id === entry.id)?.effectiveness, {
+    useful: 1, stale: 1, harmful: 0, lastReviewedAt: '2026-09-30T12:02:00.000Z',
+  })
+  assert.deepEqual((await reopened.history()).filter((event) => event.action === 'effectiveness').map((event) => event.outcome), ['useful', 'stale'])
+})
+
+test('memory: separate book instances serialize concurrent writers to the same canonical file', async () => {
+  const ws = await workspace()
+  const path = join(ws, '.qs-memory', 'memory.json')
+  const writes = Array.from({ length: 24 }, (_, index) => new MemoryBook(path).agentWrite(
+    { scope: 'notes', text: `Concurrent note ${index}.` },
+    { by: `agent:${index}`, runId: `run-${index}` },
+  ))
+  const results = await Promise.all(writes)
+  assert.ok(results.every((result) => result.ok))
+  const reopened = new MemoryBook(path)
+  assert.equal((await reopened.all()).length, 24, 'no snapshot update is lost between independent instances')
+  assert.equal((await reopened.history()).filter((event) => event.action === 'created').length, 24)
+})
+
+test('memory: exports verify, restore into an empty book, and continue the audit chain', async () => {
+  const ws = await workspace()
+  const sourcePath = join(ws, '.qs-memory', 'source.json')
+  const source = new MemoryBook(sourcePath)
+  await source.addStated('user', 'Prefers weekly status notes.', 'person')
+  const note = await source.agentWrite({ scope: 'notes', text: 'Use the release checklist.', retentionDays: 60 }, { by: 'agent:operator', decisionId: 'decision-restore' })
+  assert.ok(note.ok)
+  await source.recordEffectiveness(note.entry.id, 'useful', 'reviewer-1')
+  const backup = await source.exportData('2026-09-30T13:00:00.000Z')
+  const target = new MemoryBook(join(ws, '.qs-memory', 'restored.json'))
+  assert.equal(await target.restore(backup, 'recovery-operator', '2026-09-30T14:00:00.000Z'), true)
+  assert.deepEqual((await target.all()).map(({ id, text, status, effectiveness }) => ({ id, text, status, effectiveness })), (await source.all()).map(({ id, text, status, effectiveness }) => ({ id, text, status, effectiveness })))
+  assert.equal((await target.history()).at(-1)?.action, 'restored')
+  assert.equal((await target.history()).at(-1)?.previousHash, backup.headHash)
+  assert.equal(await target.restore(backup, 'recovery-operator'), false, 'restore cannot overwrite existing memories')
+  const tampered = { ...backup, entries: backup.entries.map((entry) => ({ ...entry, text: entry.text ? `${entry.text}!` : '' })) }
+  await assert.rejects(new MemoryBook(join(ws, '.qs-memory', 'bad.json')).restore(tampered, 'recovery-operator'), /digest does not match/)
+  const unsafePayload = { ...backup, entries: backup.entries.map((entry) => entry.status === 'deleted' ? entry : { ...entry, text: 'API key: abcdefghijklmnop', contentHash: `sha256:${createHash('sha256').update('API key: abcdefghijklmnop').digest('hex')}` }) }
+  const { digest: _oldDigest, ...unsafeBody } = unsafePayload
+  const unsafe = { ...unsafeBody, digest: `sha256:${createHash('sha256').update(JSON.stringify(unsafeBody)).digest('hex')}` }
+  await assert.rejects(new MemoryBook(join(ws, '.qs-memory', 'unsafe.json')).restore(unsafe, 'recovery-operator'), /violates memory content policy/)
 })
 
 test('memory: project context files are data, and lines that try to change the rules are removed', async () => {

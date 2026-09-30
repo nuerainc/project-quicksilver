@@ -90,12 +90,8 @@ export default function WorkflowMonitoringPage() {
   }, [executions])
 
   return (
-    <main className="mx-auto max-w-7xl px-6 py-10">
+    <main className="app-main">
       <header className="mb-8">
-        <nav aria-label="Main navigation" className="mb-6 flex flex-wrap gap-4 font-mono text-[10px] uppercase tracking-widest text-quicksilver-accent">
-          <a href="/" className="hover:text-quicksilver-signal">← Console</a>
-          <a href="/workflows" className="hover:text-quicksilver-signal">Workflow builder →</a>
-        </nav>
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
             <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-quicksilver-accent">Operations</p>
@@ -142,14 +138,14 @@ export default function WorkflowMonitoringPage() {
 
         {loading && executions.length === 0 ? <p className="py-12 text-center text-sm text-quicksilver-accent">Loading recent executions…</p>
           : filtered.length === 0 ? <p className="py-12 text-center text-sm text-quicksilver-accent">{executions.length ? 'No executions match these filters.' : 'No published workflow executions are recorded for this tenant yet.'}</p>
-            : <div className="mt-4 overflow-x-auto"><table className="w-full min-w-[760px] border-collapse text-left text-xs">
+            : <><div className="mt-4 space-y-3 lg:hidden">{filtered.map((run) => <article key={run.runId} className="grid min-w-0 gap-3 rounded border border-quicksilver-border bg-quicksilver-bg p-4"><div className="min-w-0"><h3 className="break-words font-mono text-sm text-quicksilver-signal">{run.workflowId} <span className="text-xs text-quicksilver-accent">v{run.version}</span></h3><p className={`mt-1 text-sm ${run.status === 'succeeded' ? 'text-emerald-300' : run.status === 'blocked' ? 'text-amber-200' : 'text-rose-300'}`}>{run.status}</p></div><dl className="grid grid-cols-2 gap-3 text-xs"><div><dt className="text-quicksilver-accent">Duration</dt><dd className="mt-1 font-mono">{duration(run.durationMs)}</dd></div><div><dt className="text-quicksilver-accent">Evaluations</dt><dd className="mt-1">{run.evaluationCount}</dd></div><div className="min-w-0"><dt className="text-quicksilver-accent">Requester</dt><dd className="mt-1 break-words">{run.requestedBy}</dd></div><div><dt className="text-quicksilver-accent">Completed</dt><dd className="mt-1 break-words">{displayDate(run.completedAt)}</dd></div></dl></article>)}</div><div className="mt-4 hidden overflow-x-auto lg:block"><table className="w-full min-w-[760px] border-collapse text-left text-xs">
               <thead><tr className="border-b border-quicksilver-border font-mono text-[9px] uppercase tracking-widest text-quicksilver-accent"><th className="py-3 pr-4">Workflow</th><th className="py-3 pr-4">Outcome</th><th className="py-3 pr-4">Duration</th><th className="py-3 pr-4">Evaluations</th><th className="py-3 pr-4">Requester</th><th className="py-3">Completed</th></tr></thead>
               <tbody>{filtered.map((run) => <tr key={run.runId} className="border-b border-quicksilver-border/60 text-quicksilver-signal last:border-0">
                 <td className="py-3 pr-4"><span className="font-mono text-quicksilver-signal">{run.workflowId}</span><span className="ml-2 text-[10px] text-quicksilver-accent">v{run.version}</span></td>
                 <td className="py-3 pr-4"><span className={run.status === 'succeeded' ? 'text-emerald-300' : run.status === 'blocked' ? 'text-amber-200' : 'text-rose-300'}>{run.status}</span></td>
                 <td className="py-3 pr-4 font-mono">{duration(run.durationMs)}</td><td className="py-3 pr-4">{run.evaluationCount}</td><td className="py-3 pr-4">{run.requestedBy}</td><td className="py-3 text-quicksilver-accent">{displayDate(run.completedAt)}</td>
               </tr>)}</tbody>
-            </table></div>}
+            </table></div></>}
       </section>
       <p className="mt-4 text-[10px] leading-5 text-quicksilver-accent">Metrics are calculated from the latest {sampleLimit} metadata records, not a complete historical time series. This dashboard does not yet include host queue depth, model traces, alerting, or retention controls.</p>
     </main>

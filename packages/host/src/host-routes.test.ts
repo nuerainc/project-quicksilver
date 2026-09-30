@@ -10,7 +10,7 @@
  */
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -81,7 +81,7 @@ async function start(options: StartOptions = {}) {
   const everyone = who('entity-everyone', 'human', ['supervisor', 'intent-provider', 'intent-admin', 'tenant-admin', 'developer', 'operator', 'auditor'])
   const webhookSecret = generateWebhookSecret()
   const clients = new TaskClientRegistry({ persistence: new MemoryTaskClientPersistence(), tenantId: TENANT })
-  const env = { QUICKSILVER_VAULT_KEY: generateMasterKey(), HOOK_SECRET: webhookSecret }
+  const env = { QUICKSILVER_VAULT_KEY: generateMasterKey(), HOOK_SECRET: webhookSecret, QUICKSILVER_AUTHORIZATION_AUDIT_PATH: join(dir, 'authorization-audit.jsonl') }
   // The intent, shadow, genesis and decision handlers never run for a 401 or a
   // 403 (the table's check comes first), so presence is all these need.
   const host = new QuicksilverHost(parseHostConfig({
@@ -125,7 +125,7 @@ async function start(options: StartOptions = {}) {
     return { status: res.status, headers: res.headers, body: json, text }
   }
   return {
-    host, base, call, webhookSecret,
+    host, base, call, webhookSecret, auditPath: join(dir, 'authorization-audit.jsonl'),
     tokens: { nobody: nobody.token, everyone: everyone.token },
     close: async () => { await host.stop({ abort: true }); await rm(dir, { recursive: true, force: true }) },
   }
@@ -190,6 +190,10 @@ test('route table (A-9): every route refuses a request without credentials (401)
       checked++
     }
     assert.equal(checked, HOST_ROUTES.length, 'every route in the table was exercised')
+
+    const persisted = (await readFile(h.auditPath, 'utf8')).trim().split('\n').map((line) => JSON.parse(line) as { decision: { allowed: boolean; principalId: string; permission: string } })
+    assert.ok(persisted.some((entry) => entry.decision.principalId === 'anonymous' && !entry.decision.allowed), 'anonymous denials are persisted')
+    assert.ok(persisted.some((entry) => entry.decision.principalId === 'entity-everyone' && entry.decision.allowed), 'authorized API decisions are persisted')
 
     // Paths that are not in the table do not exist, whoever asks.
     assert.equal((await h.call('GET', '/api/not-a-route')).status, 401, 'unauthenticated callers learn nothing about which paths exist')

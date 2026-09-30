@@ -22,7 +22,8 @@
  */
 import type { Permission } from '@quicksilver/kernel'
 import { TokenBucketLimiter, parseRateLimitSetting, type RateLimitConfig } from '@quicksilver/kernel/rate-limit'
-import { checkRouteCaller, type CredentialEnv } from './nqc-approval'
+import { checkRouteCaller, type CredentialEnv } from './nqc-approval.ts'
+import { appendAuthorizationDecision, type AuthorizationAuditRecord } from './authorization-audit-store.ts'
 
 export type WebRateLimitClass = 'write' | 'model'
 
@@ -147,6 +148,46 @@ export function checkWebRoute(route: WebRoute, authorization: string | null, env
 }
 
 /** `checkWebRoute` for a request, with `process.env`. */
-export function guardWebRoute(request: Request, route: WebRoute): GuardResult {
-  return checkWebRoute(route, request.headers.get('authorization'), process.env)
+/**
+ * Request-level guard. The RBAC result is not used until its audit record has
+ * been durably created. If the audit store is unavailable, fail closed.
+ */
+export async function persistWebRouteDecision(
+  route: WebRoute,
+  result: GuardResult,
+  env: CredentialEnv,
+  append: typeof appendAuthorizationDecision = appendAuthorizationDecision,
+): Promise<GuardResult> {
+  const access = WEB_ROUTE_ACCESS[route]
+  const record: AuthorizationAuditRecord = {
+    tenantId: env.QUICKSILVER_TENANT_ID?.trim() || 'default',
+    route,
+    permissions: access.permissions,
+    ...(result.ok ? { actorId: result.principalId } : {}),
+    outcome: result.ok ? 'allow' : 'deny',
+    httpStatus: result.ok ? 200 : result.status,
+    at: new Date().toISOString(),
+    decisionCode: result.ok ? 'authorized' : result.body.code,
+  }
+  try {
+    await append(record)
+  } catch (error) {
+    console.error('[authorization-audit] durable append failed', error instanceof Error ? error.name : 'UnknownError')
+    return { ok: false, status: 503, body: { error: 'Authorization audit storage is unavailable.', code: 'authorization-audit-unavailable' } }
+  }
+  return result
+}
+
+export async function guardWebRoute(request: Request, route: WebRoute): Promise<GuardResult> {
+  const env = process.env
+  const access = WEB_ROUTE_ACCESS[route]
+  const caller = checkRouteCaller(access.permissions, request.headers.get('authorization'), env)
+  const authorization: GuardResult = caller.ok
+    ? { ok: true, principalId: caller.principalId }
+    : { ok: false, status: caller.status, body: { error: caller.reason, code: caller.status === 401 ? 'unauthenticated' : caller.status === 403 ? 'forbidden' : 'unavailable', ...(caller.status === 403 ? { needs: access.permissions } : {}) } }
+  const persisted = await persistWebRouteDecision(route, authorization, env)
+  if (!caller.ok) return persisted
+  if (!persisted.ok) return persisted
+  if (access.rateLimit) return takeWebRateLimit(access.rateLimit, caller.principalId, env) ?? persisted
+  return persisted
 }

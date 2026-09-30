@@ -160,6 +160,11 @@ func (c *Client) RunReadOnlyWorkflow(ctx context.Context, graph any, input strin
 	if response.Evaluations == nil {
 		return WorkflowRunResponse{}, fmt.Errorf("Quicksilver returned a read-only run without evaluations")
 	}
+	for _, raw := range response.Evaluations {
+		if err := validateEvaluation(raw); err != nil {
+			return WorkflowRunResponse{}, err
+		}
+	}
 	return response, nil
 }
 
@@ -174,6 +179,46 @@ func validateRunResponse(response WorkflowRunResponse, expectedMode string) erro
 	}
 	if response.Outputs == nil || response.Steps == nil {
 		return fmt.Errorf("Quicksilver returned an incomplete workflow response")
+	}
+	for _, step := range response.Steps {
+		if step.NodeID == "" {
+			return fmt.Errorf("Quicksilver returned a workflow step without a node id")
+		}
+		if step.RetryAfterMS < 0 {
+			return fmt.Errorf("Quicksilver returned a workflow step with an invalid retry delay")
+		}
+		switch step.Status {
+		case "completed", "skipped", "blocked", "failed", "cancelled":
+		default:
+			return fmt.Errorf("Quicksilver returned a workflow step with an invalid status")
+		}
+		switch step.SafetyDecision {
+		case "", "ALLOW", "BLOCK", "ESCALATE", "SKIPPED":
+		default:
+			return fmt.Errorf("Quicksilver returned a workflow step with an invalid safety decision")
+		}
+	}
+	return nil
+}
+
+func validateEvaluation(raw json.RawMessage) error {
+	var evaluation struct {
+		ReasoningScore    *float64 `json:"reasoningScore"`
+		HallucinationRisk string   `json:"hallucinationRisk"`
+		Brittleness       string   `json:"brittleness"`
+		SafetyDecision    string   `json:"safetyDecision"`
+		Issues            []string `json:"issues"`
+		Corrections       []string `json:"corrections"`
+	}
+	if err := json.Unmarshal(raw, &evaluation); err != nil {
+		return fmt.Errorf("Quicksilver returned an invalid NQC evaluation: %w", err)
+	}
+	if evaluation.ReasoningScore == nil || *evaluation.ReasoningScore < 0 || *evaluation.ReasoningScore > 100 ||
+		(evaluation.HallucinationRisk != "low" && evaluation.HallucinationRisk != "med" && evaluation.HallucinationRisk != "high") ||
+		(evaluation.Brittleness != "low" && evaluation.Brittleness != "med" && evaluation.Brittleness != "high") ||
+		(evaluation.SafetyDecision != "ALLOW" && evaluation.SafetyDecision != "BLOCK" && evaluation.SafetyDecision != "ESCALATE") ||
+		evaluation.Issues == nil || evaluation.Corrections == nil {
+		return fmt.Errorf("Quicksilver returned an incomplete NQC evaluation")
 	}
 	return nil
 }

@@ -86,6 +86,17 @@ test('gateway: one conversation per person across channels, and duplicates are d
   assert.equal(b.sent.at(-1)!.text, 're: second')
 })
 
+test('pairing: concurrent code writes serialize atomic replacement and persist every code', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'qs-pairing-race-'))
+  const path = join(dir, 'pairing.json')
+  const pairing = new PairingRegistry(path)
+  await pairing.addPerson({ id: 'entity-founder', name: 'Brodi', canApprove: true })
+  const codes = await Promise.all(Array.from({ length: 20 }, () => pairing.createCode('entity-founder')))
+  assert.equal(new Set(codes).size, 20)
+  assert.equal((await pairing.list()).codes.length, 20)
+  assert.equal((await new PairingRegistry(path).list()).codes.length, 20, 'all concurrent writes survive reopening')
+})
+
 test('gateway: approvals happen in the chat, bound to the call; no answer means no', async () => {
   const answers: Array<{ approved: boolean; bound: boolean }> = []
   const { pairing, a, gw } = await setup(async (r) => {

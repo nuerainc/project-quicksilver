@@ -196,8 +196,11 @@ test('sole-operator prompt (A-3): the approve flow asks for a justification only
 })
 
 test('approve body: the approver can never come from the request body', () => {
-  assert.equal(DecisionActionBody.safeParse({ action: 'approve' }).success, true)
-  assert.equal(DecisionActionBody.safeParse({ action: 'approve', comment: 'ok' }).success, true)
+  assert.equal(DecisionActionBody.safeParse({ action: 'approve' }).success, false)
+  assert.equal(DecisionActionBody.safeParse({ action: 'approve', comment: 'ok' }).success, false)
+  assert.equal(DecisionActionBody.safeParse({ action: 'approve', expectedActionFingerprint: `sha256:${'a'.repeat(64)}` }).success, true)
+  assert.equal(DecisionActionBody.safeParse({ action: 'approve', expectedActionFingerprint: 'sha256:stale' }).success, false)
+  assert.equal(DecisionActionBody.safeParse({ action: 'reject' }).success, true)
   for (const field of ['approvedBy', 'supervisorId', 'approverId', 'actorId', 'principalId']) {
     assert.equal(DecisionActionBody.safeParse({ action: 'approve', [field]: 'entity-mallory' }).success, false, field)
   }

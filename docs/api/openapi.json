@@ -1,0 +1,1037 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "version": "0.4.0",
+    "description": "Contract for the current Next.js HTTP routes. Version follows the repository release line. This project is pre-1.0: request and response details may change between releases. See api-contract.md for supported guarantees and known gaps.",
+    "title": "Nuera Quicksilver HTTP API",
+    "summary": "Pre-1.0 API contract; not a stable compatibility promise."
+  },
+  "servers": [
+    {
+      "url": "/"
+    }
+  ],
+  "security": [
+    {
+      "BearerAuth": []
+    }
+  ],
+  "paths": {
+    "/api/agents/catalog": {
+      "get": {
+        "operationId": "listAgentCatalog",
+        "tags": [
+          "Agents"
+        ],
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "401": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "403": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "503": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "2XX": {
+            "$ref": "#/components/responses/JsonResponse"
+          }
+        }
+      }
+    },
+    "/api/agents/definitions": {
+      "get": {
+        "operationId": "getAgentDefinition",
+        "tags": [
+          "Agents"
+        ],
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "401": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "403": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "503": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "2XX": {
+            "$ref": "#/components/responses/JsonResponse"
+          }
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/AgentId"
+          }
+        ]
+      }
+    },
+    "/api/agents/drafts": {
+      "post": {
+        "operationId": "createAgentDraft",
+        "tags": [
+          "Agents"
+        ],
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "401": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "403": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "503": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "2XX": {
+            "$ref": "#/components/responses/JsonResponse"
+          }
+        },
+        "requestBody": {
+          "$ref": "#/components/requestBodies/JsonObject"
+        }
+      }
+    },
+    "/api/agents/drafts/submit": {
+      "post": {
+        "operationId": "submitAgentDraft",
+        "tags": [
+          "Agents"
+        ],
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "401": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "403": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "503": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "2XX": {
+            "$ref": "#/components/responses/JsonResponse"
+          }
+        },
+        "requestBody": {
+          "$ref": "#/components/requestBodies/JsonObject"
+        }
+      }
+    },
+    "/api/agents/publish": {
+      "post": {
+        "operationId": "publishAgent",
+        "tags": [
+          "Agents"
+        ],
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "401": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "403": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "503": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "2XX": {
+            "$ref": "#/components/responses/JsonResponse"
+          }
+        },
+        "requestBody": {
+          "$ref": "#/components/requestBodies/JsonObject"
+        }
+      }
+    },
+    "/api/agents/review": {
+      "post": {
+        "operationId": "reviewAgent",
+        "tags": [
+          "Agents"
+        ],
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "401": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "403": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "503": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "2XX": {
+            "$ref": "#/components/responses/JsonResponse"
+          }
+        },
+        "requestBody": {
+          "$ref": "#/components/requestBodies/JsonObject"
+        }
+      }
+    },
+    "/api/agents/rollback": {
+      "post": {
+        "operationId": "rollbackAgent",
+        "tags": [
+          "Agents"
+        ],
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "401": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "403": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "503": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "2XX": {
+            "$ref": "#/components/responses/JsonResponse"
+          }
+        },
+        "requestBody": {
+          "$ref": "#/components/requestBodies/JsonObject"
+        }
+      }
+    },
+    "/api/decisions/{id}/action": {
+      "post": {
+        "operationId": "approveDecisionAction",
+        "description": "For action=approve, expectedActionFingerprint is required and must equal the fingerprint returned with the reviewed plan decision. Missing fingerprints are a 400; stale action or policy snapshots are a 409.",
+        "tags": [
+          "Decisions"
+        ],
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "401": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "403": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "409": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimitResponse"
+          },
+          "503": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "2XX": {
+            "$ref": "#/components/responses/JsonResponse"
+          }
+        },
+        "requestBody": {
+          "$ref": "#/components/requestBodies/JsonObject"
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/DecisionId"
+          }
+        ]
+      }
+    },
+    "/api/decisions/{id}/execute": {
+      "post": {
+        "operationId": "executeDecision",
+        "tags": [
+          "Decisions"
+        ],
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "401": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "403": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimitResponse"
+          },
+          "503": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "2XX": {
+            "$ref": "#/components/responses/JsonResponse"
+          }
+        },
+        "requestBody": {
+          "$ref": "#/components/requestBodies/JsonObject"
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/DecisionId"
+          }
+        ]
+      }
+    },
+    "/api/decisions/{id}/observe": {
+      "post": {
+        "operationId": "observeDecision",
+        "tags": [
+          "Decisions"
+        ],
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "401": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "403": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimitResponse"
+          },
+          "503": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "2XX": {
+            "$ref": "#/components/responses/JsonResponse"
+          }
+        },
+        "requestBody": {
+          "$ref": "#/components/requestBodies/JsonObject"
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/DecisionId"
+          }
+        ]
+      }
+    },
+    "/api/decisions/{id}/resume": {
+      "post": {
+        "operationId": "resumeDecision",
+        "tags": [
+          "Decisions"
+        ],
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "401": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "403": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimitResponse"
+          },
+          "503": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "2XX": {
+            "$ref": "#/components/responses/JsonResponse"
+          }
+        },
+        "requestBody": {
+          "$ref": "#/components/requestBodies/JsonObject"
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/DecisionId"
+          }
+        ]
+      }
+    },
+    "/api/decisions/{id}/rollback": {
+      "post": {
+        "operationId": "rollbackDecision",
+        "tags": [
+          "Decisions"
+        ],
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "401": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "403": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimitResponse"
+          },
+          "503": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "2XX": {
+            "$ref": "#/components/responses/JsonResponse"
+          }
+        },
+        "requestBody": {
+          "$ref": "#/components/requestBodies/JsonObject"
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/DecisionId"
+          }
+        ]
+      }
+    },
+    "/api/monitoring/workflows": {
+      "get": {
+        "operationId": "getWorkflowMonitoring",
+        "tags": [
+          "Monitoring"
+        ],
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "401": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "403": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "503": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "2XX": {
+            "$ref": "#/components/responses/JsonResponse"
+          }
+        }
+      }
+    },
+    "/api/plan": {
+      "post": {
+        "operationId": "createPlan",
+        "tags": [
+          "Planning"
+        ],
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "401": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "403": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "503": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "2XX": {
+            "$ref": "#/components/responses/JsonResponse"
+          }
+        },
+        "requestBody": {
+          "$ref": "#/components/requestBodies/JsonObject"
+        }
+      }
+    },
+    "/api/query": {
+      "post": {
+        "operationId": "queryQuicksilver",
+        "tags": [
+          "Planning"
+        ],
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "401": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "403": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimitResponse"
+          },
+          "503": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "2XX": {
+            "$ref": "#/components/responses/JsonResponse"
+          }
+        },
+        "requestBody": {
+          "$ref": "#/components/requestBodies/JsonObject"
+        }
+      }
+    },
+    "/api/whoami": {
+      "get": {
+        "operationId": "whoAmI",
+        "tags": [
+          "Identity"
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/WhoamiResponse"
+          },
+          "400": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "401": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "403": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "503": {
+            "$ref": "#/components/responses/ErrorResponse"
+          }
+        }
+      }
+    },
+    "/api/workflows/diff": {
+      "get": {
+        "operationId": "diffWorkflowVersions",
+        "tags": [
+          "Workflows"
+        ],
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "401": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "403": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "503": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "2XX": {
+            "$ref": "#/components/responses/JsonResponse"
+          }
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/WorkflowId"
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ]
+      }
+    },
+    "/api/workflows/drafts": {
+      "post": {
+        "operationId": "saveWorkflowDraft",
+        "tags": [
+          "Workflows"
+        ],
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "401": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "403": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimitResponse"
+          },
+          "503": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "2XX": {
+            "$ref": "#/components/responses/JsonResponse"
+          }
+        },
+        "requestBody": {
+          "$ref": "#/components/requestBodies/JsonObject"
+        }
+      }
+    },
+    "/api/workflows/drafts/submit": {
+      "post": {
+        "operationId": "submitWorkflowDraft",
+        "tags": [
+          "Workflows"
+        ],
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "401": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "403": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimitResponse"
+          },
+          "503": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "2XX": {
+            "$ref": "#/components/responses/JsonResponse"
+          }
+        },
+        "requestBody": {
+          "$ref": "#/components/requestBodies/JsonObject"
+        }
+      }
+    },
+    "/api/workflows/executions": {
+      "get": {
+        "operationId": "listWorkflowExecutions",
+        "tags": [
+          "Workflows"
+        ],
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "401": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "403": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "503": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "2XX": {
+            "$ref": "#/components/responses/JsonResponse"
+          }
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/WorkflowId"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 500
+            }
+          }
+        ]
+      }
+    },
+    "/api/workflows/publications": {
+      "get": {
+        "operationId": "listWorkflowPublications",
+        "tags": [
+          "Workflows"
+        ],
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "401": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "403": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "503": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "2XX": {
+            "$ref": "#/components/responses/JsonResponse"
+          }
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/WorkflowId"
+          }
+        ]
+      }
+    },
+    "/api/workflows/publish": {
+      "post": {
+        "operationId": "publishWorkflow",
+        "tags": [
+          "Workflows"
+        ],
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "401": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "403": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimitResponse"
+          },
+          "503": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "2XX": {
+            "$ref": "#/components/responses/JsonResponse"
+          }
+        },
+        "requestBody": {
+          "$ref": "#/components/requestBodies/JsonObject"
+        }
+      }
+    },
+    "/api/workflows/review": {
+      "post": {
+        "operationId": "reviewWorkflow",
+        "tags": [
+          "Workflows"
+        ],
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "401": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "403": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimitResponse"
+          },
+          "503": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "2XX": {
+            "$ref": "#/components/responses/JsonResponse"
+          }
+        },
+        "requestBody": {
+          "$ref": "#/components/requestBodies/JsonObject"
+        }
+      }
+    },
+    "/api/workflows/rollback": {
+      "post": {
+        "operationId": "rollbackWorkflow",
+        "tags": [
+          "Workflows"
+        ],
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "401": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "403": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimitResponse"
+          },
+          "503": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "2XX": {
+            "$ref": "#/components/responses/JsonResponse"
+          }
+        },
+        "requestBody": {
+          "$ref": "#/components/requestBodies/JsonObject"
+        }
+      }
+    },
+    "/api/workflows/run": {
+      "post": {
+        "operationId": "runWorkflow",
+        "tags": [
+          "Workflows"
+        ],
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "401": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "403": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimitResponse"
+          },
+          "503": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "2XX": {
+            "$ref": "#/components/responses/JsonResponse"
+          }
+        },
+        "requestBody": {
+          "$ref": "#/components/requestBodies/JsonObject"
+        }
+      }
+    },
+    "/api/workflows/simulate": {
+      "post": {
+        "operationId": "simulateWorkflow",
+        "tags": [
+          "Workflows"
+        ],
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "401": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "403": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "503": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "2XX": {
+            "$ref": "#/components/responses/JsonResponse"
+          }
+        },
+        "requestBody": {
+          "$ref": "#/components/requestBodies/JsonObject"
+        }
+      }
+    },
+    "/api/workflows/validate": {
+      "post": {
+        "operationId": "validateWorkflow",
+        "tags": [
+          "Workflows"
+        ],
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "401": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "403": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "503": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "2XX": {
+            "$ref": "#/components/responses/JsonResponse"
+          }
+        },
+        "requestBody": {
+          "$ref": "#/components/requestBodies/JsonObject"
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string"
+          },
+          "retryAfterSeconds": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "code": {
+            "type": "string"
+          },
+          "needs": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "description": "Common fields where emitted; not guaranteed across all routes.",
+        "additionalProperties": true
+      },
+      "JsonObject": {
+        "type": "object",
+        "description": "Route-specific shape not exhaustively captured yet.",
+        "additionalProperties": true
+      },
+      "Whoami": {
+        "type": "object",
+        "properties": {
+          "credential": {
+            "type": "string",
+            "enum": [
+              "principal",
+              "shared-supervisor"
+            ]
+          },
+          "permissions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "tenantId": {
+            "type": "string"
+          },
+          "principalId": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "principalId",
+          "kind",
+          "tenantId",
+          "permissions",
+          "credential"
+        ]
+      }
+    },
+    "requestBodies": {
+      "JsonObject": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/JsonObject"
+            }
+          }
+        },
+        "required": true
+      }
+    },
+    "securitySchemes": {
+      "BearerAuth": {
+        "bearerFormat": "opaque principal or configured supervisor token",
+        "type": "http",
+        "scheme": "bearer"
+      }
+    },
+    "responses": {
+      "RateLimitResponse": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        },
+        "description": "Rate limited by the current in-process token bucket.",
+        "headers": {
+          "Retry-After": {
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        }
+      },
+      "JsonResponse": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/JsonObject"
+            }
+          }
+        },
+        "description": "Successful JSON response; exact route-specific fields are not yet fully specified."
+      },
+      "ErrorResponse": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        },
+        "description": "Route-specific error; status and body vary by failure."
+      },
+      "WhoamiResponse": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Whoami"
+            }
+          }
+        },
+        "description": "Authenticated principal identity and effective permissions."
+      }
+    },
+    "parameters": {
+      "DecisionId": {
+        "schema": {
+          "type": "string",
+          "minLength": 1
+        },
+        "required": true,
+        "name": "id",
+        "in": "path"
+      },
+      "AgentId": {
+        "schema": {
+          "type": "string",
+          "minLength": 1
+        },
+        "required": true,
+        "name": "agentId",
+        "in": "query"
+      },
+      "WorkflowId": {
+        "schema": {
+          "type": "string",
+          "minLength": 1
+        },
+        "required": true,
+        "name": "workflowId",
+        "in": "query"
+      }
+    }
+  }
+}

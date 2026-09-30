@@ -31,6 +31,7 @@ import { handleTaskRoute } from './tasks-api.ts'
 import { TaskError, TaskService, type TaskRunBackend, type TaskServiceDeps } from './tasks.ts'
 import type { TaskClientRegistry } from './task-clients.ts'
 import { hostRouteLabel, matchHostRoute, type HostRoute, type HostRouteFeature } from './routes.ts'
+import { FileAuthorizationAuditStore, resolveAuthorizationAuditPath } from './authorization-audit.ts'
 
 /**
  * The single-tenant Quicksilver host: one process that runs the governed
@@ -109,6 +110,7 @@ export class QuicksilverHost {
   /** Per-principal buckets for `write` and `model` routes, and per-endpoint buckets for webhooks (A-5). */
   private readonly limiters: { write: TokenBucketLimiter; model: TokenBucketLimiter; webhook: Map<string, TokenBucketLimiter> }
   private readonly hostPrincipal: Principal
+  private readonly authorizationAudit: FileAuthorizationAuditStore
   private server?: Server
   private started = false
 
@@ -123,6 +125,7 @@ export class QuicksilverHost {
     const foreign = principals.filter((p) => p.tenantId !== config.tenantId)
     if (foreign.length) throw new Error(`Principals ${foreign.map((p) => p.id).join(', ')} belong to another tenant; this host serves "${config.tenantId}" only.`)
     this.identity = new StaticTokenIdentityProvider(principals)
+    this.authorizationAudit = new FileAuthorizationAuditStore(resolveAuthorizationAuditPath(config, deps.env ?? process.env))
 
     const customRoles = [
       { id: 'host-runtime', tenantId: config.tenantId, description: 'The host process: resolve secrets for triggers.', permissions: ['secret:use'] as const },
@@ -364,6 +367,7 @@ export class QuicksilverHost {
   }
 
   private onAccessDecision(decision: AccessDecision): void {
+    this.authorizationAudit.append(decision)
     if (decision.allowed) this.log.debug('access allowed', { permission: decision.permission, principalId: decision.principalId, resourceId: decision.resourceId })
     else this.log.warn('access denied', { permission: decision.permission, principalId: decision.principalId, resourceId: decision.resourceId, reasons: decision.reasons })
   }
@@ -378,6 +382,22 @@ export class QuicksilverHost {
     try {
       const out = await this.dispatch(req, url)
       status = out.status
+      // Authentication failures happen before a Principal reaches RBAC. Keep
+      // those refusals in the same durable decision ledger without recording
+      // a supplied bearer token (or any request material).
+      const matched = matchHostRoute(req.method ?? 'GET', url.pathname).route
+      if (status === 401 && matched?.access.kind === 'permission') {
+        this.authorizationAudit.append({
+          allowed: false,
+          permission: matched.access.anyOf[0]!,
+          principalId: 'anonymous',
+          principalKind: 'unknown',
+          tenantId: this.config.tenantId,
+          grantedBy: [],
+          reasons: ['No authenticated principal.'],
+          at: Date.now(),
+        })
+      }
       res.writeHead(status, {
         'content-type': out.contentType ?? 'application/json; charset=utf-8',
         'cache-control': 'no-store',

@@ -53,8 +53,10 @@ async function start(options: { config?: GenesisRunConfig; vault?: string[]; sto
   const viewer = who('entity-viewer', 'human', ['viewer'])
   const graphs = new MemoryIntentGraphStore()
   const store = options.store ?? new MemoryGenesisStore()
+  const auditDir = await mkdtemp(join(tmpdir(), 'qs-genesis-audit-'))
   const host = new QuicksilverHost(parseHostConfig({ tenantId: TENANT, http: { host: '127.0.0.1', port: 0 }, workflows: {} }), {
     principals: [founder.config, agent.config, viewer.config],
+    env: { QUICKSILVER_AUTHORIZATION_AUDIT_PATH: join(auditDir, 'authorization.jsonl') },
     logger: new Logger({ level: 'error', sink: { write: () => {} } }),
     intent: { graphs, ledger: new MemoryLedgerStore() },
     ...(options.genesis === false ? {} : { genesis: { config: options.config ?? runConfig(), store, vaultNames: async () => options.vault ?? ['genesis-card'] } }),
@@ -65,7 +67,7 @@ async function start(options: { config?: GenesisRunConfig; vault?: string[]; sto
     headers: { authorization: `Bearer ${token}`, ...(body !== undefined ? { 'content-type': 'application/json' } : {}) },
     ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
   }).then(async (r) => ({ status: r.status, body: await r.json() as any }))
-  return { host, call, store, port, tokens: { founder: founder.token, agent: agent.token, viewer: viewer.token } }
+  return { host, call, store, port, auditDir, tokens: { founder: founder.token, agent: agent.token, viewer: viewer.token } }
 }
 
 const E = '/api/genesis/experiments'

@@ -78,8 +78,44 @@ export function runProcess(file: string, args: string[], o: ProcessOptions): Pro
     child.stderr.on('data', (c: Buffer) => { stderr = take(stderr, c) })
     const kill = () => {
       try {
-        if (process.platform !== 'win32' && child.pid) process.kill(-child.pid, 'SIGKILL')
-        else child.kill('SIGKILL')
+        if (process.platform !== 'win32' && child.pid) {
+          process.kill(-child.pid, 'SIGKILL')
+        } else {
+          // On Windows child.kill() only terminates cmd.exe; grandchildren
+          // can keep stdout/stderr open and prevent close() from firing.
+          // taskkill /T tears down the whole command tree so timeout and abort
+          // settle deterministically.
+          if (child.pid) {
+            const killer = spawn('taskkill.exe', ['/pid', String(child.pid), '/t', '/f'], { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true })
+            let killOutput = ''
+            killer.stdout?.on('data', (chunk: Buffer) => { killOutput += chunk.toString() })
+            killer.stderr?.on('data', (chunk: Buffer) => { killOutput += chunk.toString() })
+            let settled = false
+            const fallback = setTimeout(() => {
+              settled = true
+              child.kill('SIGKILL')
+            }, 1_000)
+            fallback.unref()
+            killer.on('error', (error) => {
+              if (settled) return
+              settled = true
+              clearTimeout(fallback)
+              stderr += `\nCould not terminate the Windows process tree: ${error.message}`
+              child.kill('SIGKILL')
+            })
+            killer.on('close', (code) => {
+              if (settled) return
+              settled = true
+              clearTimeout(fallback)
+              if (code !== 0) {
+                stderr += `\nCould not terminate the Windows process tree (taskkill exited ${code}): ${killOutput.trim()}`
+                child.kill('SIGKILL')
+              }
+            })
+          } else {
+            child.kill('SIGKILL')
+          }
+        }
       } catch { /* already gone */ }
     }
     const timer = setTimeout(() => { timedOut = true; kill() }, o.timeoutMs)

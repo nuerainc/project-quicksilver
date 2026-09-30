@@ -88,7 +88,7 @@ async function startHost(overrides: Record<string, unknown> = {}, extra: { agent
   const auditor = person('entity-auditor', ['auditor'])
   const admin = person('entity-admin', ['tenant-admin'])
   const webhookSecret = generateWebhookSecret()
-  const env = { QUICKSILVER_VAULT_KEY: generateMasterKey(), ERP_WEBHOOK_SECRET: webhookSecret }
+  const env = { QUICKSILVER_VAULT_KEY: generateMasterKey(), ERP_WEBHOOK_SECRET: webhookSecret, QUICKSILVER_AUTHORIZATION_AUDIT_PATH: join(dir, 'authorization-audit.jsonl') }
   await extra.prepare?.(dir, env)
   const config = parseHostConfig({
     tenantId: TENANT,

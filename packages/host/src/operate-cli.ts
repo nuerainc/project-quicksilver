@@ -29,6 +29,7 @@ import { randomUUID } from 'node:crypto'
 import { resolve } from 'node:path'
 
 import { AccessController } from '@quicksilver/kernel/identity'
+import { FileAuthorizationAuditStore, resolveAuthorizationAuditPath } from './authorization-audit.ts'
 import { validatePlaybook, type PlaybookDefinition } from '@quicksilver/kernel/playbooks'
 import {
   appendMoney,
@@ -62,6 +63,7 @@ import {
 import { loadHostConfig } from './config.ts'
 import { departmentStatus, OperateStore } from './operate-store.ts'
 import { SecretsVault } from './vault.ts'
+import { CLI_VALUE_FLAGS, parseCommandArgs } from './cli-args.ts'
 
 const root = process.env.INIT_CWD ?? process.cwd()
 const configPath = resolve(root, process.env.QUICKSILVER_OPERATE_CONFIG ?? 'deploy/operate/operate-nuera.json')
@@ -70,10 +72,7 @@ const actorKind = (['human', 'agent', 'service'] as const).find((k) => k === pro
 const actor = { id: actorId, kind: actorKind }
 const kernelActor = { id: 'kernel', kind: 'service' as const }
 const tenantId = process.env.QUICKSILVER_TENANT_ID?.trim() || 'nuera'
-const [cmd, ...args] = process.argv.slice(2)
-const flag = (name: string) => { const i = args.indexOf(name); return i >= 0 ? args[i + 1] : undefined }
-const VALUE_FLAGS = ['--source', '--experiment', '--cash']
-const positional = args.filter((a, i) => !a.startsWith('--') && !(i > 0 && VALUE_FLAGS.includes(args[i - 1]!)))
+const { command: cmd, args, flag, positional } = parseCommandArgs(process.argv.slice(2), { valueFlags: CLI_VALUE_FLAGS.operate })
 
 function fail(message: string): never { console.error(message); process.exit(1) }
 const usd = (n: number) => `$${n.toFixed(2)}`
@@ -96,7 +95,8 @@ async function vaultNames(): Promise<{ names: string[]; note?: string }> {
     if (!host.vault) return { names: [], note: 'No vault is configured in the host config.' }
     const masterKey = process.env[host.vault.keyEnv]
     if (!masterKey) return { names: [], note: `${host.vault.keyEnv} is not set, so the vault can't be checked.` }
-    const vault = new SecretsVault({ path: host.vault.path, masterKey, tenantId: host.tenantId, access: new AccessController(), audit: () => {} })
+    const authorizationAudit = new FileAuthorizationAuditStore(resolveAuthorizationAuditPath(host))
+    const vault = new SecretsVault({ path: host.vault.path, masterKey, tenantId: host.tenantId, access: new AccessController({ audit: (decision) => authorizationAudit.append(decision) }), audit: () => {} })
     await vault.open()
     const admin = { id: `operate-cli:${actorId}`, kind: 'human' as const, tenantId: host.tenantId, roles: ['tenant-admin'] }
     return { names: (await vault.list(admin)).filter((s) => !s.disabled).map((s) => s.name) }

@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { WorkflowEdge, WorkflowGraph, WorkflowNode, WorkflowNodeKind } from '@quicksilver/kernel'
 import { authFailureMessage, consoleHeaders, readConsoleToken, type ConsoleRoute } from '@/lib/console-auth'
+import { graphLayout } from '@/lib/workflow-layout'
 
 type ValidationResponse = { valid: boolean; errors: string[]; topologicalOrder: string[] }
 type PublicationVersion = { workflowId: string; version: number; graph: WorkflowGraph; digest: string; authoredBy: string; createdAt: number; status: 'draft' | 'in-review' | 'published' | 'deprecated'; reviewedBy?: string; reviewNote?: string; publishedAt?: number }
@@ -92,40 +93,6 @@ function nextSequence(graphNodes: WorkflowNode[], graphEdges: WorkflowEdge[]) {
     const match = item.id.match(/-(\d+)$/)
     return match ? Math.max(max, Number(match[1])) : max
   }, 0)
-}
-
-function graphLayout(graphNodes: WorkflowNode[], graphEdges: WorkflowEdge[]) {
-  const depths = new Map<string, number>()
-  const entryId = graphNodes.find((node) => node.kind === 'trigger')?.id
-  if (entryId) depths.set(entryId, 0)
-  for (let pass = 0; pass < graphNodes.length; pass += 1) {
-    let changed = false
-    for (const edge of graphEdges) {
-      const sourceDepth = depths.get(edge.from)
-      if (sourceDepth === undefined) continue
-      const nextDepth = Math.min(sourceDepth + 1, graphNodes.length - 1)
-      if ((depths.get(edge.to) ?? -1) < nextDepth) {
-        depths.set(edge.to, nextDepth)
-        changed = true
-      }
-    }
-    if (!changed) break
-  }
-  for (const node of graphNodes) if (!depths.has(node.id)) depths.set(node.id, 0)
-
-  const layers = new Map<number, WorkflowNode[]>()
-  for (const node of graphNodes) {
-    const depth = depths.get(node.id) ?? 0
-    layers.set(depth, [...(layers.get(depth) ?? []), node])
-  }
-  const positions = new Map<string, { x: number; y: number }>()
-  let maxRows = 1
-  for (const [depth, layer] of layers) {
-    maxRows = Math.max(maxRows, layer.length)
-    layer.forEach((node, row) => positions.set(node.id, { x: 32 + depth * 230, y: 24 + row * 88 }))
-  }
-  const maxDepth = Math.max(0, ...layers.keys())
-  return { positions, width: 64 + (maxDepth + 1) * 230, height: 48 + maxRows * 88 }
 }
 
 export default function WorkflowBuilderPage() {
@@ -466,11 +433,10 @@ export default function WorkflowBuilderPage() {
   }
 
   return (
-    <main className="mx-auto max-w-7xl px-6 py-10">
+    <main className="app-main">
       <header className="mb-8 flex flex-wrap items-start justify-between gap-4">
         <div>
-          <a href="/" className="font-mono text-xs uppercase tracking-widest text-quicksilver-accent hover:text-quicksilver-signal">← Nuera Quicksilver</a>
-          <h1 className="mt-3 font-mono text-2xl tracking-[0.18em] text-quicksilver-signal">Workflow builder</h1>
+          <h1 className="font-mono text-2xl tracking-[0.18em] text-quicksilver-signal">Workflow builder</h1>
           <p className="mt-2 max-w-2xl text-sm text-quicksilver-accent">Arrange agent, tool, and decision steps, then check the workflow against NQC safety rules.</p>
         </div>
         <span className="rounded border border-quicksilver-border px-3 py-2 font-mono text-[10px] uppercase tracking-widest text-quicksilver-accent">{!persistenceReady ? 'Restoring browser draft…' : storageAvailable ? 'Autosaved in this browser · not executable' : 'Browser saving unavailable'}</span>
@@ -488,8 +454,9 @@ export default function WorkflowBuilderPage() {
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.65fr)]">
         <section aria-label="Workflow graph" className="rounded border border-quicksilver-border bg-quicksilver-panel p-5">
           <div className="mb-5 flex items-center justify-between"><h2 className="font-mono text-xs uppercase tracking-widest text-quicksilver-accent">Workflow graph</h2><span className="font-mono text-[10px] text-quicksilver-accent">{nodes.length} steps · {edges.length} connections</span></div>
-          <h3 className="mb-3 font-mono text-[10px] uppercase tracking-widest text-quicksilver-accent">Visual flow · connections and branches</h3>
-          <div className="mb-6 max-h-[440px] overflow-auto rounded border border-quicksilver-border bg-quicksilver-bg" role="img" aria-label={`Workflow diagram with ${nodes.length} steps and ${edges.length} connections`}>
+          <details className="mb-6 rounded border border-quicksilver-border">
+            <summary className="min-h-11 cursor-pointer px-3 py-3 font-mono text-[10px] uppercase tracking-widest text-quicksilver-accent">Visual flow · {nodes.length} steps, {edges.length} connections</summary>
+            <div className="max-h-[440px] overflow-auto border-t border-quicksilver-border bg-quicksilver-bg" role="img" aria-label={`Workflow diagram with ${nodes.length} steps and ${edges.length} connections`}>
             <svg width={map.width} height={map.height} viewBox={`0 0 ${map.width} ${map.height}`} className="min-w-full">
               <defs><marker id="workflow-arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#56d7e7" /></marker></defs>
               {edges.map((edge) => {
@@ -511,7 +478,8 @@ export default function WorkflowBuilderPage() {
                 return <g key={node.id}><rect x={point.x} y={point.y} width="180" height="58" rx="5" fill="#0b1119" stroke={stroke} strokeWidth="1.5" /><text x={point.x + 10} y={point.y + 19} fill={stroke} fontSize="9" letterSpacing="1">{node.kind.toUpperCase()}</text><text x={point.x + 10} y={point.y + 39} fill="#edf4fa" fontSize="12">{node.label.length > 22 ? `${node.label.slice(0, 21)}…` : node.label}</text></g>
               })}
             </svg>
-          </div>
+            </div>
+          </details>
           <h3 className="mb-3 font-mono text-[10px] uppercase tracking-widest text-quicksilver-accent">Step settings</h3>
           <div className="space-y-3">
             {nodes.map((node, index) => (

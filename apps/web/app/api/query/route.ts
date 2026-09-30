@@ -15,7 +15,7 @@ import { guardWebRoute } from '@/lib/route-guard'
 export async function POST(req: Request) {
   // A principal with decision:read before anything else (A-3), then the
   // per-principal model-route limit (A-5).
-  const requester = guardWebRoute(req, 'query')
+  const requester = await guardWebRoute(req, 'query')
   if (!requester.ok) return NextResponse.json(requester.body, { status: requester.status, headers: requester.headers })
 
   let body: unknown

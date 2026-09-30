@@ -34,16 +34,15 @@ import { AccessController, type Principal } from '@quicksilver/kernel/identity'
 
 import { loadHostConfig, parseHostConfig, type HostConfig } from './config.ts'
 import { createSanityStoreClient } from './sanity-client.ts'
+import { FileAuthorizationAuditStore, resolveAuthorizationAuditPath } from './authorization-audit.ts'
 import { FileShadowStore, MemoryShadowStore, type ShadowStore } from './shadow-api.ts'
 import { SanityShadowStore } from './shadow-store-sanity.ts'
 import { TaskError, TaskService, taskView, TASK_STATUSES, type Task } from './tasks.ts'
 import { taskSetup } from './tasks-setup.ts'
+import { CLI_VALUE_FLAGS, parseCommandArgs } from './cli-args.ts'
 
 const root = process.env.INIT_CWD ?? process.cwd()
-const [cmd, ...args] = process.argv.slice(2)
-const flag = (name: string) => { const i = args.indexOf(name); return i >= 0 ? args[i + 1] : undefined }
-const VALUE_FLAGS = ['--capability', '--department', '--key', '--status']
-const positional = args.filter((a, i) => !a.startsWith('--') && !(i > 0 && VALUE_FLAGS.includes(args[i - 1]!)))
+const { command: cmd, args, flag, positional } = parseCommandArgs(process.argv.slice(2), { valueFlags: CLI_VALUE_FLAGS.tasks })
 
 function fail(message: string): never { console.error(message); process.exit(1) }
 
@@ -102,9 +101,10 @@ async function main(): Promise<void> {
     fail('Usage: client add <name> | client list | client revoke <name>')
   }
 
+  const authorizationAudit = new FileAuthorizationAuditStore(resolveAuthorizationAuditPath(config))
   const service = new TaskService({
     tenantId: config.tenantId,
-    access: new AccessController(),
+    access: new AccessController({ audit: (decision) => authorizationAudit.append(decision) }),
     store: setup.store,
     catalog: setup.catalog,
     boundaries: setup.boundaries,
