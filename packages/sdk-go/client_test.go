@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestNewClientRequiresHTTPSOutsideLoopback(t *testing.T) {
@@ -139,19 +140,34 @@ func TestStructuredHTTPErrorAndResponseSizeLimit(t *testing.T) {
 
 func TestContextCancellationStopsRequest(t *testing.T) {
 	started := make(chan struct{})
+	release := make(chan struct{})
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		close(started)
-		<-r.Context().Done()
+		select {
+		case <-r.Context().Done():
+		case <-release:
+		}
 	}))
 	defer server.Close()
+	defer close(release)
 	client, _ := NewClient(ClientOptions{BaseURL: server.URL})
 	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	done := make(chan error, 1)
 	go func() { _, err := client.ValidateWorkflow(ctx, map[string]any{}); done <- err }()
-	<-started
+	select {
+	case <-started:
+	case <-time.After(2 * time.Second):
+		t.Fatal("request did not reach the test server")
+	}
 	cancel()
-	if err := <-done; !errors.Is(err, context.Canceled) {
-		t.Fatalf("expected context cancellation, got %v", err)
+	select {
+	case err := <-done:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("expected context cancellation, got %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("client request did not stop after context cancellation")
 	}
 }
 
