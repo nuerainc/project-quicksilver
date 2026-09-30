@@ -19,6 +19,7 @@ that every operating mode depends on.
 - [Supervisor approval gate](supervisor-approval.md)
 - [TypeScript SDK foundation](sdk-typescript.md)
 - [Python SDK and CLI foundation](sdk-python.md)
+- [Go SDK foundation](sdk-go.md)
 - [Dedicated Sanity project setup](sanity-isolation.md)
 - [Operate (M6): autonomy, reinvestment and bounded experiments](operate.md)
 - [Kernel depth (M7): policy lineage, supersession, scope nesting and the capability graph](kernel-depth.md)

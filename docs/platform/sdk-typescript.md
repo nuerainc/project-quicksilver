@@ -12,4 +12,5 @@ credentials described in the [workflow guide](workflow-graphs.md).
 This is an internal SDK foundation, not a published package. Authentication,
 agent creation, and broader hosted-run APIs depend on the platform identity and
 authorization design. The internal Python client and `qs` CLI are documented
-in the [Python SDK guide](sdk-python.md); a Go client remains future work.
+in the [Python SDK guide](sdk-python.md), and the dependency-free Go client
+foundation is documented in the [Go SDK guide](sdk-go.md).
