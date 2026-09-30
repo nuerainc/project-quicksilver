@@ -117,9 +117,12 @@ interface ExecutionDocument extends Omit<WorkflowExecutionRecord, 'startedAt' | 
 }
 
 export class WorkflowPublicationFault extends Error {
-  constructor(message: string, readonly status: 400 | 404 | 409) {
+  readonly status: 400 | 404 | 409
+
+  constructor(message: string, status: 400 | 404 | 409) {
     super(message)
     this.name = 'WorkflowPublicationFault'
+    this.status = status
   }
 }
 
