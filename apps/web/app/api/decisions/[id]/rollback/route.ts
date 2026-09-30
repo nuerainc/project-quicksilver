@@ -13,6 +13,7 @@
  */
 
 import { NextResponse } from 'next/server'
+import { safeErrorName } from '@/lib/safe-log'
 import { getSanityClient } from '@/lib/sanity-client'
 import { z } from 'zod'
 import { authorizeTransition, nextAutomaticTransition } from '@quicksilver/kernel'
@@ -195,9 +196,9 @@ export async function POST(
 
     return NextResponse.json({ rollbackDecisionId: rollbackId, parentDecisionId: id })
   } catch (err) {
-    console.error('[/api/decisions/[id]/rollback]', err)
+    console.error('[/api/decisions/[id]/rollback]', safeErrorName(err))
     return NextResponse.json(
-      { error: 'Rollback failed', detail: (err as Error).message },
+      { error: 'Rollback failed', detail: safeErrorName(err) },
       { status: 500 },
     )
   }

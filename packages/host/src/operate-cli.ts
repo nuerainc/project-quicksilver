@@ -25,6 +25,7 @@
  * kernel, which may only kill, continue or complete.
  */
 import { readFile } from 'node:fs/promises'
+import { randomUUID } from 'node:crypto'
 import { resolve } from 'node:path'
 
 import { AccessController } from '@quicksilver/kernel/identity'
@@ -250,13 +251,15 @@ switch (cmd) {
     const source = parseSource()
     const experimentId = flag('--experiment')
     const experiment = experimentId ? findExperiment(experimentId)[0] : undefined
+    let spendAuthorization: MoneyEntryInput['spendAuthorization']
     if (cmd === 'spend' || cmd === 'compute') {
       const d = decideOperateSpend(config, ledger, plans, experiments, { amountUsd, category, description, ...(experimentId ? { experimentId } : {}) }, now, experiment)
       console.log(`Kernel: ${d.recommendation} (spend risk ${d.riskLevel}).${d.reasons.length ? ` ${d.reasons.join(' ')}` : ''}`)
       if (d.recommendation === 'reject') fail('Not recorded: the rules refuse this spend. If the money already moved outside the rules, stop Operate and review it.')
       if (d.recommendation === 'request-approval' && (!args.includes('--confirm') || actor.kind !== 'human')) fail('Not recorded: this needs the founder. Re-run with --confirm to approve it as yourself.')
+      spendAuthorization = { decisionId: `spend-${randomUUID()}`, recommendation: d.recommendation, riskLevel: d.riskLevel, reasons: d.reasons, confirmedBy: actor.id, confirmedAt: now.toISOString() }
     }
-    const r = appendMoney(ledger, { kind: cmd as MoneyKind, amountUsd, category, description, source, ...(experimentId ? { experimentId } : {}) }, actor, now)
+    const r = appendMoney(ledger, { kind: cmd as MoneyKind, amountUsd, category, description, source, ...(experimentId ? { experimentId } : {}), ...(spendAuthorization ? { spendAuthorization } : {}) }, actor, now)
     if (!r.ok) fail(r.reasons.join(' '))
     await store.saveLedger(r.ledger)
     console.log(`Recorded ${cmd} ${usd(amountUsd)} (entry ${r.entry.seq}). Nothing was moved or executed.`)

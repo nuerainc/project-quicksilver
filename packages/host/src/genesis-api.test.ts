@@ -197,6 +197,9 @@ test('money: rejected spends 422, founder decisions 409 until confirmed, and not
     assert.equal(read.body.totals.remainingUsd, 475)
     assert.equal(read.body.ledger.entries, 3)
     assert.equal(read.body.ledger.verified.valid, true)
+    const recordedSpend = read.body.ledger.recent.find((entry: { kind: string }) => entry.kind === 'spend')
+    assert.ok(recordedSpend?.spendAuthorization?.decisionId)
+    assert.equal(recordedSpend?.spendAuthorization?.confirmedBy, 'entity-founder')
     assert.equal(read.body.experiments[0].spentUsd, 5)
     assert.equal(read.body.ledger.recent[0].seq, 3)
   } finally { await host.stop() }

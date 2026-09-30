@@ -44,7 +44,7 @@ const report = (department: string, ready: boolean): DepartmentReport => ({
 function ledgerWith(entries: Array<[kind: 'spend' | 'compute' | 'revenue' | 'refund', amount: number, at: Date, experimentId?: string, category?: string]>): MoneyLedger {
   let l: MoneyLedger = { runId: config.runId, budgetUsd: 0, entries: [] }
   for (const [kind, amountUsd, at, experimentId, category] of entries) {
-    const r = appendMoney(l, { kind, amountUsd, category: category ?? (kind === 'revenue' ? 'sales' : 'software'), description: `${kind} ${amountUsd}`, source: { type: 'bank', ref: `stmt-${l.entries.length}` }, occurredAt: at.toISOString(), ...(experimentId ? { experimentId } : {}) }, founder, at)
+    const r = appendMoney(l, { kind, amountUsd, category: category ?? (kind === 'revenue' ? 'sales' : 'software'), description: `${kind} ${amountUsd}`, source: { type: 'bank', ref: `stmt-${l.entries.length}` }, occurredAt: at.toISOString(), ...(experimentId ? { experimentId } : {}), ...((kind === 'spend' || kind === 'compute') ? { spendAuthorization: { decisionId: `decision-${l.entries.length + 1}`, recommendation: 'execute-autonomously' as const, riskLevel: 1 as const, reasons: [], confirmedBy: founder.id, confirmedAt: at.toISOString() } } : {}) }, founder, at)
     assert.ok(r.ok, r.ok ? '' : r.reasons.join(' '))
     l = r.ledger
   }
@@ -240,7 +240,7 @@ test('spend: experiment spend is refused over the pool; business spend always ne
   assert.equal(small.recommendation, 'request-approval', '8 of 100 left is risk 3, above autoMaxRisk 2')
   const tiny = decideOperateSpend(config, l, plans, exps, { amountUsd: 2, category: 'advertising', description: 'ad', experimentId: 'exp-a' }, day(2), s.experiment)
   assert.equal(tiny.recommendation, 'execute-autonomously')
-  const r = appendMoney(l, { kind: 'spend', amountUsd: 45, category: 'advertising', description: 'ads', experimentId: 'exp-a', source: { type: 'receipt', ref: 'r1' }, occurredAt: day(2).toISOString() }, founder, day(2))
+  const r = appendMoney(l, { kind: 'spend', amountUsd: 45, category: 'advertising', description: 'ads', experimentId: 'exp-a', source: { type: 'receipt', ref: 'r1' }, occurredAt: day(2).toISOString(), spendAuthorization: { decisionId: 'decision-direct', recommendation: 'execute-autonomously', riskLevel: 1, reasons: [], confirmedBy: founder.id, confirmedAt: day(2).toISOString() } }, founder, day(2))
   assert.ok(r.ok)
   if (!r.ok) return
   l = r.ledger

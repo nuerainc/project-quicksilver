@@ -28,6 +28,7 @@
  * review commands send and publish nothing.
  */
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
+import { randomUUID } from 'node:crypto'
 import { join, resolve } from 'node:path'
 
 import { AccessController } from '@quicksilver/kernel/identity'
@@ -204,13 +205,15 @@ switch (cmd) {
     const experimentId = flag('--experiment')
     const experiment = experimentId ? findExperiment(experimentId)[0] : undefined
     const now = new Date()
+    let spendAuthorization: MoneyEntryInput['spendAuthorization']
     if (cmd === 'spend' || cmd === 'compute') {
       const d = decideSpend(config, ledger, { amountUsd, category, description, ...(experimentId ? { experimentId } : {}) }, now, experiment)
       console.log(`Kernel: ${d.recommendation} (spend risk ${d.riskLevel}).${d.reasons.length ? ` ${d.reasons.join(' ')}` : ''}`)
       if (d.recommendation === 'reject') fail('Not recorded: the rules refuse this spend. If the money already moved outside the rules, stop the run and review it.')
       if (d.recommendation === 'request-approval' && !args.includes('--confirm')) fail('Not recorded: this needs your decision. Re-run with --confirm to approve it as yourself.')
+      spendAuthorization = { decisionId: `spend-${randomUUID()}`, recommendation: d.recommendation, riskLevel: d.riskLevel, reasons: d.reasons, confirmedBy: founder.id, confirmedAt: now.toISOString() }
     }
-    const r = appendMoney(ledger, { kind: cmd as MoneyKind, amountUsd, category, description, source: parseSource(), ...(experimentId ? { experimentId } : {}) }, founder, now)
+    const r = appendMoney(ledger, { kind: cmd as MoneyKind, amountUsd, category, description, source: parseSource(), ...(experimentId ? { experimentId } : {}), ...(spendAuthorization ? { spendAuthorization } : {}) }, founder, now)
     if (!r.ok) fail(r.reasons.join(' '))
     await stores.ledger.append(config.runId, r.entry)
     const t = moneyTotals(r.ledger)

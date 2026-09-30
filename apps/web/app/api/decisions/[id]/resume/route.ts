@@ -14,6 +14,7 @@
  */
 
 import { NextResponse } from 'next/server'
+import { safeErrorName } from '@/lib/safe-log'
 import { getSanityClient } from '@/lib/sanity-client'
 import { nextAutomaticTransition } from '@quicksilver/kernel'
 import {
@@ -90,7 +91,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     }
     return NextResponse.json({ id, status: step.to, process: processView(definition, step.to!, facts, step.transition?.id) })
   } catch (err) {
-    console.error('[/api/decisions/[id]/resume]', err)
-    return NextResponse.json({ error: 'Resume failed', detail: (err as Error).message }, { status: 500 })
+    console.error('[/api/decisions/[id]/resume]', safeErrorName(err))
+    return NextResponse.json({ error: 'Resume failed', detail: safeErrorName(err) }, { status: 500 })
   }
 }

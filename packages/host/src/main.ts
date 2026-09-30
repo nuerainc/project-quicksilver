@@ -42,6 +42,7 @@ import { SanityShadowStore } from './shadow-store-sanity.ts'
 import { FileGenesisStore, MemoryGenesisStore, type GenesisApiDeps } from './genesis-api.ts'
 import { SecretsVault, generateMasterKey } from './vault.ts'
 import { taskSetup } from './tasks-setup.ts'
+import { createShutdownHandler } from './shutdown.ts'
 
 /** Where the command was run from (npm sets INIT_CWD; workspace scripts run inside packages/host). */
 const baseDir = process.env.INIT_CWD ?? process.cwd()
@@ -367,22 +368,12 @@ async function main(): Promise<void> {
   }
 
   await host.start()
-  let stopping = false
-  const shutdown = (signal: string) => {
-    if (stopping) {
-      log.warn('second signal; aborting in-flight runs', { signal })
-      void host.stop({ abort: true }).finally(() => process.exit(1))
-      return
-    }
-    stopping = true
-    log.info('shutdown requested', { signal })
-    const timer = setTimeout(() => {
-      log.error('graceful shutdown timed out; aborting in-flight runs')
-      void host.stop({ abort: true }).finally(() => process.exit(1))
-    }, 60_000)
-    timer.unref()
-    void host.stop().then(() => process.exit(0), () => process.exit(1))
-  }
+  const shutdown = createShutdownHandler({
+    stop: (options) => host.stop(options),
+    exit: (code) => process.exit(code),
+    schedule: (callback, delay) => setTimeout(callback, delay),
+    log,
+  })
   process.on('SIGTERM', () => shutdown('SIGTERM'))
   process.on('SIGINT', () => shutdown('SIGINT'))
 }

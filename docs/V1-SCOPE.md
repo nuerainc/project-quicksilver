@@ -2,7 +2,8 @@
 
 **Baseline choice: literal baseline — selected by the product owner on 2026-09-29.**  
 **Product owner:** Brodi (per the NQC Kernel specification).  
-**Scope classification and remaining owners/evidence:** still in progress.
+**Decision owner for product, security, operations, data, and finance:** Brodi.
+**Scope classification and operational decisions:** still in progress.
 
 The product owner selected the literal baseline. This records the decision; it
 does not claim the requirements are implemented or waive any requirement. The
@@ -36,16 +37,21 @@ Challenge project and its challenge dataset.
 
 ## Required owner decisions
 
-| Decision | Proposed owner | Status |
+Brodi is currently the decision owner across all domains; this does not waive
+independent human approval or reviewer-separation rules for runtime actions.
+
+| Decision | Recommended default | Status |
 |---|---|---|
-| Literal baseline vs. mode-critical baseline | Product owner, Brodi | **Literal baseline selected 2026-09-29** |
-| Exact Genesis, Onboard, and Operate pilot scenarios | Product / operations | Pending definition |
-| Security owner and P0 acceptance | Security owner (name TBD) | Pending |
-| Data classes, retention, provider settings | Data owner (name TBD) | Pending |
-| Finance ledger and spend controls | Finance owner (name TBD) | Pending |
-| Node, browsers, database, deployment and model providers | Product / operations | Pending |
-| WAES service vs. manual founder review | Product / safety owner | Pending |
-| One host replica vs. multi-replica requirements | Operations / security | Pending |
+| Literal baseline vs. mode-critical baseline | Literal; P-017–P-031 required before 1.0.0 | **Selected 2026-09-29** |
+| Pilot scenarios | Nuera Onboard; founder-owned, digital-only Genesis microbusiness with $500/30-day limits; Operate on that venture after Genesis handover | Onboard and Genesis are already in the product definition; Operate linkage needs confirmation |
+| Deployment | Vercel for `apps/web`; Render for the persistent host and managed Postgres; keep Sanity Studio/project separate | Proposed; not deployed |
+| Host replica count | One replica for initial founder pilots; require B-16 shared webhook replay protection before enabling multiple replicas | Proposed |
+| Runtime and support matrix | Node 22 (matches CI); PostgreSQL for hosted runs; current stable Chrome, Edge, and Firefox; existing Azure, OpenAI, Anthropic, Google, and explicit local Ollama provider modes | Proposed; browser/provider support needs acceptance evidence |
+| WAES/manual review | Require WAES for customer-facing content; allow founder review only as a separately labelled, exact-content manual path during pilots; manual review is never reported as WAES | Product docs already describe this path; confirm policy |
+| Data classes and provider handling | Founder-owned pilot business data only after access/security gates; no restricted patent data, raw payment data, secrets in prompts/logs, or regulated data; select providers/configurations that do not train on submitted data; minimize and document retention by data class | Proposed; retention durations and provider terms need confirmation |
+| Finance and spend | Keep the defined $500 Genesis cap, 30-day limit, daily caps and pre-set experiment thresholds; reconcile every payment to the ledger | Product-defined; implementation/evidence remains incomplete |
+| Release/change policy | SemVer; protected `main`; PR required; Ubuntu + Windows CI and Go checks required; migrations and changelog entries accompany schema/API changes; exceptions recorded here with parity IDs and expiry | Proposed |
+| Sanity separation | Dedicated Quicksilver project `f87t11g1`, private `production` dataset; never connect the public Sanity Challenge dataset | Selected in prior setup; credentials/deployment still blocked |
 
 ## Gate 0 completion checklist
 
@@ -53,7 +59,7 @@ Challenge project and its challenge dataset.
 - [ ] Exact pilot scenarios and supported connectors/channels are listed.
 - [ ] Every P-001–P-121 is classified `v1`, `post-v1`, or `not applicable`
       with an owner, rationale, replacement behavior, and evidence.
-- [ ] Product, security, operations, data, and finance owners are named.
+- [x] Product, security, operations, data, and finance decision owner is Brodi.
 - [ ] Runtime, provider, data-class, WAES, and replica decisions are recorded.
 - [ ] `V1-ACCEPTANCE.md` maps every in-scope item to automated and operational
       evidence.

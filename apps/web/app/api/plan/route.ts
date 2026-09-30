@@ -44,6 +44,7 @@
  */
 
 import { NextResponse } from 'next/server'
+import { safeErrorName } from '@/lib/safe-log'
 import { getSanityClient } from '@/lib/sanity-client'
 import { z } from 'zod'
 import { policySnapshotVersion } from '@/lib/nqc-approval'
@@ -493,9 +494,9 @@ export async function POST(req: Request) {
       decisions,
     })
   } catch (err) {
-    console.error('[/api/plan]', err)
+    console.error('[/api/plan]', safeErrorName(err))
     return NextResponse.json(
-      { error: 'Plan failed', detail: (err as Error).message },
+      { error: 'Plan failed', detail: safeErrorName(err) },
       { status: 500 },
     )
   }

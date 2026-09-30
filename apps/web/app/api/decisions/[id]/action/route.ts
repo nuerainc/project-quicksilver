@@ -17,6 +17,7 @@
  */
 
 import { NextResponse } from 'next/server'
+import { safeErrorName } from '@/lib/safe-log'
 import { getSanityClient } from '@/lib/sanity-client'
 import { randomUUID } from 'node:crypto'
 import { DecisionActionBody, separationRefusal } from '@/lib/decision-action-body'
@@ -265,9 +266,9 @@ export async function POST(
       at: now,
     })
   } catch (err) {
-    console.error('[/api/decisions/[id]/action]', err)
+    console.error('[/api/decisions/[id]/action]', safeErrorName(err))
     return NextResponse.json(
-      { error: 'Action failed', detail: (err as Error).message },
+      { error: 'Action failed', detail: safeErrorName(err) },
       { status: 500 },
     )
   }

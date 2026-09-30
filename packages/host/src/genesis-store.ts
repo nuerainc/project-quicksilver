@@ -246,6 +246,12 @@ export interface SanityMoneyEntryDocument {
   experimentId?: string
   sourceType: MoneyEntry['source']['type']
   sourceRef: string
+  spendDecisionId?: string
+  spendRecommendation?: 'execute-autonomously' | 'request-approval'
+  spendRiskLevel?: number
+  spendReasons?: string[]
+  spendConfirmedBy?: string
+  spendConfirmedAt?: string
   occurredAt?: string
   recordedAt: string
   recordedBy: string
@@ -272,6 +278,14 @@ export function toMoneyEntryDocument(runId: string, e: MoneyEntry): SanityMoneyE
     ...(e.experimentId !== undefined ? { experimentId: e.experimentId } : {}),
     sourceType: e.source.type,
     sourceRef: e.source.ref,
+    ...(e.spendAuthorization ? {
+      spendDecisionId: e.spendAuthorization.decisionId,
+      spendRecommendation: e.spendAuthorization.recommendation,
+      spendRiskLevel: e.spendAuthorization.riskLevel,
+      spendReasons: e.spendAuthorization.reasons,
+      spendConfirmedBy: e.spendAuthorization.confirmedBy,
+      spendConfirmedAt: e.spendAuthorization.confirmedAt,
+    } : {}),
     ...(e.occurredAt !== undefined ? { occurredAt: e.occurredAt } : {}),
     recordedAt: e.recordedAt,
     recordedBy: e.recordedBy,
@@ -288,6 +302,16 @@ export function fromMoneyEntryDocument(d: SanityMoneyEntryDocument): MoneyEntry 
     description: d.description,
     ...(d.experimentId !== undefined ? { experimentId: d.experimentId } : {}),
     source: { type: d.sourceType, ref: d.sourceRef },
+    ...(d.spendDecisionId && d.spendRecommendation && d.spendRiskLevel !== undefined && d.spendConfirmedBy && d.spendConfirmedAt ? {
+      spendAuthorization: {
+        decisionId: d.spendDecisionId,
+        recommendation: d.spendRecommendation,
+        riskLevel: d.spendRiskLevel as NonNullable<MoneyEntry['spendAuthorization']>['riskLevel'],
+        reasons: d.spendReasons ?? [],
+        confirmedBy: d.spendConfirmedBy,
+        confirmedAt: d.spendConfirmedAt,
+      },
+    } : {}),
     ...(d.occurredAt !== undefined ? { occurredAt: d.occurredAt } : {}),
     seq: d.seq,
     recordedAt: d.recordedAt,

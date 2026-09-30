@@ -30,6 +30,7 @@
  */
 
 import { NextResponse } from 'next/server'
+import { safeErrorName } from '@/lib/safe-log'
 import { getSanityClient } from '@/lib/sanity-client'
 import { authorizeDecisionRoute, currentPolicySnapshotVersion, decisionActionFingerprint } from '@/lib/nqc-approval'
 import { takeWebRateLimit } from '@/lib/route-guard'
@@ -363,9 +364,9 @@ export async function POST(
       at: now,
     })
   } catch (err) {
-    console.error('[/api/decisions/[id]/execute]', err)
+    console.error('[/api/decisions/[id]/execute]', safeErrorName(err))
     return NextResponse.json(
-      { error: 'Execution failed', detail: (err as Error).message },
+      { error: 'Execution failed', detail: safeErrorName(err) },
       { status: 500 },
     )
   }
@@ -396,7 +397,7 @@ async function completeParentRollback(
   try {
     await commitTransition(client, parent._id, parent._rev, definition, step, KERNEL_ACTOR, now)
   } catch (err) {
-    return { id: parentId, error: (err as Error).message }
+    return { id: parentId, error: safeErrorName(err) }
   }
   return { id: parentId, status: step.to!, process: processView(definition, step.to!, facts, step.transition?.id) }
 }
