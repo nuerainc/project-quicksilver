@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { executeWorkflowGraph, validateWorkflowGraph, type NqcEvaluationResponse, type WorkflowGraph } from '@quicksilver/kernel'
@@ -5,11 +6,13 @@ import { persistEvaluations } from '@/lib/evaluation-store'
 import { guardWebRoute } from '@/lib/route-guard'
 import { isProductionEnv } from '@quicksilver/kernel/production-flags'
 import { executeGovernedAgent, isLlmConfigured, queryQuicksilverAgent, type GovernedNueraAgentResult, type QueryAgentOutput } from '@quicksilver/agent'
+import { WorkflowPublicationFault, getActivePublishedWorkflow, recordWorkflowExecution } from '@/lib/workflow-publication-store'
 
-const requestSchema = z.object({
-  graph: z.record(z.string(), z.unknown()),
-  input: z.string().min(3).max(2_000),
-}).strict()
+const workflowIdSchema = z.string().min(1).max(128).regex(/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/)
+const requestSchema = z.union([
+  z.object({ graph: z.record(z.string(), z.unknown()), input: z.string().min(3).max(2_000) }).strict(),
+  z.object({ workflowId: workflowIdSchema, version: z.number().int().positive().optional(), input: z.string().min(3).max(2_000) }).strict(),
+])
 const MAX_REQUEST_BYTES = 256 * 1024
 const MAX_QUERY_AGENT_STEPS = 3
 
@@ -41,7 +44,24 @@ export async function POST(request: Request) {
   const parsed = requestSchema.safeParse(body)
   if (!parsed.success) return NextResponse.json({ error: 'Provide a workflow graph and an input from 3 to 2,000 characters.' }, { status: 400 })
 
-  const graph = parsed.data.graph as unknown as WorkflowGraph
+  let graph: WorkflowGraph
+  let pinned: { workflowId: string; version: number; digest: string } | undefined
+  if ('workflowId' in parsed.data) {
+    try {
+      const active = await getActivePublishedWorkflow(parsed.data.workflowId)
+      if (parsed.data.version !== undefined && parsed.data.version !== active.version) {
+        return NextResponse.json({ error: 'Requested version is not the active published version.', activeVersion: active.version }, { status: 409 })
+      }
+      graph = active.graph
+      pinned = { workflowId: active.workflowId, version: active.version, digest: active.digest }
+    } catch (error) {
+      if (error instanceof WorkflowPublicationFault) return NextResponse.json({ error: error.message }, { status: error.status })
+      console.error('[workflow-run] published workflow lookup failed', error instanceof Error ? error.name : 'UnknownError')
+      return NextResponse.json({ error: 'Could not resolve the active published workflow.' }, { status: 500 })
+    }
+  } else {
+      graph = parsed.data.graph as unknown as WorkflowGraph
+  }
   const graphValidation = validateWorkflowGraph(graph)
   if (!graphValidation.valid) return NextResponse.json({ error: 'Workflow graph is invalid.', issues: graphValidation.errors }, { status: 422 })
 
@@ -54,7 +74,11 @@ export async function POST(request: Request) {
 
   const agentResults = new Map<string, GovernedNueraAgentResult<QueryAgentOutput>>()
   const evaluations: Record<string, NqcEvaluationResponse> = {}
-  const result = await executeWorkflowGraph(graph, parsed.data.input, {
+  const startedAt = Date.now()
+  const runId = `workflow-${randomUUID()}`
+  let result: Awaited<ReturnType<typeof executeWorkflowGraph>>
+  try {
+    result = await executeWorkflowGraph(graph, parsed.data.input, {
     runAgent: async (node, context) => {
       const previous = Object.values(context.outputs).at(-1)
       const priorContext = previous === undefined || previous === parsed.data.input
@@ -85,9 +109,19 @@ export async function POST(request: Request) {
       evaluations[node.id] = evaluation
       return { safetyDecision: evaluation.safetyDecision, issues: evaluation.issues }
     },
-  }, { maxConcurrentAgents: MAX_QUERY_AGENT_STEPS, signal: request.signal })
+    }, { maxConcurrentAgents: MAX_QUERY_AGENT_STEPS, signal: request.signal })
+  } catch (error) {
+    if (pinned) {
+      await recordWorkflowExecution({
+        runId, workflowId: pinned.workflowId, version: pinned.version, digest: pinned.digest,
+        requestedBy: requester.principalId, status: 'failed', startedAt, completedAt: Date.now(),
+        durationMs: Date.now() - startedAt, evaluationCount: Object.keys(evaluations).length,
+      }).catch((historyError) => console.error('[workflow-run] failed-run history write failed', historyError instanceof Error ? historyError.name : 'UnknownError'))
+    }
+    console.error('[workflow-run] execution failed', error instanceof Error ? error.name : 'UnknownError')
+    return NextResponse.json({ error: 'Workflow execution failed.' }, { status: 500 })
+  }
 
-  const runId = `workflow-${Date.now().toString(36)}`
   const audit = await persistEvaluations(
     Object.entries(evaluations).map(([nodeId, evaluation]) => ({
       source: 'workflow-run' as const,
@@ -102,5 +136,20 @@ export async function POST(request: Request) {
     })),
   )
 
-  return NextResponse.json({ mode: 'live-read-only', externalEffectsEnabled: false, ...result, evaluations, audit: { persisted: audit.persisted, evaluationRecordIds: audit.ids, ...(audit.error ? { error: audit.error } : {}) } })
+  let historyPersisted: boolean | undefined
+  if (pinned) {
+    try {
+      await recordWorkflowExecution({
+        runId, workflowId: pinned.workflowId, version: pinned.version, digest: pinned.digest,
+        requestedBy: requester.principalId, status: result.status === 'completed' ? 'succeeded' : result.status === 'blocked' ? 'blocked' : 'failed', startedAt, completedAt: Date.now(),
+        durationMs: Date.now() - startedAt, evaluationCount: Object.keys(evaluations).length,
+      })
+      historyPersisted = true
+    } catch (error) {
+      console.error('[workflow-run] execution history write failed', error instanceof Error ? error.name : 'UnknownError')
+      historyPersisted = false
+    }
+  }
+
+  return NextResponse.json({ mode: 'live-read-only', externalEffectsEnabled: false, ...(pinned ? { publishedWorkflow: pinned, historyPersisted } : {}), ...result, evaluations, audit: { persisted: audit.persisted, evaluationRecordIds: audit.ids, ...(audit.error ? { error: audit.error } : {}) } })
 }

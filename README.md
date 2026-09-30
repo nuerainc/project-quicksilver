@@ -251,7 +251,7 @@ The challenge-era stress test found real bugs: a risk formula that scored nearly
 | Evaluation | **Quicksilver Engine**: deterministic grounding, tool-failure, and brittleness signals |
 | Worker agents | **Nuera Quicksilver Agents**: planner, advisory reviewer, and query agent; kernel manifests gate registered tasks, with the NQC Kernel retaining action authority |
 | Write path | `@sanity/client` mutations with `ifRevisionId` optimistic locking |
-| Workflow authoring | Draft graph builder, browser-local autosave, validated JSON import/export, validation API, separate `automationWorkflow` schema, safe preview, and opt-in read-only query-agent run through NQC; tools blocked, safe data-only conditions, not shared or hosted |
+| Workflow authoring | Draft graph builder, browser-local autosave, validated JSON import/export, immutable shared versions with independent review/publish/rollback, reviewer rationale, safety-aware version diffs, and Sanity audit; published live runs resolve and pin the active version, verify its digest, and expose metadata-only execution history. Editable draft runs remain separate; live runs are opt-in/read-only and tools stay blocked |
 | Developer SDKs | Internal TypeScript, Python, and Go client foundations for workflow validation, safe preview, and gated read-only runs; not published or stable |
 | Python CLI | Internal Python `qs` CLI for validation, safe preview, and gated read-only runs; not published |
 | Run runtime | `@quicksilver/kernel/runtime`: durable run records, in-memory / journaled-file / PostgreSQL stores, governed priority queue with dead letters, and a worker ([details](./docs/platform/durable-runs.md)) |

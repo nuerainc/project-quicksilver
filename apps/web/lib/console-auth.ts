@@ -65,10 +65,21 @@ const TOKEN_PATHS: ReadonlySet<string> = new Set([
   '/api/workflows/validate',
   '/api/workflows/simulate',
   '/api/workflows/run',
+  '/api/workflows/publications',
+  '/api/workflows/diff',
+  '/api/workflows/executions',
+  '/api/workflows/drafts',
+  '/api/workflows/drafts/submit',
+  '/api/workflows/review',
+  '/api/workflows/publish',
+  '/api/workflows/rollback',
 ])
 
 /** The only paths the console token is ever sent to: this app's own API routes, listed exactly. */
 export function mayCarryConsoleToken(url: string): boolean {
+  if (/^\/api\/workflows\/publications\?workflowId=[a-zA-Z0-9._:%-]{1,256}$/.test(url)) return true
+  if (/^\/api\/workflows\/executions\?workflowId=[a-zA-Z0-9._:%-]{1,256}(?:&limit=[0-9]{1,3})?$/.test(url)) return true
+  if (/^\/api\/workflows\/diff\?workflowId=[a-zA-Z0-9._:%-]{1,256}&from=[0-9]{1,9}&to=[0-9]{1,9}$/.test(url)) return true
   return /^\/api\/decisions\/[^/?#]+\/(action|execute|observe|resume|rollback)$/.test(url) || TOKEN_PATHS.has(url)
 }
 
@@ -84,7 +95,10 @@ export interface ConsoleWhoami {
 
 export type ConsoleDecisionRoute = 'action' | 'execute' | 'observe' | 'resume' | 'rollback'
 /** Every console call that can be refused for auth: the decision routes plus plan, query and the workflow builder. */
-export type ConsoleRoute = ConsoleDecisionRoute | 'plan' | 'query' | 'workflows/validate' | 'workflows/simulate' | 'workflows/run'
+export type ConsoleRoute = ConsoleDecisionRoute | 'plan' | 'query'
+  | 'workflows/validate' | 'workflows/simulate' | 'workflows/run'
+  | 'workflows/publications' | 'workflows/executions' | 'workflows/diff' | 'workflows/drafts' | 'workflows/drafts/submit'
+  | 'workflows/review' | 'workflows/publish' | 'workflows/rollback'
 
 /** The permission each route checks (observe and resume also accept `decision:propose`). Mirrors route-guard.ts. */
 export const CONSOLE_ROUTE_PERMISSION: Readonly<Record<ConsoleRoute, string>> = Object.freeze({
@@ -98,6 +112,14 @@ export const CONSOLE_ROUTE_PERMISSION: Readonly<Record<ConsoleRoute, string>> = 
   'workflows/validate': 'workflow:read',
   'workflows/simulate': 'workflow:read',
   'workflows/run': 'run:enqueue',
+  'workflows/publications': 'workflow:read',
+  'workflows/diff': 'workflow:read',
+  'workflows/executions': 'workflow:read',
+  'workflows/drafts': 'workflow:write',
+  'workflows/drafts/submit': 'workflow:write',
+  'workflows/review': 'workflow:publish',
+  'workflows/publish': 'workflow:publish',
+  'workflows/rollback': 'workflow:publish',
 })
 
 /** The message the console shows for an auth refusal or a rate limit, or null for any other status. */
