@@ -20,3 +20,5 @@ export type { NueraAgentRequest, NueraAgentResult, NueraQuicksilverAgent, Govern
 export { queryQuicksilverAgent } from './query'
 export { BUSINESS_AGENT_DEFINITIONS, BusinessAgentOutputSchema, businessAgents, runBusinessAgent } from './business-agents'
 export type { BusinessAgentInput, BusinessAgentKey, BusinessAgentOutput } from './business-agents'
+export { reviewCustomerFacingContent, WAES_COMPONENTS } from './waes'
+export type { WaesAssessment, WaesComponent, WaesComponentResult, WaesEvidenceItem, WaesReviewRequest, WaesVerdict } from './waes'

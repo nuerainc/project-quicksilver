@@ -1,9 +1,7 @@
 import { defineCliConfig } from 'sanity/cli'
+import { dedicatedSanityProjectId } from './lib/sanity-project-id'
 
-const projectId = process.env.SANITY_STUDIO_PROJECT_ID
-if (!projectId || projectId === 'd280bqjc') {
-  throw new Error('SANITY_STUDIO_PROJECT_ID must identify the dedicated Nuera Quicksilver Sanity project; legacy challenge writes are blocked.')
-}
+const projectId = dedicatedSanityProjectId()
 
 export default defineCliConfig({
   api: {

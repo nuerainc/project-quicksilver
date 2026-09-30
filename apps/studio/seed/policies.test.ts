@@ -6,6 +6,8 @@ import { checkAuthority } from '../../../packages/kernel/src/authority.ts'
 import { conditionFromSanity, conditionToSanity } from '../../../packages/kernel/src/process-document.ts'
 import type { PolicyRef, ProposedAction, RiskLevel } from '../../../packages/kernel/src/types.ts'
 import { policies } from './policies.ts'
+// Keep Studio project configuration regression coverage in the existing CI test set.
+import '../lib/sanity-project-id.test.ts'
 
 const NOW = new Date('2026-09-26T12:00:00Z')
 

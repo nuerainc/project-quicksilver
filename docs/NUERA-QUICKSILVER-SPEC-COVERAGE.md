@@ -99,10 +99,10 @@ These requirements come from the [product definition](NUERA-QUICKSILVER-PRODUCT.
 | Dynamic organization | Kernel produces digest-bound spawn/fund/shrink/retire proposals from ledger-backed unit-economics inputs, with owner-defined pinned thresholds, evidence/sample gates, approved capital ceilings, and an independent founder decision; founder-only Operate apply uses a dedicated-Sanity executor to atomically update department status/budget metadata and append audit evidence | Partial: does not transfer/disburse funds; department attribution and independent period evidence are unresolved; no general workflow/tool executor or live Sanity integration evidence (P-071/P-095) |
 | Finance layer | Decisions record financial exposure | Missing; `ledgerEntry`, CAC, margin, cash forecast, compute billed as capital |
 | Connectors | Sanity Context MCP only | Missing; ledger, CRM, payments and email connectors that write `OBSERVED` values |
-| WAES review | None | Missing; `wellbeingReview` type, review contract, hard block on failure |
+| WAES review | The NQC WAES gate binds service reviews to exact content, checks proposer/reviewer separation, and blocks on revise/block/missing/stale results; Genesis exposes a model-backed three-component evaluator that persists append-only reviews | Partial: automated contract and fail-closed paths are tested; live-provider calibration, evidence-quality evaluation and operational evidence remain open (P-045) |
 | Small-budget spend risk | Financial tiers start at $1,000 | Missing; a lower tier scale for Genesis runs |
 | Business agent family | Planner, reviewer and query manifests | Missing; research, offer, content, outreach, sales, fulfillment and finance agents, each defined by a manifest |
-| Platform feature baseline | See the tables above; the pass/fail list is [parity tests](platform/parity-tests.md) (123 requirements: 85 covered, 22 partial, 7 missing, 9 needing operational evidence, as of 2026-09-30) | Partial; P-001–P-123 are required for v1.0.0. P-025–P-027 and four other rows remain missing. P-122/P-123 are in scope by the product owner's explicit direction. |
+| Platform feature baseline | See the tables above; the pass/fail list is [parity tests](platform/parity-tests.md) (123 requirements: 85 covered, 23 partial, 6 missing, 9 needing operational evidence, as of 2026-09-30) | Partial; P-001–P-123 are required for v1.0.0. Six rows remain missing; nine need operational evidence. P-122/P-123 are in scope by the product owner's explicit direction. |
 
 ## Regression coverage
 

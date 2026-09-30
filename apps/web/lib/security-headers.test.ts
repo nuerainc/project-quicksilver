@@ -51,6 +51,7 @@ test('CSP (T-67): unsafe-eval appears only for next dev, and middleware enables 
   assert.match(middleware, /response\.headers\.set\('content-security-policy', policy\)/)
   assert.match(middleware, /requestHeaders\.set\('content-security-policy', policy\)/)
   assert.match(middleware, /STATIC_SECURITY_HEADERS/)
+  assert.match(middleware, /runtime: 'nodejs'/, 'middleware must use Node.js runtime for Vercel Services')
 })
 
 test('CSP (T-67): nonces are fresh, base64 and validated', () => {

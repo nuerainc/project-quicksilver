@@ -4,8 +4,8 @@ import { createHash } from 'node:crypto'
  * WAES review gate (M5): customer-facing actions need a passing review.
  *
  * WAES (the Wellbeing Alignment Evaluation Suite) reviews an offer, claim or
- * outbound message before any customer sees it. The kernel does not run
- * WAES; it checks the evidence:
+ * outbound message before any customer sees it. The model-backed evaluator
+ * runs outside the kernel; the kernel checks its recorded evidence:
  *
  *   - the review must cover exactly the content being sent (content digest),
  *   - its verdict must be `pass`,
@@ -15,8 +15,8 @@ import { createHash } from 'node:crypto'
  *
  *   - `waes` (the default, and what a review without `kind` is): WAES suites
  *     ran; `components` names them.
- *   - `manual`: until the WAES suites run as a service, the founder approves
- *     customer-facing text himself. A manual review must come from a human
+ *   - `manual`: an explicitly labeled founder review of customer-facing text.
+ *     A manual review must come from a human
  *     reviewer and names exactly `components: ['MANUAL-FOUNDER-REVIEW']`, so
  *     every place that lists components shows it was not a WAES run. Only a
  *     manual review may carry that marker. Manual reviews count only when the
@@ -55,7 +55,7 @@ export interface WaesReview {
 export type WaesReviewFact = WaesVerdict | 'missing' | 'stale' | 'self-reviewed' | 'manual-not-allowed' | 'manual-invalid'
 
 export interface WaesFactOptions {
-  /** Count manual founder reviews (default false). Turn off once WAES runs as a service. */
+  /** Count manual founder reviews (default false). This is a policy exception, not a WAES run. */
   allowManual?: boolean
 }
 

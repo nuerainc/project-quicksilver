@@ -164,7 +164,7 @@ the security, observability and developer-experience groups below.
 | P-042 | Every agent step's evaluation is stored as an `evaluationRecord`, and the response reports whether the write succeeded. | automated test | Kernel and host persistence tests plus `apps/web/lib/evaluation-store.test.ts` prove empty, successful, failed, and privacy-safe writes; query and workflow APIs return `audit.persisted` and record IDs | covered | |
 | P-043 | Spend risk is measured against the budget that is left. | automated test | `packages/kernel/src/playbooks/economics.test.ts` "spend risk is measured against what is left" | covered | |
 | P-044 | A customer-facing action is hard-blocked without a passing review of its exact content by someone other than the proposer. | automated test | `economics.test.ts` "WAES gate: customer-facing actions are hard-blocked without a passing review of the exact content"; `packages/host/src/genesis-reviews.test.ts` "the gate: a manual pass unlocks the exact text only when the run allows it, and never for the reviewer as proposer" | covered | The gate is covered; the WAES evaluator is P-045 |
-| P-045 | WAES runs as a service and produces the reviews the gate requires. | — | Manual founder reviews stand in, labeled as such | missing | `waesManualReviewAllowed` stays on until this exists |
+| P-045 | WAES runs as a service and produces the reviews the gate requires. | `packages/agent/src/waes.test.ts`; `packages/host/src/genesis-api.test.ts` WAES service review cases | Three NQC-governed model evaluations produce one exact-content, append-only, service-attributed WAES review; incomplete results, unavailable providers and malformed requests fail closed without a record | partial | Automated contract and failure-path coverage exists. Live-provider calibration, evidence-quality evaluation and operational evidence remain required before claiming production-grade evaluation. |
 | P-046 | Every task, from every channel, goes through one intake: RBAC, rate limit, validation, boundaries, then `authorize()`. | automated test | `tasks.test.ts` "the three kernel outcomes through the real authorize(): refused, awaiting-approval, queued", "webhooks: a signed delivery becomes a task through the same intake; the payload cannot pick the capability", "the CLI uses the same intake: a founder submits, lists and denies" | covered | |
 | P-047 | The MCP task server gives the same results as the HTTP API and has no approving tool. | automated test | `mcp-tasks.test.ts` "the tools: five, none approves, and each says the kernel decides and a human approves in the console", "MCP tool calls return the same results as the HTTP API" | covered | |
 | P-048 | The seed policies carry structured effects and fail closed on unknown exposure. | automated test | `apps/studio/seed/policies.test.ts` "Budget 3 requires approval above $50,000 and fails closed when exposure is unknown", "every live seed policy has a structured effect, so live decisions use the resolver" | covered | Threat model T-40: the planner can report an exposure of 0 |
@@ -485,7 +485,7 @@ and end-to-end usability acceptance criteria.
    exception before the 0.9.0 candidate.
 5. **Build the mode-critical missing pieces** that remain in scope after step
    4: live connectors (P-088), effectful executors behind approval (P-095),
-   WAES as a service (P-045) or an explicit decision to keep manual reviews.
+   and complete WAES live-provider calibration and evidence-quality evaluation (P-045).
 
 ### Shortest path to 1.0.0 (with operational evidence)
 
