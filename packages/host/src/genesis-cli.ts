@@ -54,6 +54,7 @@ import { decideSpend, genesisBlockers, genesisFacts, validateGenesisConfig, type
 import { loadHostConfig } from './config.ts'
 import { contentStatus, createManualReview, MANUAL_REVIEW_LABEL, parseContentReviewInput, readContentArg, reviewSummary } from './genesis-reviews.ts'
 import { genesisStoresFromEnv, MoneyLedgerIntegrityError, runStartedAt } from './genesis-store.ts'
+import { exportGenesisResearchTrajectories } from './genesis-research.ts'
 import { SecretsVault } from './vault.ts'
 import { CLI_VALUE_FLAGS, parseCommandArgs } from './cli-args.ts'
 
@@ -295,6 +296,32 @@ switch (cmd) {
     console.log('Nothing was sent or published.')
     break
   }
+  case 'research': {
+    const [sub] = positional
+    if (sub !== 'export') fail('Usage: research export --confirm-privacy-review --note "<privacy review note>"')
+    if (actorId !== config.owner) fail(`Research exports require the configured owner (${config.owner}).`)
+    if (!args.includes('--confirm-privacy-review')) fail('Review the included structured data and pass --confirm-privacy-review before exporting a training dataset.')
+    const privacyNote = flag('--note')
+    if (!privacyNote?.trim()) fail('A privacy-review note is required with --note; the note text is hashed and is not included in the export.')
+    const dataset = exportGenesisResearchTrajectories({
+      runId: config.runId,
+      experiments,
+      ledger,
+      reviews: await stores.reviews.list(config.runId),
+      reviewer: founder,
+      privacyNote,
+      now: new Date(),
+    })
+    const outputDir = resolve(root, 'data', 'research')
+    const outputPath = join(outputDir, `genesis-${config.runId}-${dataset.digest.slice(0, 12)}.json`)
+    await mkdir(outputDir, { recursive: true })
+    await writeJson(outputPath, dataset)
+    console.log(`Exported ${dataset.includedCount} decided Genesis experiment trajectory/trajectories; ${dataset.excludedWithoutDecisionCount} undecided experiments excluded.`)
+    console.log(`Private research dataset: ${outputPath}`)
+    console.log('The export contains structured metric signals and outcome ratios only; no hypothesis text, raw measurements, ledger details, review text, notes, source refs, or private reasoning.')
+    console.log(`Dataset digest: ${dataset.digest}`)
+    break
+  }
   default:
-    console.log('Commands: check, experiment draft|start, measure, evaluate, decide, spend, compute, revenue, refund, status, review, reviews, check-content. See the header of packages/host/src/genesis-cli.ts.')
+    console.log('Commands: check, experiment draft|start, measure, evaluate, decide, spend, compute, revenue, refund, status, review, reviews, check-content, research export. See the header of packages/host/src/genesis-cli.ts.')
 }

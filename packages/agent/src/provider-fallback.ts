@@ -2,6 +2,7 @@ import {
   getMode,
   languageModelForId,
   modelForRole,
+  resolveId,
   routeForRole,
   type QuicksilverModelRole,
 } from './models.ts'
@@ -25,7 +26,7 @@ export function isTransientProviderFailure(error: unknown): boolean {
  */
 export async function withMeasuredProviderFallback<T>(
   role: QuicksilverModelRole,
-  invoke: (model: LanguageModel) => Promise<T>,
+  invoke: (model: LanguageModel, selectedModelId: string) => Promise<T>,
 ): Promise<T> {
   const override = process.env[`QUICKSILVER_${role.toUpperCase()}_MODEL`]
   const route = override ? null : routeForRole(role)
@@ -38,7 +39,7 @@ export async function withMeasuredProviderFallback<T>(
     const modelId = modelIds[index]
     try {
       const model = index === 0 ? modelForRole(role) : languageModelForId(modelId!, getMode())
-      return await invoke(model)
+      return await invoke(model, modelId ?? resolveId(role, getMode()))
     } catch (error) {
       lastError = error
       if (!isTransientProviderFailure(error) || index === modelIds.length - 1) throw error

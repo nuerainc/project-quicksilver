@@ -230,7 +230,7 @@ Measure P-064 parsing, P-065 choice agreement, and P-066 question quality during
 
 1. Define versioned manifests for research, offer, content, outreach, sales, fulfillment, finance, memory, evaluator, router, and supervisor roles required by scope.
 2. Give each manifest task/data/tool/capability/impact/budget permissions; agents cannot approve, execute, grant autonomy, alter policy, or change human values.
-3. Implement spawn/fund/shrink/retire department proposals and unit economics (P-071).
+3. ~~Implement spawn/fund/shrink/retire department proposals and unit economics (P-071).~~ Kernel and Operate CLI proposal/decision foundation plus a founder-only, atomic Sanity department status/budget executor are covered by `department-economics.test.ts`, `operate.test.ts`, and `department-executor.test.ts`. P-071 still needs attributable period evidence and a live ledger/pilot; P-095 still needs general workflow/tool executors and operational evidence.
 4. Implement required business agent family (P-072) and bounded loops (P-073).
 
 ### Executor
@@ -241,7 +241,7 @@ Measure P-064 parsing, P-065 choice agreement, and P-066 question quality during
 4. Record effect receipt, provider hash, retries, outcome, compensation/rollback, and actor.
 5. Do not automatically retry an effect unless provider idempotency is proven.
 6. Test duplicate, stale approval, timeout, provider outage, cancellation, compensation, and failure injection.
-7. Keep unreviewed tools disabled; close P-095 before Operate can act.
+7. Keep unreviewed tools disabled; only the reviewed department metadata executor may apply approved structure. Close the remaining P-095 workflow/tool execution gap before broader Operate actions are enabled.
 
 ## 11. Phase 8 — in-scope platform baseline and connectors
 
@@ -261,7 +261,7 @@ This phase is conditional on Gate 0; a provider SDK alone is not evidence.
 - **P-027:** products/prices/payment links/orders/refunds/processor references/webhooks/reconciliation; credentials in vault, no raw card data, ledger linkage.
 - **P-028/P-088:** connector manifests, least-privilege OAuth/API keys, rotation, read/import validation, `OBSERVED` provenance, AMP refusal, malformed/injection/outage/replay/cross-tenant tests. Build only bookkeeping, payment, CRM, and email connectors required by scope.
 - **P-029/P-030:** sandboxing, no-training/data-handling decision, safe streaming if included, one governed intake for CLI/HTTP/cloud/SDK.
-- **P-031:** bounded batch runs and trajectory export of observable inputs/tools/outputs/evaluations/approvals/outcomes, excluding private reasoning; reviewed imports to Genesis priors.
+- **P-031:** bounded batch runs and trajectory export of observable inputs/tools/outputs/evaluations/approvals/outcomes, excluding private reasoning; reviewed imports to Genesis priors. A privacy-reviewed, digest-bound quantitative export of decided Genesis experiment outcomes is now implemented; batch orchestration, broader workflow trajectories, and reviewed prior import remain open.
 
 **Exit:** every scoped P-017–P-031 row has implementation, failure behavior, tests, docs, and required operational evidence.
 

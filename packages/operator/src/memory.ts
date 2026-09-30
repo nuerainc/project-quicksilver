@@ -142,6 +142,7 @@ export class SessionArchive {
 
 export type MemoryScope = 'notes' | 'user'
 export type MemoryStatus = 'active' | 'pending' | 'superseded' | 'deleted'
+export type MemorySensitivity = 'standard' | 'sensitive' | 'restricted'
 
 export interface MemoryEntry {
   id: string
@@ -150,7 +151,7 @@ export interface MemoryEntry {
   /** A person said it, or the agent inferred it. */
   kind: 'stated' | 'inferred'
   status: MemoryStatus
-  source: { by: string; runId?: string; decisionId?: string }
+  source: { by: string; runId?: string; decisionId?: string; sensitivity?: MemorySensitivity }
   at: string
   confidence: number
   retentionDays: number
@@ -245,6 +246,7 @@ function verifyMemoryExport(bundle: MemoryExportBundle): void {
     ids.add(entry.id)
     if (!['notes', 'user'].includes(entry.scope) || !['stated', 'inferred'].includes(entry.kind) || !['active', 'pending', 'superseded', 'deleted'].includes(entry.status)) throw new Error(`Memory export entry "${entry.id}" has invalid metadata.`)
     if (!entry.source || typeof entry.source.by !== 'string' || entry.sourceHash !== `sha256:${sha256(JSON.stringify(entry.source))}`) throw new Error(`Memory export entry "${entry.id}" has invalid provenance.`)
+    if (entry.source.sensitivity !== undefined && !(entry.source.sensitivity in SENSITIVITY_RANK)) throw new Error(`Memory export entry "${entry.id}" has an invalid sensitivity label.`)
     if (typeof entry.text !== 'string') throw new Error(`Memory export entry "${entry.id}" has invalid text.`)
     if (entry.status !== 'deleted' && entry.contentHash !== `sha256:${sha256(entry.text)}`) throw new Error(`Memory export entry "${entry.id}" has invalid content integrity.`)
     if (entry.status === 'deleted' ? entry.text !== '' : entry.text.length < 1 || entry.text.length > 500 || !!memoryPrivacyProblem(entry.text)) throw new Error(`Memory export entry "${entry.id}" violates memory content policy.`)
@@ -273,6 +275,21 @@ function memoryPrivacyProblem(text: string): string | null {
   return null
 }
 
+const SENSITIVITY_RANK: Readonly<Record<MemorySensitivity, number>> = Object.freeze({ standard: 0, sensitive: 1, restricted: 2 })
+
+/** Conservative classifier. Secret and regulated identifiers are rejected separately; these topics are withheld by default. */
+export function classifyMemorySensitivity(text: string): MemorySensitivity {
+  if (/\b(?:diagnos(?:is|ed)|medical|health(?:care)?|medication|prescription|therapy|bank(?:ing)?|credit|debt|salary|payroll|financial account|investment|tax return)\b/i.test(text)) return 'sensitive'
+  return 'standard'
+}
+
+function effectiveSensitivity(text: string, requested?: MemorySensitivity): MemorySensitivity {
+  const detected = classifyMemorySensitivity(text)
+  if (requested !== undefined && !(requested in SENSITIVITY_RANK)) throw new Error('Memory sensitivity must be standard, sensitive, or restricted.')
+  const declared = requested ?? 'standard'
+  return SENSITIVITY_RANK[detected] >= SENSITIVITY_RANK[declared] ? detected : declared
+}
+
 function memoryWithDefaults(input: { id: string; scope: MemoryScope; text: string; kind: 'stated' | 'inferred'; status: MemoryStatus; source: MemoryEntry['source']; at?: string; confidence?: number; retentionDays?: number; supersedesId?: string }): MemoryEntry {
   const at = input.at ?? new Date().toISOString()
   const retentionDays = input.retentionDays ?? DEFAULT_MEMORY_RETENTION_DAYS
@@ -283,7 +300,8 @@ function memoryWithDefaults(input: { id: string; scope: MemoryScope; text: strin
     confidence: input.confidence ?? (input.kind === 'stated' ? 1 : 0.5),
     retentionDays,
     expiresAt,
-    sourceHash: `sha256:${sha256(JSON.stringify(input.source))}`,
+    source: { ...input.source, sensitivity: effectiveSensitivity(input.text, input.source.sensitivity) },
+    sourceHash: `sha256:${sha256(JSON.stringify({ ...input.source, sensitivity: effectiveSensitivity(input.text, input.source.sensitivity) }))}`,
     contentHash: `sha256:${sha256(input.text)}`,
   }
 }
@@ -305,7 +323,21 @@ export class MemoryBook {
     }
     if (!Array.isArray(raw.entries)) throw new Error('Memory document is missing its entries list.')
     const entries = raw.entries.map((entry) => {
-      if (entry.sourceHash && entry.contentHash && entry.expiresAt && typeof entry.confidence === 'number' && typeof entry.retentionDays === 'number') return entry as MemoryEntry
+      if (entry.sourceHash && entry.contentHash && entry.expiresAt && typeof entry.confidence === 'number' && typeof entry.retentionDays === 'number') {
+        const complete = entry as MemoryEntry
+        // Backfill the explicit label for records written before sensitivity metadata existed.
+        if (!complete.source.sensitivity) {
+          // Validate the legacy provenance before changing its serialized shape. Otherwise a
+          // tampered legacy record could be made to look valid by recomputing the new hash.
+          const legacySourceHash = `sha256:${sha256(JSON.stringify(complete.source))}`
+          if (complete.sourceHash !== legacySourceHash) {
+            throw new Error(`Memory provenance integrity check failed for "${complete.id}".`)
+          }
+          complete.source = { ...complete.source, sensitivity: classifyMemorySensitivity(complete.text) }
+          complete.sourceHash = `sha256:${sha256(JSON.stringify(complete.source))}`
+        }
+        return complete
+      }
       return memoryWithDefaults(entry as Pick<MemoryEntry, 'id' | 'scope' | 'text' | 'kind' | 'status' | 'source'>)
     })
     let events = raw.events ?? []
@@ -407,12 +439,12 @@ export class MemoryBook {
   }
 
   /** A person adds or confirms something: active and stated. */
-  addStated(scope: MemoryScope, text: string, by: string, retentionDays = DEFAULT_MEMORY_RETENTION_DAYS): Promise<MemoryEntry> {
+  addStated(scope: MemoryScope, text: string, by: string, retentionDays = DEFAULT_MEMORY_RETENTION_DAYS, sensitivity?: MemorySensitivity): Promise<MemoryEntry> {
     return this.mutate((entries) => {
       const cleaned = text.trim()
       const privacyProblem = memoryPrivacyProblem(cleaned)
       if (!cleaned || cleaned.length > 500 || !Number.isInteger(retentionDays) || retentionDays < 1 || retentionDays > 3650 || privacyProblem) throw new Error(privacyProblem ?? 'Memory text must be 1–500 characters and retention must be 1–3,650 days.')
-      const e = memoryWithDefaults({ id: `mem-${randomBytes(5).toString('hex')}`, scope, text: cleaned, kind: 'stated', status: 'active', source: { by }, retentionDays })
+      const e = memoryWithDefaults({ id: `mem-${randomBytes(5).toString('hex')}`, scope, text: cleaned, kind: 'stated', status: 'active', source: { by, sensitivity: effectiveSensitivity(cleaned, sensitivity) }, retentionDays })
       return { entries: [...entries, e], result: e, changes: [{ action: 'created', memoryId: e.id, actorId: by, at: e.at, contentHash: e.contentHash }] }
     })
   }
@@ -422,7 +454,7 @@ export class MemoryBook {
    * person. An agent may replace or remove only inferred entries, never a
    * stated one. Refuses writes past the cap.
    */
-  agentWrite(input: { scope: MemoryScope; text: string; replaces?: string; retentionDays?: number }, source: { by: string; runId?: string; decisionId?: string }): Promise<AgentWriteResult> {
+  agentWrite(input: { scope: MemoryScope; text: string; replaces?: string; retentionDays?: number; sensitivity?: MemorySensitivity }, source: { by: string; runId?: string; decisionId?: string }): Promise<AgentWriteResult> {
     return this.mutate<AgentWriteResult>((entries) => {
       const text = input.text.trim()
       if (!text) return { entries, result: { ok: false as const, reason: 'Nothing to remember.' } }
@@ -445,7 +477,8 @@ export class MemoryBook {
         return { entries, result: { ok: false as const, reason: `The ${input.scope} memory is full (${MEMORY_CAPS[input.scope]} characters). Replace an older inferred entry that no longer matters.` } }
       }
       const id = `mem-${randomBytes(5).toString('hex')}`
-      const e = memoryWithDefaults({ id, scope: input.scope, text, kind: 'inferred', status: input.scope === 'user' ? 'pending' : 'active', source, retentionDays, ...(input.replaces ? { supersedesId: input.replaces } : {}) })
+      const sensitivity = effectiveSensitivity(text, input.sensitivity)
+      const e = memoryWithDefaults({ id, scope: input.scope, text, kind: 'inferred', status: input.scope === 'user' ? 'pending' : 'active', source: { ...source, sensitivity }, retentionDays, ...(input.replaces ? { supersedesId: input.replaces } : {}) })
       for (const old of entries.filter((entry) => entry.id === input.replaces)) changes.push({ action: 'superseded', memoryId: old.id, actorId: source.by, at: e.at, contentHash: old.contentHash })
       if (input.replaces) next = next.map((entry) => entry.id === input.replaces ? { ...entry, supersededBy: id } : entry)
       changes.push({ action: 'created', memoryId: e.id, actorId: source.by, at: e.at, contentHash: e.contentHash })
@@ -548,13 +581,15 @@ export class MemoryBook {
   }
 
   /** The frozen block injected at the start of a run: active entries only. */
-  async snapshot(): Promise<string> {
+  async snapshot(policy: { maxSensitivity?: MemorySensitivity } = {}): Promise<string> {
+    const maxSensitivity = policy.maxSensitivity ?? 'standard'
+    if (!(maxSensitivity in SENSITIVITY_RANK)) throw new Error('Memory retrieval policy has an invalid sensitivity ceiling.')
     const now = Date.now()
-    const active = (await this.all()).filter((e) => e.status === 'active' && Date.parse(e.expiresAt) > now)
+    const active = (await this.all()).filter((e) => e.status === 'active' && Date.parse(e.expiresAt) > now && SENSITIVITY_RANK[e.source.sensitivity ?? 'standard'] <= SENSITIVITY_RANK[maxSensitivity])
     const section = (scope: MemoryScope, title: string) => {
       const lines = active.filter((e) => e.scope === scope).map((e) => {
         const citation = e.source.decisionId ? `decision:${e.source.decisionId}` : e.source.runId ? `run:${e.source.runId}` : `actor:${e.source.by}`
-        return `- [${e.id}${e.kind === 'stated' ? ', stated' : ''}; citation=${citation}; source-hash=${e.sourceHash}; confidence=${e.confidence.toFixed(2)}; expires=${e.expiresAt.slice(0, 10)}] ${e.text}`
+        return `- [${e.id}${e.kind === 'stated' ? ', stated' : ''}; sensitivity=${e.source.sensitivity ?? 'standard'}; citation=${citation}; source-hash=${e.sourceHash}; confidence=${e.confidence.toFixed(2)}; expires=${e.expiresAt.slice(0, 10)}] ${e.text}`
       })
       return lines.length ? `${title}\n${lines.join('\n')}` : ''
     }
@@ -617,9 +652,9 @@ export function memoryTools(book: MemoryBook, archive: SessionArchive): Operator
   }
   const remember: OperatorTool<{ scope: MemoryScope; text: string; replaces?: string; retentionDays?: number }> = {
     name: 'remember',
-    description: 'Keep something for later runs. Notes become active at once; inferred user-profile facts wait for confirmation. Memory expires after one year by default. Never store credentials, payment-card numbers or government IDs.',
+    description: 'Keep something for later runs. Sensitive health or financial topics are automatically labeled and withheld from agent context by default. Notes become active at once; inferred user-profile facts wait for confirmation. Memory expires after one year by default. Never store credentials, payment-card numbers or government IDs.',
     tier: 'write',
-    input: z.object({ scope: z.enum(['notes', 'user']), text: z.string().min(1).max(500), replaces: z.string().optional(), retentionDays: z.number().int().min(1).max(3650).optional() }),
+    input: z.object({ scope: z.enum(['notes', 'user']), text: z.string().min(1).max(500), replaces: z.string().optional(), retentionDays: z.number().int().min(1).max(3650).optional(), sensitivity: z.enum(['standard', 'sensitive', 'restricted']).optional() }),
     summarize: (i) => `remember (${i.scope}): ${i.text.slice(0, 80)}`,
     async run(i, ctx) {
       const r = await book.agentWrite(i, { by: 'agent:operator', runId: ctx.runId })

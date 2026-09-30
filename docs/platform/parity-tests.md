@@ -25,6 +25,13 @@ included in `npm run verify` as of this checkpoint. The Go SDK checks could
 not run locally because no Go executable is installed; the duplicate-import
 fix still needs CI confirmation.
 
+Checkpoint verification on 2026-09-30: the host regression suite passed
+137/137 tests with the department executor and founder CLI path included; host
+and Studio TypeScript checks passed. The executor tests use a fake Sanity
+client. The live Nuera Sanity write credential is not available in this
+environment, so P-071/P-095 production application and the operational rows
+remain unverified.
+
 A requirement is not complete until it meets the roadmap's completion
 standard: connected to its runtime path, auditable, with defined failure
 behavior, and covered by the regression suites. Tests alone are not the
@@ -109,7 +116,7 @@ the security, observability and developer-experience groups below.
 | P-004 | Failed runs retry with backoff, then dead-letter; a run whose tool step dispatched is never retried; redrive needs an actor and a reason. | automated test | `runtime.test.ts` "Queue: failures retry with exponential backoff, then dead-letter when attempts run out", "Queue: a failed run whose tool step was dispatched is dead-lettered, never retried", "Queue: redrive needs a dead letter, an actor, and a reason, and resets the attempt budget" | covered | |
 | P-005 | Cancelling a run aborts the in-flight handler and stops at the next step boundary. | automated test | `runtime.test.ts` "Worker: cancellation requested mid-run aborts the handler signal and ends cancelled"; `packages/kernel/src/workflows/workflows.test.ts` "Runtime: a run-level signal cancels at the next step boundary and aborts the in-flight handler" | covered | |
 | P-006 | Cron schedules enqueue each slot once across restarts and replicas, catch up only the latest missed slot, and obey RBAC. | automated test | `packages/kernel/src/triggers/triggers.test.ts` "Scheduler: replicas and restarts never duplicate a slot (idempotency key per slot)", "Scheduler: after an outage only the latest missed slot runs, and only inside the catch-up window", "Scheduler: RBAC applies — a schedule without an enqueue-capable principal is refused" | covered | |
-| P-007 | Workflow graphs are validated as data: acyclic, data-only conditions, mandatory evaluation for agents, approval for side-effect tools. | automated test | `workflows.test.ts` "Graph: cycles are rejected until a bounded-loop node exists", "Condition: validator rejects code, unsupported paths, and malformed values", "Graph: governance config — agents need evaluation + id, side-effect tools need evaluation + approval" | covered | |
+| P-007 | Workflow graphs are validated as data: acyclic except for isolated bounded loops, data-only conditions, mandatory evaluation for agents, approval for side-effect tools. | automated test | `workflows.test.ts` "Graph: arbitrary graph back-edges are rejected; repeated work uses an isolated bounded-loop node", "Graph: bounded loops require bounded time, iterations, safe conditions, and a valid isolated body graph", "Condition: validator rejects code, unsupported paths, and malformed values", "Graph: governance config — agents need evaluation + id, side-effect tools need evaluation + approval" | covered | |
 | P-008 | The single-tenant host runs a configured workflow end to end under NQC evaluation and records the evaluation. | automated test | `packages/host/src/host.test.ts` "an operator starts a configured workflow; the worker runs it under NQC evaluation and records it" | covered | |
 | P-009 | The host drains in-flight runs on `SIGTERM` (up to 60 s) and aborts on a second signal. | automated test | `packages/host/src/shutdown.test.ts` covers graceful exit, second signal, timeout abort and exit failure; `main.ts` wires process signals to the tested coordinator | covered | |
 | P-010 | Host startup fails closed on an invalid config: inline secrets, trigger identities with extra roles, bad schedules, workflows outside the execution policy. | automated test | `packages/host/src/config.test.ts` "secrets can only be references, never inline values", "trigger identities must hold only the trigger role", "schedules, workflows and the execution policy are validated at startup" | covered | |
@@ -125,20 +132,20 @@ the security, observability and developer-experience groups below.
 | ID | Requirement | Verified by | Existing evidence | Status | Notes |
 |---|---|---|---|---|---|
 | P-017 | Agent runtime and models: several providers with bring-your-own keys, named agents with their own model, memory, skills and routines, and project context files. | automated test | `packages/agent/src/models.test.ts` "Mode: azure credentials select azure mode, and win over direct provider keys", "Cloud and local providers also produce spec v3 models (Claude/Ollama used to be v1)"; the agent manifest registry | partial | Providers and keys: covered. Built-in tools are read-only Sanity queries only. Per-agent memory, skills and routines, and project context files: missing |
-| P-018 | Memory: persistent memory across sessions, agent-curated memory, full-text recall with summarization, and a model of user preferences. | automated test | Operator `operator.test.ts` covers archive search, governed lifecycle, integrity, feedback, backup/restore, concurrent independent book instances, and ten concurrent writer processes; `setup.test.ts` covers collision-safe identity paths and legacy migration; `operator-cli.test.ts` verifies user-facing backup, restore, feedback, no-overwrite, and tamper refusal | partial | Implemented: exact UTF-8 identity IDs encoded as base64url, automatic migration for simple legacy IDs, manual-review refusal for ambiguous legacy paths, per-person memory books, provenance/content hashes, confidence and expiry, explicit replacement lineage, hash-chained metadata events, cited prompt snapshots, credential/ID/card refusal, deletion redaction, retention purge, legal holds, feedback aggregates (one rating per reviewer and version), CLI-mediated export/restore/feedback, and local-filesystem process locks for writes to a canonical path. Locks time out after 30 seconds and stale lock directories are reclaimed after ten minutes. Still required: sensitivity labels and policy-checked retrieval, identity-backed authorization for feedback/export/restore, and source-decision validation. Cross-process locking assumes a local filesystem with atomic directory creation; network filesystems and multi-host coordination are not established. Export bundles contain plaintext and their digest is not a signature; hash chains detect altered edits when reopened but a privileged writer can recompute them. |
+| P-018 | Memory: persistent memory across sessions, agent-curated memory, full-text recall with summarization, and a model of user preferences. | automated test | Operator `operator.test.ts` covers archive search, governed lifecycle, integrity, sensitivity-aware snapshots, feedback, backup/restore, concurrent independent book instances, and ten concurrent writer processes; `setup.test.ts` covers collision-safe identity paths and legacy migration; `operator-cli.test.ts` verifies human-token RBAC, audited allow/deny, backup, restore, feedback, no-overwrite, and tamper refusal | partial | Implemented: exact UTF-8 identity IDs encoded as base64url, automatic migration for simple legacy IDs, manual-review refusal for ambiguous legacy paths, per-person memory books, provenance/content hashes, confidence and expiry, explicit replacement lineage, hash-chained metadata events, cited prompt snapshots, automatic health/financial sensitivity labels excluded by default from agent context, stricter caller labels and explicit retrieval ceilings, credential/ID/card refusal, deletion redaction, retention purge, legal holds, feedback aggregates (one rating per reviewer and version), CLI-mediated export/restore/feedback with `memory:approve` RBAC and hash-chained authorization audit, and local-filesystem process locks for writes to a canonical path. Locks time out after 30 seconds and stale lock directories are reclaimed after ten minutes. Still required: authenticated product memory APIs and source-decision existence validation. Cross-process locking assumes a local filesystem with atomic directory creation; network filesystems and multi-host coordination are not established. Export bundles contain plaintext and their digest is not a signature; hash chains detect altered edits when reopened but a privileged writer can recompute them. |
 | P-019 | Skills: skills created from solved problems, reusable workflow templates, portable skills on an open standard. | automated test | Playbooks and workflow graphs are reusable templates (`packages/kernel/src/playbooks/playbook.test.ts` "the Onboard playbook is valid content") | partial | Skills on the SKILL.md standard, agent-written skills held for review, outcome scores: `packages/operator/src/skills.ts` (`operator.test.ts` "skills: …", M8 part 3). Needs operational evidence (skills written and reused in real runs) |
 | P-020 | Automation: scheduled jobs described in natural language, unattended agents, delivery to any channel. | automated test | P-006 (cron); P-008 (unattended worker); `packages/operator/src/automations.ts` (`automations.test.ts`, M8 part 5): plain-language schedules, time zones, channel delivery, costs, self-pausing | partial | Triggers on business metrics and events: missing. Operational evidence (automations running for weeks): missing |
 | P-021 | Delegation: isolated subagents, scripted pipelines, batch runs. | automated test | `workflows.test.ts` "Runtime: independent agents run concurrently up to the limit and all results reach the output" | partial | Pipelines and bounded batches exist. No isolation per subagent. Departments managed by unit economics: missing |
 | P-022 | Channels: messaging platforms, email, SMS and voice with one memory across channels; customer-facing channels pass WAES review. | automated test, operational evidence | `packages/operator/src/channels` (`channels.test.ts`, M8 part 4): Telegram, Slack, Discord, SMS and email adapters; pairing, allowlists, one memory per person, approvals in the chat | partial | More platforms (WhatsApp, Signal, Teams…), voice, customer-facing channels with WAES review, and operational evidence: missing |
 | P-023 | Compute: an always-on workspace, sandboxed backends, desktop and remote machine control; an isolated workspace per venture and client. | operational evidence | Sandboxed backends: `packages/operator` local and Docker sandboxes, `operator.test.ts` "sandbox: …", "docker sandbox: …" (M8 part 1); hosting templates (P-014) | partial | Always-on workspace, remote and desktop control, per-venture workspaces: M8 |
-| P-024 | Web and browser: search, deep research, browser automation including logged-in sites. | — | — | missing | |
+| P-024 | Web and browser: search, deep research, browser automation including logged-in sites. | automated test, operational evidence | `packages/operator/src/web-search.ts` Brave public web search provider, read-only `web_search` and bounded multi-query `deep_research` evidence tools; `web-search.test.ts` covers citation normalization/deduplication, query coverage, partial failures, key handling, limits, error redaction, timeout and cancellation | partial | Public web search and bounded evidence gathering are implemented; source-page retrieval, durable research reports and browser automation (especially authenticated browser sessions) remain missing. Live provider evidence needs `BRAVE_SEARCH_API_KEY`. |
 | P-025 | Media: image, video, speech, transcription, diagrams, image understanding. | — | — | missing | |
 | P-026 | Hosting: sites, apps, services, custom domains and version history; experiment pages created and torn down per experiment. | — | — | missing | The host templates host Quicksilver itself, not experiment pages |
 | P-027 | Commerce: payments, products, prices, payment links and orders, feeding the finance layer. | — | The money ledger records money that already moved (P-078) | missing | Nothing takes or makes payments |
 | P-028 | Integrations: MCP client and server, an app catalog, office and productivity tools; Onboard connectors write `OBSERVED` values. | automated test | MCP server: `packages/host/src/mcp-tasks.test.ts` "MCP tool calls return the same results as the HTTP API"; MCP client: the Sanity Context MCP path (`contracts.test.ts`); CSV connector: P-083 | partial | App catalog and office tools: missing. Live connectors: P-088 |
 | P-029 | Governance and security: command approval, sandboxing, behavior rules, per-agent permissions, no training on user data. | automated test, manual check | Approval and per-agent permissions: P-030 to P-037; behavior rules: policies (P-034) | partial | Command approval and sandboxing now in `packages/operator` (`operator.test.ts` "policy: …", "gate: …", "loop: approvals …"). "No training on user data" is a model-provider term to confirm (manual check, founder decision) |
-| P-030 | Interfaces: desktop, CLI, cloud, API with streaming, open-source option; one intent entry point that selects mode and autonomy depth. | automated test | CLI (P-117), HTTP API (host tests), the console, the intent entry point (P-053) | partial | No desktop app; no streaming API; the repository carries an MIT license |
-| P-031 | Research tooling: batch runs and trajectory export for training; experiment logs used as priors for Genesis. | — | Decision export (`npm run onboard -- decisions --export json`) is not a trajectory export | missing | |
+| P-030 | Interfaces: desktop, CLI, cloud, API with streaming, open-source option; one intent entry point that selects mode and autonomy depth. | automated test | CLI (P-117), HTTP API (host tests), the console and P-053 intent entry point; the global chat now offers Ask (read-only `/api/query`) and Plan (NQC-governed `/api/plan`) modes, with proposal review routed to `/decisions`; `apps/web/lib/chat-request.test.ts` checks each mode's API contract | partial | No desktop app or streaming API. The chat can create governed proposals but does not approve or execute them; those stay in the existing decision workflow |
+| P-031 | Research tooling: batch runs and trajectory export for training; experiment logs used as priors for Genesis. | `node --experimental-strip-types --no-warnings --test packages/host/src/genesis-research.test.ts` | `genesis research export` projects decided Genesis experiments into a digest-bound structured trajectory dataset; export is owner-only, requires explicit privacy confirmation, verifies the ledger, omits free text/raw measurements/source refs/transaction details/private reasoning, and excludes undecided experiments | partial | No general batch-run service, tool/output trajectory export, or reviewed import of trajectory priors back into Genesis; the bounded quantitative export is a foundation only |
 
 ### B. Layer 1: NQC Kernel
 
@@ -162,7 +169,7 @@ the security, observability and developer-experience groups below.
 | P-047 | The MCP task server gives the same results as the HTTP API and has no approving tool. | automated test | `mcp-tasks.test.ts` "the tools: five, none approves, and each says the kernel decides and a human approves in the console", "MCP tool calls return the same results as the HTTP API" | covered | |
 | P-048 | The seed policies carry structured effects and fail closed on unknown exposure. | automated test | `apps/studio/seed/policies.test.ts` "Budget 3 requires approval above $50,000 and fails closed when exposure is unknown", "every live seed policy has a structured effect, so live decisions use the resolver" | covered | Threat model T-40: the planner can report an exposure of 0 |
 | P-049 | Company-model queries are parameterized and fetch everything version and scope resolution need. | automated test | `packages/kernel/src/model-document.test.ts` "Queries are parameterized and project the M7 fields", "End to end from documents: ancestor-scope policy, lineage sibling, requirements and the snapshot ids" | covered | |
-| P-050 | Model routing uses measured profiles and feeds the actual dispatch. | automated test | `nqc.test.ts` routing selector tests; `packages/agent/src/models.test.ts` measured-profile planner dispatch, explicit override, fail-closed constraint, and environment validation regressions | partial | Measured profiles now feed planner/reviewer dispatch through `QUICKSILVER_ROUTING_CONFIG`; explicit per-role overrides remain authoritative. Profiles are static process configuration, not learned from outcomes; provider-failure retries/fallbacks and persistent performance history remain open. |
+| P-050 | Model routing uses measured profiles and feeds the actual dispatch. | automated test | `nqc.test.ts` routing selector tests; `packages/agent/src/models.test.ts` measured-profile planner dispatch, explicit override, fail-closed constraint, and environment validation regressions; `provider-fallback.test.ts` checks transient-only measured alternatives and verifies live planner, company-query, and reviewer calls use that path | partial | Measured profiles feed live planner/query/reviewer dispatch, with ordered eligible fallbacks only for transient provider failures; explicit per-role overrides remain authoritative. Profiles are static process configuration, not learned from outcomes; persistent performance history remains open. |
 | P-051 | The reasoning stress harness is deterministic and scores only final answers. | automated test | `nqc.test.ts` "Stress: challenges are deterministic and cycle through all four categories", "Stress: rubrics accept correct final answers and reject traps" | covered | |
 
 ### C. Layer 2: Aura (intent)
@@ -193,9 +200,9 @@ the security, observability and developer-experience groups below.
 | P-068 | Publishing a playbook needs a human supervisor who is not the author and pins the content digest; a run refuses changed content. | automated test | `playbook.test.ts` "publishing needs a human supervisor who is not the author, and pins the digest", "a run refuses a playbook whose content changed after it started" | covered | |
 | P-069 | Stage transitions advance only when facts allow, with thresholds fixed in advance. | automated test | `playbook.test.ts` "a run needs the required variables, then advances only when facts allow", "metrics are judged against thresholds fixed in advance, in the right direction" | covered | |
 | P-070 | Shadow mode never executes, and only a human judges. | automated test | `packages/kernel/src/playbooks/shadow.test.ts` "nothing in shadow mode executes, and only a human judges"; `shadow-api.test.ts` "recommendations are recorded with the kernel verdict and a prediction, and never executed" | covered | |
-| P-071 | The running playbooks spawn, fund, shrink and retire departments through kernel proposals. | — | — | missing | Product section 5.4 |
-| P-072 | A business agent family (research, offer, content, outreach, sales, fulfillment, finance) exists, each defined by a manifest. | — | Only the planner, reviewer, query, intent and shadow agents | missing | |
-| P-073 | Bounded loops run inside workflow graphs with iteration and time budgets. | — | Cycles are refused; loops run at the process level | missing | |
+| P-071 | The running playbooks spawn, fund, shrink and retire departments through kernel proposals. | kernel and Operate CLI regression tests | `department-economics.test.ts` covers all four actions, maintain/no-op cases, owner-pinned thresholds, evidence/sample gates, deterministic capital ceilings, proposal digests and independent founder decisions; `department-executor.test.ts` verifies approved changes and audit records; `packages/host/src/operate.test.ts` exercises proposal persistence and founder approval through `operate departments propose/decide` | partial | The reviewed Sanity executor now applies founder-approved structural/budget metadata changes atomically and records immutable audit evidence. P-071 remains partial: the economics evidence still does not normalize department attribution or independently prove each qualifying accounting period, and live ledger/pilot evidence is outstanding. This does not transfer or disburse funds. |
+| P-072 | A business agent family (research, offer, content, outreach, sales, fulfillment, finance) exists, each defined by a manifest. | automated tests | Kernel `BUILT_IN_AGENT_MANIFESTS` plus `packages/agent/src/business-agents.ts`; `business-agents.test.ts` verifies all seven identities, specialty, NQC registration, proposal-only authority, moderate impact ceiling, evaluation requirement, strict bounded output/input schemas, and read-only context usage | covered | These workers produce evaluated proposals; they do not perform the external business actions they recommend. Live provider/MCP credentials and domain integrations remain operational requirements for exercising them against a company. |
+| P-073 | Bounded loops run inside workflow graphs with iteration and time budgets. | automated test | `workflows.test.ts` "Graph: bounded loops require bounded time, iterations, safe conditions, and a valid isolated body graph", "Runtime: bounded loop carries state across iterations and records an inspectable trace", "Runtime: bounded loop fails closed when its condition still requests work at the iteration limit", "Runtime: bounded loop enforces its wall-clock budget and aborts the running iteration", "Runtime: caller cancellation aborts an active bounded-loop iteration and stays cancelled", "Runtime: every bounded-loop side-effect iteration repeats kernel authorization before dispatch"; `workflow-page-usability.test.ts` "workflow editor provides bounded-loop authoring with validated non-recursive body graphs" | covered | Isolated loop body is a validated DAG; nested loops are rejected. Each iteration repeats normal evaluator, approval, and signed authorization gates. Runtime remains in-process; hosted queue execution and operational evidence are separate requirements. |
 
 ### E. Genesis mode
 
@@ -232,7 +239,7 @@ the security, observability and developer-experience groups below.
 | P-092 | The surplus split tops up the reserve first and caps the experiment pool. | automated test | `operate.test.ts` (kernel) "reinvestment: surplus is revenue minus spend and compute, net of refunds; reserve is topped up first", "reinvestment: the experiment pool is capped by maxExperimentUsd; amounts are in cents" | covered | |
 | P-093 | Operate experiments stay inside the approved pool and the cap; business spend always needs the founder. | automated test | `operate.test.ts` (kernel) "experiments: bounded by the approved pool and by maxExperimentUsd", "spend: experiment spend is refused over the pool; business spend always needs the founder" | covered | |
 | P-094 | A task runs on its own only at `act-within-limits`, or after a human approves at `act-with-approval` or above. | automated test | `tasks.test.ts` "recommendation only unless the department acts within limits; then the existing run queue carries it out", "an approved task stays queued for a human below act-with-approval, or with no workflow" | covered | |
-| P-095 | Effectful executors exist behind the kernel and approval. | — | Host workflows are read-only | missing | Required before Operate can act beyond reading |
+| P-095 | Effectful executors exist behind the kernel and approval. | host executor regression tests | `packages/host/src/department-executor.test.ts` exercises exact proposal/approval binding, owner-only execution, stale-state refusal, atomic mutation failure, idempotent retry, audit creation, and the public challenge project guard | partial | A dedicated-Sanity executor exists for internal department status/budget metadata only, invoked by the founder-only `operate departments apply` command after rechecking the current approved plan. General workflow/tool executors, API path, dedicated Sanity write credentials, and live operational evidence remain open; no money transfer or external tool action is implemented. |
 | P-096 | **Operational:** at least one full Operate period on Nuera with an approved plan, every action inside its department's effective autonomy, and every dollar traced. | operational evidence | [Operate](operate.md) | needs operational evidence | Criteria in section 5.3. Starts after the Onboard pilot and the Genesis run |
 
 ### S. Security
@@ -261,7 +268,7 @@ the security, observability and developer-experience groups below.
 | P-111 | Logs are one JSON object per line, with levels and bindings. | automated test | `observability.test.ts` "logs are one JSON object per line with bindings and levels", "redact handles cycles and depth" | covered | |
 | P-112 | Metrics render in Prometheus format with bounded labels and need `audit:read` unless configured public. | automated test | `observability.test.ts` "metrics render Prometheus text with escaped labels, histograms and collectors"; `host.test.ts` "metrics need audit:read unless configured public", "signed webhooks start runs; bad signatures are refused and counted" | covered | |
 | P-113 | Access decisions are kept in a durable audit store. | automated test | Web: `authorization-audit-store.test.ts` verifies durable Sanity append-before-action; host/kernel: `authorization-audit.test.ts` and `identity.test.ts` verify fsynced hash-chained replay/tamper detection and fail-closed authorization | covered | Host JSONL integrity assumes durable mounted storage and one writer per path; a privileged operator replacing both log and checkpoint is outside its threat boundary. Not a compliance attestation. |
-| P-114 | Traces, dashboards and alerts cover runs, decisions, tool calls, model usage and cost. | — | — | missing | |
+| P-114 | Traces, dashboards and alerts cover runs, decisions, tool calls, model usage and cost. | automated test | `apps/web/lib/telemetry.test.ts` covers metadata-only trace construction, nullable provider usage and measured-rate cost estimates, alert rules and fail-closed persistence; `apps/web/lib/app-routes.test.ts` enumerates and authorizes the trace endpoint; OpenAPI route drift check covers `GET /api/monitoring/traces` | partial | Web query, plan and read-only workflow paths write tenant-scoped request/model/tool/evaluation/decision spans; `/monitoring/traces` shows a bounded sample and evaluates in-app alerts. Host queue/schedule/webhook traces, external alert delivery, complete history/retention, live-provider evidence, and provider-billed cost reconciliation remain open. Cost is estimated only when an operator supplies measured per-model rates. |
 
 ### X. Developer experience
 
@@ -280,7 +287,7 @@ the security, observability and developer-experience groups below.
 | ID | Requirement | Verified by | Existing evidence | Status | Notes |
 |---|---|---|---|---|---|
 | P-122 | The existing Nuera Quicksilver UI is mobile-first, clean and easy to navigate, with responsive layouts and controls that adapt across viewport sizes, aspect ratios and portrait/landscape orientations; all existing capabilities remain accessible. | automated viewport checks, manual usability review | Responsive grouped navigation; business operations dashboard; preserved objective planner at `/planning`; accessible decision, workflow, agent and monitoring workspaces; full-width workflow map auto-fits through `ResizeObserver`; viewports and typography use responsive breakpoints; covered by `responsive-shell.test.ts`, `home-experience.test.ts`, `workspace-pages.test.ts`, and `workflow-page-usability.test.ts` | partial | Run rendered-app checks at representative phone/tablet/desktop widths and portrait/landscape, and manually verify no clipping/overlap, touch targets, and access to every capability. Automated helper/static tests are not a substitute for those checks. |
-| P-123 | The platform provides an exceptionally usable end-to-end experience: people can discover the right capability, understand current state and next steps, complete common tasks with clear guidance, and recover from errors without hidden controls or unexplained system behavior. | task-based usability tests, accessibility checks, manual review | Root page is an operating cockpit with authenticated decision, metric, experiment, workflow and separately finance-authorized ledger summaries; quick actions link to the planning console and task workspaces; explicit loading, empty, permission and source-error states; preserved planner at `/planning`; floating read-only agent chat; decision review progressively discloses evidence and approval basis; covered by `home-experience.test.ts`, `business-dashboard.test.ts`, `agent-chat-widget.test.ts`, `agent-review.test.ts`, `responsive-shell.test.ts`, and `workflow-page-usability.test.ts` | partial | Complete task-based usability sessions and keyboard/screen-reader review, including initial sign-in, plan/review, publish/run workflow, recover from authorization/data errors, and supervisor-only finance access. |
+| P-123 | The platform provides an exceptionally usable end-to-end experience: people can discover the right capability, understand current state and next steps, complete common tasks with clear guidance, and recover from errors without hidden controls or unexplained system behavior. | task-based usability tests, accessibility checks, manual review | Root page is an operating cockpit with authenticated decision, metric, experiment, workflow and separately finance-authorized ledger summaries; quick actions link to the planning console and task workspaces; explicit loading, empty, permission and source-error states; preserved planner at `/planning`; global chat offers read-only Ask and governed Plan modes and links saved proposals to the decision log; decision review progressively discloses evidence and approval basis; covered by `home-experience.test.ts`, `business-dashboard.test.ts`, `agent-chat-widget.test.ts`, `chat-request.test.ts`, `agent-review.test.ts`, `responsive-shell.test.ts`, and `workflow-page-usability.test.ts` | partial | Complete task-based usability sessions and keyboard/screen-reader review, including initial sign-in, chat plan/review, publish/run workflow, recover from authorization/data errors, and supervisor-only finance access. |
 
 ## 4. Every test file, mapped
 
@@ -292,11 +299,13 @@ Each test file maps to at least one requirement.
 | `apps/web/lib/agent-review.test.ts` | 1 | P-123 |
 | `apps/web/lib/responsive-shell.test.ts` | 3 | P-122, P-123 |
 | `apps/web/lib/nqc-approval.test.ts` | 6 | P-039 |
+| `apps/web/lib/telemetry.test.ts` | 6 | P-114 |
+| `apps/web/lib/monitoring-traces.test.ts` | 2 | P-114 |
 | `apps/web/lib/workflow-layout.test.ts` | 3 | P-120, P-122, P-123 |
 | `packages/agent/src/choice-prompts.test.ts` | 7 | P-059 |
 | `packages/agent/src/contracts.test.ts` | 7 | P-013, P-015, P-057 |
 | `packages/agent/src/decision-predictor.test.ts` | 2 | P-063 |
-| `packages/agent/src/models.test.ts` | 14 | P-017, P-050 |
+| `packages/agent/src/models.test.ts` | 15 | P-017, P-050, P-114 |
 | `packages/agent/src/schemas.test.ts` | 1 | P-013 (strict structured output) |
 | `packages/agent/src/shadow-agent.test.ts` | 2 | P-086 |
 | `packages/aura/src/aura.test.ts` | 14 | P-052, P-053, P-054, P-057, P-064 |
@@ -321,12 +330,14 @@ Each test file maps to at least one requirement.
 | `packages/host/src/decisions-api.test.ts` | 3 | P-061, P-097 |
 | `packages/host/src/genesis-api.test.ts` | 10 | P-075, P-076, P-077, P-078, P-080, P-097, P-117 |
 | `packages/host/src/genesis-cli.test.ts` | 1 | P-117 |
+| `packages/host/src/genesis-research.test.ts` | 4 | P-031 |
 | `packages/host/src/genesis-reviews.test.ts` | 5 | P-044, P-080, P-103, P-117 |
 | `packages/host/src/host.test.ts` | 12 | P-008, P-011, P-097, P-100, P-102, P-106, P-112 |
 | `packages/host/src/intent-api.test.ts` | 4 | P-053, P-055, P-097 |
 | `packages/host/src/mcp-tasks.test.ts` | 4 | P-028, P-047 |
 | `packages/host/src/observability.test.ts` | 5 | P-100, P-111, P-112 |
-| `packages/host/src/operate.test.ts` | 3 | P-090, P-091, P-117 |
+| `packages/host/src/operate.test.ts` | 4 | P-071, P-090, P-091, P-117 |
+| `packages/host/src/department-executor.test.ts` | 3 | P-071, P-095 |
 | `packages/host/src/onboard-cli.test.ts` | 1 | P-117 |
 | `packages/host/src/sanity-stores.test.ts` | 12 | P-015, P-078, P-103 |
 | `packages/host/src/shadow-api.test.ts` | 5 | P-058, P-070, P-086 |
@@ -345,6 +356,7 @@ Each test file maps to at least one requirement.
 | `packages/kernel/src/nqc/nqc.test.ts` | 35 | P-012, P-013, P-018, P-033, P-041, P-042, P-050, P-051 |
 | `packages/kernel/src/playbooks/economics.test.ts` | 9 | P-043, P-044, P-074, P-075, P-076, P-077, P-078 |
 | `packages/kernel/src/playbooks/operate.test.ts` | 14 | P-090, P-091, P-092, P-093 |
+| `packages/kernel/src/playbooks/department-economics.test.ts` | 6 | P-071 |
 | `packages/kernel/src/playbooks/playbook.test.ts` | 8 | P-019, P-067, P-068, P-069, P-082 |
 | `packages/kernel/src/playbooks/shadow.test.ts` | 3 | P-070, P-087 |
 | `packages/kernel/src/policy-versioning.test.ts` | 24 | P-035 |
@@ -353,10 +365,11 @@ Each test file maps to at least one requirement.
 | `packages/kernel/src/runtime/store-contract.test.ts` | 7 | P-002 |
 | `packages/kernel/src/simulation/simulation.test.ts` | 10 | P-016, P-087 |
 | `packages/kernel/src/triggers/triggers.test.ts` | 20 | P-006, P-099 |
-| `packages/kernel/src/workflows/workflows.test.ts` | 37 | P-005, P-007, P-012, P-021 |
-| `packages/operator/src/operator.test.ts` | 31 | P-018, P-019, P-023, P-029 |
+| `packages/kernel/src/workflows/workflows.test.ts` | 45 | P-005, P-007, P-012, P-021, P-073 |
+| `packages/operator/src/operator.test.ts` | 33 | P-018, P-019, P-023, P-029 |
 | `packages/operator/src/operator-cli.test.ts` | 1 | P-018 |
 | `packages/operator/src/setup.test.ts` | 3 | P-018 |
+| `packages/operator/src/web-search.test.ts` | 5 | P-024 |
 
 Direct command-parsing tests now cover Onboard, Genesis, Operate, Tasks and
 What-if. Complete CLI/API authorization, validation and persistence parity
@@ -420,28 +433,35 @@ the provider's own hand-over.
 
 | Status | Count |
 |---|---|
-| covered | 83 |
-| partial | 17 |
-| missing | 15 |
-| needs operational evidence | 8 |
+| covered | 84 |
+| partial | 19 |
+| missing | 11 |
+| needs operational evidence | 9 |
 | **Total** | **123** |
 
-As of 2026-09-30, the matrix has 15 missing and 17 partial requirements.
+As of 2026-09-30, the matrix has 11 missing, 19 partial, and 9 requirements
+that need operational evidence.
 P-039 and P-113 moved to covered with execution-binding regression tests and
 durable web/host authorization audit stores. P-115, P-116, and P-120 moved to
 covered with SDK contract suites and workflow layout regression coverage.
 P-018 now has tests for restart recall, cited memory, supersession history,
-tamper detection, sensitive-data refusal, retention redaction, legal holds,
-reviewer feedback, and integrity-checked export/restore through the CLI;
-tenant/domain isolation, identity-backed authorization, and cross-process
-writes remain unfinished. P-118 now has a versioned
+tamper detection (including verification before legacy provenance migration),
+sensitivity-aware retrieval, sensitive-data refusal, retention redaction, legal
+holds, reviewer feedback, and integrity-checked export/restore through the CLI;
+CLI operations now require human-token RBAC with audited decisions. Authenticated
+product APIs, tenant/domain isolation, and source-decision validation remain
+unfinished. P-024 now has tested read-only Brave search and bounded multi-query
+evidence gathering; source retrieval, durable reports, logged-in browsing and
+live-provider evidence remain open. P-118 now has a versioned
 pre-1.0 OpenAPI contract and route/method drift test, but stable 1.0.0
 semantics remain unfinished. P-119's agent draft/review/publish API is present;
 its former “API absent” gap is corrected, while the local Go toolchain and CI
 evidence for the current working tree remain outstanding.
-P-024 through P-027 and P-031 remain missing; these represent web/browser,
-media, experiment hosting, commerce, and research tooling. Eight rows still
-require operational evidence; three are Aura-ladder rows that do not gate
+P-025 through P-027 remain missing; these represent media, experiment hosting,
+and commerce. P-031 now has a privacy-reviewed quantitative Genesis experiment
+trajectory export but remains partial pending general batch runs, broader
+observable workflow trajectories, and a reviewed import into Genesis priors.
+Eight rows still require operational evidence; three are Aura-ladder rows that do not gate
 Quicksilver releases. P-122 and P-123 extend V1.0.0 with responsive interface
 and end-to-end usability acceptance criteria.
 

@@ -10,6 +10,7 @@ export interface EvaluatorToolCall {
   name: string
   succeeded: boolean
   error?: string
+  durationMs?: number
 }
 
 export interface EvaluationInput {

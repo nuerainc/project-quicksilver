@@ -8,6 +8,7 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
 
+import { generateToken } from '@quicksilver/kernel/identity/tokens'
 import { MemoryBook } from './memory.ts'
 
 const exec = promisify(execFile)
@@ -16,9 +17,26 @@ const cli = join(repo, 'packages', 'operator', 'src', 'cli.ts')
 
 test('Operator CLI exports, restores, and records reviewer feedback without overwriting backups', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'qs-operator-cli-memory-'))
-  const env = { ...process.env, INIT_CWD: dir, QUICKSILVER_OPERATOR_APPROVER: 'memory-reviewer' }
-  const run = (...args: string[]) => exec(process.execPath, ['--experimental-strip-types', '--no-warnings', cli, ...args], { cwd: repo, env })
+  const credential = generateToken()
+  const developerCredential = generateToken()
+  const { verifyAudit } = await import('./audit.ts')
+  const env = {
+    ...process.env,
+    INIT_CWD: dir,
+    QUICKSILVER_OPERATOR_APPROVER: 'forged-supervisor',
+    QUICKSILVER_OPERATOR_TOKEN: credential.token,
+    QUICKSILVER_TENANT_ID: 'default',
+    QUICKSILVER_PRINCIPALS: JSON.stringify([
+      { id: 'user:memory-reviewer', kind: 'human', tenantId: 'default', roles: ['supervisor'], tokenDigest: credential.tokenDigest },
+      { id: 'user:developer', kind: 'human', tenantId: 'default', roles: ['developer'], tokenDigest: developerCredential.tokenDigest },
+    ]),
+  }
+  const runWith = (runEnv: NodeJS.ProcessEnv, ...args: string[]) => exec(process.execPath, ['--experimental-strip-types', '--no-warnings', cli, ...args], { cwd: repo, env: runEnv })
+  const run = (...args: string[]) => runWith(env, ...args)
   try {
+    await assert.rejects(runWith({ ...env, QUICKSILVER_OPERATOR_TOKEN: 'invalid-credential' }, '--workspace', 'source', '--memory', 'export', '--memory-file', 'denied.json'), /Memory operation denied/)
+    await assert.rejects(runWith({ ...env, QUICKSILVER_OPERATOR_TOKEN: developerCredential.token }, '--workspace', 'source', '--memory', 'export', '--memory-file', 'denied-by-role.json'), /Memory operation denied/)
+    await assert.rejects(runWith({ ...env, QUICKSILVER_PRINCIPALS: '{invalid' }, '--workspace', 'source', '--memory', 'export', '--memory-file', 'denied-by-config.json'), /Memory operation denied/)
     const source = new MemoryBook(join(dir, 'source', '.qs-memory', 'memory.json'))
     const stated = await source.addStated('user', 'Prefers concise rollout reports.', 'person')
     const note = await source.agentWrite({ scope: 'notes', text: 'Check the health endpoint after rollout.' }, { by: 'agent:operator', runId: 'run-7' })
@@ -44,6 +62,11 @@ test('Operator CLI exports, restores, and records reviewer feedback without over
     const badBackup = JSON.parse(await readFile(backup, 'utf8')) as { digest: string }
     await writeFile(join(dir, 'tampered.json'), JSON.stringify({ ...badBackup, digest: 'sha256:tampered' }))
     await assert.rejects(run('--workspace', 'tampered', '--memory', 'restore', '--memory-file', 'tampered.json'), /digest does not match/)
+    const audit = await readFile(join(dir, 'source', '.qs-audit', 'operator.jsonl'), 'utf8')
+    assert.match(audit, /memory\.authorization/)
+    assert.match(audit, /"allowed":false/)
+    assert.match(audit, /user:memory-reviewer/)
+    assert.equal(verifyAudit(audit.trim().split('\n').map((line) => JSON.parse(line))).valid, true, 'memory authorization decisions are recorded in the verified audit chain')
   } finally {
     await rm(dir, { recursive: true, force: true })
   }

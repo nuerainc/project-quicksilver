@@ -72,6 +72,19 @@
 .references p span { display: block; color: #9eafc1; font-size: 0.69rem; }
 .evaluation { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.75rem; }
 .evaluation span { border: 1px solid #354b61; border-radius: 999px; background: #0d1a2a; padding: 0.2rem 0.55rem; color: #acbdce; font-size: 0.64rem; }
+.planMeta { margin: 0.55rem 0 0; color: #aebfd0; font-size: 0.74rem; }
+.planActions { display: grid; gap: 0.55rem; margin: 0.8rem 0; padding-inline-start: 1.3rem; }
+.planActions li { padding-inline-start: 0.1rem; }
+.planActions strong, .planActions span, .planActions small { display: block; }
+.planActions span { margin-block-start: 0.2rem; color: #9ecfc9; font-size: 0.69rem; }
+.planActions small { margin-block-start: 0.25rem; color: #c7b78e; font-size: 0.69rem; }
+.reviewPlan { display: inline-flex; min-height: 2.5rem; align-items: center; gap: 0.5rem; margin-block-start: 0.35rem; border: 1px solid #427a79; border-radius: 0.65rem; background: #173439; padding: 0.5rem 0.75rem; color: #b7ece3; font-size: 0.75rem; font-weight: 650; text-decoration: none; }
+.reviewPlan:hover { background: #1b4447; }
+.modeSwitch { grid-column: 1 / -1; display: inline-flex; justify-self: start; gap: 0.2rem; border: 1px solid #2a3f55; border-radius: 0.7rem; background: #111e30; padding: 0.2rem; }
+.modeSwitch button { min-height: 2.15rem; border: 0; border-radius: 0.5rem; background: transparent; padding: 0.4rem 0.8rem; color: #aebfd0; font: 600 0.75rem/1 var(--font-sans); cursor: pointer; }
+.modeSwitch button[aria-pressed="true"] { background: #28434c; color: #c8f4ed; }
+.modeSwitch button:focus-visible, .reviewPlan:focus-visible { outline: 2px solid #a8e4ff; outline-offset: 2px; }
+.modeSwitch button:disabled { cursor: wait; opacity: 0.65; }
 .thinking { align-self: start; margin: 0; border-radius: 0.7rem; background: #142237; padding: 0.6rem 0.75rem; color: #b9c7d5; font-size: 0.75rem; }
 .error { margin: 0; border: 1px solid #74414c; border-radius: 0.7rem; background: #321d27; padding: 0.65rem 0.75rem; color: #ffd2d5; font-size: 0.75rem; line-height: 1.5; overflow-wrap: anywhere; }
 

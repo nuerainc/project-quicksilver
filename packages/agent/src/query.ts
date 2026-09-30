@@ -20,9 +20,11 @@ import { z } from 'zod'
 
 import { QUERY_SYSTEM_PROMPT } from './prompts.ts'
 import { assertAgentDispatch } from './governance.ts'
-import { getMode, isLlmConfigured, modelForRole, resolveId } from './models.ts'
+import { getMode, isLlmConfigured, resolveId } from './models.ts'
 import type { EvaluatorToolCall } from '@quicksilver/kernel'
 import type { NueraQuicksilverAgent } from './contracts.ts'
+import { withMeasuredProviderFallback } from './provider-fallback.ts'
+import { normalizeModelTokenUsage } from './usage.ts'
 import {
   closeAll,
   createSanityContextClients,
@@ -68,6 +70,7 @@ export type QueryResult = z.infer<typeof QueryResultSchema>
 export interface QueryAgentOutput extends QueryResult {
   toolCalls: EvaluatorToolCall[]
   modelId: string
+  usage: import('./contracts.ts').ModelTokenUsage
 }
 
 export async function queryCompany(question: string, options: { signal?: AbortSignal } = {}): Promise<QueryAgentOutput> {
@@ -89,8 +92,11 @@ export async function queryCompany(question: string, options: { signal?: AbortSi
     // The tool-call loop runs first — `stopWhen` is required, because the default
     // is a single step, which ends the run right after the first tool call —
     // then the model emits a final JSON message matching the Zod schema.
-    const result = await generateText({
-      model: modelForRole('planner'),
+    let selectedModelId = resolveId('planner', getMode())
+    const result = await withMeasuredProviderFallback('planner', (model, modelId) => {
+      selectedModelId = modelId
+      return generateText({
+      model,
       system: QUERY_SYSTEM_PROMPT,
       prompt: `Question: ${question}`,
       abortSignal: options.signal,
@@ -100,13 +106,14 @@ export async function queryCompany(question: string, options: { signal?: AbortSi
       }),
       stopWhen: stepCountIs(12),
       maxRetries: 2,
-    } as Parameters<typeof generateText>[0])
+      } as Parameters<typeof generateText>[0])
+    })
 
     const parsed = (result as unknown as { experimental_output?: QueryResult }).experimental_output
     if (!parsed) {
       throw new Error('Model did not return structured output.')
     }
-    return { ...parsed, toolCalls, modelId: resolveId('planner', getMode()) }
+    return { ...parsed, toolCalls, modelId: selectedModelId, usage: normalizeModelTokenUsage(result.totalUsage) }
   } finally {
     await closeAll(clients)
   }
@@ -122,6 +129,7 @@ export const queryQuicksilverAgent: NueraQuicksilverAgent<string, QueryAgentOutp
     return {
       output: result,
       modelId: result.modelId,
+      usage: result.usage,
       toolCalls: result.toolCalls,
       evaluationContext: result.supportingContext,
     }

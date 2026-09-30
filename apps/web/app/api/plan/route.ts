@@ -43,6 +43,7 @@
  *   }
  */
 
+import { randomUUID } from 'node:crypto'
 import { NextResponse } from 'next/server'
 import { safeErrorName } from '@/lib/safe-log'
 import { getSanityClient } from '@/lib/sanity-client'
@@ -81,6 +82,9 @@ import {
   type SanityEntityDocument,
   type SanityPolicyDocument,
 } from '@quicksilver/kernel'
+import { estimateModelCostUsd } from '@quicksilver/agent'
+import { persistTraceSpans } from '@/lib/telemetry-store'
+import type { TraceSpanInput } from '@/lib/telemetry'
 import {
   KERNEL_ACTOR,
   loadDecisionLifecycle,
@@ -292,6 +296,9 @@ export async function POST(req: Request) {
     )
   }
 
+  const traceId = randomUUID()
+  const requestSpanId = randomUUID()
+  const traceStartedAt = Date.now()
   try {
     const client = getSanityClient('write')
     // The planner runs on the standard agent contract, so its output is evaluated
@@ -303,6 +310,8 @@ export async function POST(req: Request) {
       impactLevel: 'moderate',
       signal: req.signal,
     })
+    const plannerCompletedAt = Date.now()
+    const plannerSpanId = randomUUID()
     const plan = plannerRun.output
     const now = new Date().toISOString()
     const runId = Date.now().toString(36)
@@ -315,6 +324,7 @@ export async function POST(req: Request) {
         let evaluation: EvaluationResult | null = null
         let safetyDecision: 'ALLOW' | 'BLOCK' | 'ESCALATE' | null = null
         let review: ReviewResult | null = null
+        let reviewModel: { modelId: string; usage?: { inputTokens: number | null; outputTokens: number | null; totalTokens: number | null }; startedAt: number; durationMs: number } | null = null
         let doc: ReturnType<typeof buildDecisionDoc> | null = null
 
         if (refs.actor && refs.capability) {
@@ -369,7 +379,8 @@ export async function POST(req: Request) {
           // see. A reviewer failure (bad output, provider error) must not
           // block the plan response, so reviewProposedAction() always
           // resolves (see its own fallback) rather than throwing.
-          review = (await executeGovernedAgent(reviewerQuicksilverAgent, {
+          const reviewerStartedAt = Date.now()
+          const reviewerRun = await executeGovernedAgent(reviewerQuicksilverAgent, {
             agentId: reviewerQuicksilverAgent.id,
             taskType: 'evaluation',
             impactLevel: 'low',
@@ -384,7 +395,9 @@ export async function POST(req: Request) {
             policies: refs.policies.map((p) => ({ id: p.id, name: p.name, scope: p.scope, priority: p.priority })),
             evidence: refs.evidence,
             },
-          })).output
+          })
+          review = reviewerRun.output
+          reviewModel = { modelId: reviewerRun.modelId, usage: reviewerRun.usage, startedAt: reviewerStartedAt, durationMs: Date.now() - reviewerStartedAt }
 
           doc = buildDecisionDoc({
             id: `decision-plan-${runId}-${i}`,
@@ -407,7 +420,7 @@ export async function POST(req: Request) {
           })
         }
 
-        return { action: action as ProposedAction, decision, evaluation, safetyDecision, review, refs, doc }
+        return { action: action as ProposedAction, decision, evaluation, safetyDecision, review, reviewModel, refs, doc }
       }),
     )
 
@@ -495,15 +508,62 @@ export async function POST(req: Request) {
       },
     }))
 
+    const traceCompletedAt = Date.now()
+    const decisionSpans: TraceSpanInput[] = results.flatMap((item): TraceSpanInput[] => item.safetyDecision ? [{
+      traceId, parentSpanId: requestSpanId, source: 'plan', kind: 'decision', name: 'nqc.decision',
+      status: item.safetyDecision === 'ALLOW' ? 'ok' : 'blocked', startedAt: traceCompletedAt, durationMs: 0,
+      requestedBy: requester.principalId, agentId: plannerQuicksilverAgent.id, decisionId: item.doc?._id ?? null,
+      safetyDecision: item.safetyDecision,
+    }, {
+      traceId, parentSpanId: requestSpanId, source: 'plan', kind: 'evaluation', name: 'nqc.action-evaluation',
+      status: item.safetyDecision === 'ALLOW' ? 'ok' : 'blocked', startedAt: traceCompletedAt, durationMs: 0,
+      requestedBy: requester.principalId, agentId: plannerQuicksilverAgent.id, decisionId: item.doc?._id ?? null,
+      safetyDecision: item.safetyDecision,
+    }] : [])
+    const traceSpans: TraceSpanInput[] = [
+      {
+        traceId, spanId: requestSpanId, source: 'plan', kind: 'request', name: 'plan.request', status: 'ok',
+        startedAt: traceStartedAt, durationMs: traceCompletedAt - traceStartedAt, requestedBy: requester.principalId,
+        agentId: plannerQuicksilverAgent.id,
+      },
+      {
+        traceId, spanId: plannerSpanId, parentSpanId: requestSpanId, source: 'plan', kind: 'model', name: 'plan.model', status: 'ok',
+        startedAt: traceStartedAt, durationMs: plannerCompletedAt - traceStartedAt, requestedBy: requester.principalId,
+        agentId: plannerRun.agentId, modelId: plannerRun.modelId, inputTokens: plannerRun.usage?.inputTokens ?? null,
+        outputTokens: plannerRun.usage?.outputTokens ?? null, totalTokens: plannerRun.usage?.totalTokens ?? null,
+        estimatedCostUsd: estimateModelCostUsd(plannerRun.modelId, plannerRun.usage?.totalTokens ?? null),
+      },
+      ...plan.toolCalls.map((toolCall): TraceSpanInput => ({
+        traceId, parentSpanId: plannerSpanId, source: 'plan', kind: 'tool', name: 'plan.tool',
+        status: toolCall.succeeded ? 'ok' : 'error', startedAt: Math.max(traceStartedAt, plannerCompletedAt - (toolCall.durationMs ?? 0)),
+        durationMs: toolCall.durationMs ?? 0, requestedBy: requester.principalId, agentId: plannerRun.agentId,
+        toolName: toolCall.name, toolSucceeded: toolCall.succeeded,
+      })),
+      ...results.flatMap((item): TraceSpanInput[] => item.reviewModel ? [{
+        traceId, parentSpanId: requestSpanId, source: 'plan', kind: 'model', name: 'plan.review-model', status: 'ok',
+        startedAt: item.reviewModel.startedAt, durationMs: item.reviewModel.durationMs, requestedBy: requester.principalId, agentId: reviewerQuicksilverAgent.id,
+        decisionId: item.doc?._id ?? null, modelId: item.reviewModel.modelId,
+        inputTokens: item.reviewModel.usage?.inputTokens ?? null, outputTokens: item.reviewModel.usage?.outputTokens ?? null,
+        totalTokens: item.reviewModel.usage?.totalTokens ?? null,
+        estimatedCostUsd: estimateModelCostUsd(item.reviewModel.modelId, item.reviewModel.usage?.totalTokens ?? null),
+      }] : []),
+      ...decisionSpans,
+    ]
+    const telemetry = await persistTraceSpans(traceSpans)
     return NextResponse.json({
       decomposition: plan.decomposition,
       reasoning: plan.reasoning,
       decisions,
+      telemetry: { traceId, persisted: telemetry.persisted },
     })
   } catch (err) {
     console.error('[/api/plan]', safeErrorName(err))
+    const telemetry = await persistTraceSpans([{
+      traceId, spanId: requestSpanId, source: 'plan', kind: 'request', name: 'plan.request', status: 'error',
+      startedAt: traceStartedAt, durationMs: Date.now() - traceStartedAt, requestedBy: requester.principalId,
+    }])
     return NextResponse.json(
-      { error: 'Plan failed', detail: safeErrorName(err) },
+      { error: 'Plan failed', detail: safeErrorName(err), telemetry: { traceId, persisted: telemetry.persisted } },
       { status: 500 },
     )
   }

@@ -1,6 +1,16 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { readFileSync } from 'node:fs'
 import { isTransientProviderFailure, withMeasuredProviderFallback } from './provider-fallback.ts'
+
+test('live planner and company-query model calls share measured transient fallback routing', () => {
+  const planner = readFileSync(new URL('./planner.ts', import.meta.url), 'utf8')
+  const query = readFileSync(new URL('./query.ts', import.meta.url), 'utf8')
+  assert.match(planner, /withMeasuredProviderFallback\('planner', \(model, modelId\) => \{[\s\S]*?return generateText\(/)
+  assert.match(query, /withMeasuredProviderFallback\('planner', \(model, modelId\) => \{[\s\S]*?return generateText\(/)
+  assert.doesNotMatch(planner, /modelForRole\('planner'\)/)
+  assert.doesNotMatch(query, /modelForRole\('planner'\)/)
+})
 
 test('provider fallback is limited to explicit retryable and transient HTTP failures', () => {
   assert.equal(isTransientProviderFailure({ isRetryable: true }), true)
@@ -25,13 +35,16 @@ test('measured fallback tries the selected model, then ordered eligible alternat
   ] })
   try {
     const attempted: string[] = []
-    const result = await withMeasuredProviderFallback('reviewer', async (model) => {
+    const selectedIds: string[] = []
+    const result = await withMeasuredProviderFallback('reviewer', async (model, selectedModelId) => {
       const id = (model as { modelId?: string }).modelId ?? ''
       attempted.push(id)
+      selectedIds.push(selectedModelId)
       if (attempted.length === 1) throw { statusCode: 503 }
       return id
     })
     assert.deepEqual(attempted, ['first', 'second'])
+    assert.deepEqual(selectedIds, ['first', 'second'])
     assert.equal(result, 'second')
   } finally {
     if (prior.mode === undefined) delete process.env.QUICKSILVER_MODEL_MODE

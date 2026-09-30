@@ -11,7 +11,7 @@ const consolePage = readFileSync(new URL('../app/planning/page.tsx', import.meta
 
 test('primary destinations are grouped by user task and have unique reachable routes', () => {
   assert.deepEqual(APP_NAVIGATION_GROUPS.map(({ label }) => label), ['Operate', 'Govern'])
-  assert.deepEqual(APP_NAVIGATION_DESTINATIONS.map(({ href }) => href), ['/decisions', '/planning', '/workflows', '/monitoring', '/agents'])
+  assert.deepEqual(APP_NAVIGATION_DESTINATIONS.map(({ href }) => href), ['/decisions', '/planning', '/workflows', '/monitoring', '/monitoring/traces', '/agents'])
   assert.equal(new Set(APP_NAVIGATION_DESTINATIONS.map(({ href }) => href)).size, APP_NAVIGATION_DESTINATIONS.length)
   assert.equal(activeNavigationRoute('/workflows/review', '/workflows'), true)
   assert.equal(activeNavigationRoute('/agents', '/workflows'), false)

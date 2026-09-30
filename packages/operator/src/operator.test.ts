@@ -358,6 +358,32 @@ test('memory: agents may infer but never overwrite what a person stated; profile
   assert.equal((await book.agentWrite({ scope: 'notes', text: 'x'.repeat(MEMORY_CAPS.notes) }, src)).ok, false, 'caps hold')
 })
 
+test('memory: sensitivity labels are integrity-bound and retrieval policy excludes sensitive entries by default', async () => {
+  const ws = await workspace()
+  const path = join(ws, '.qs-memory', 'memory.json')
+  const book = new MemoryBook(path)
+  const standard = await book.agentWrite({ scope: 'notes', text: 'Use the weekly release checklist.' }, { by: 'agent:operator', runId: 'run-standard' })
+  const sensitive = await book.agentWrite({ scope: 'notes', text: 'Medical diagnosis is seasonal allergies.', sensitivity: 'standard' }, { by: 'agent:operator', runId: 'run-sensitive' })
+  const restricted = await book.agentWrite({ scope: 'notes', text: 'Quarterly financial account review.', sensitivity: 'restricted' }, { by: 'agent:operator', runId: 'run-restricted' })
+  assert.ok(standard.ok && sensitive.ok && restricted.ok)
+  assert.equal(standard.entry.source.sensitivity, 'standard')
+  assert.equal(sensitive.entry.source.sensitivity, 'sensitive', 'automatic classification cannot be weakened by a caller')
+  assert.equal(restricted.entry.source.sensitivity, 'restricted', 'a caller may only increase restrictions')
+
+  const ordinaryContext = await book.snapshot()
+  assert.match(ordinaryContext, /Use the weekly release checklist/)
+  assert.doesNotMatch(ordinaryContext, /Medical diagnosis|financial account/)
+  const sensitiveContext = await book.snapshot({ maxSensitivity: 'sensitive' })
+  assert.match(sensitiveContext, /Medical diagnosis/)
+  assert.doesNotMatch(sensitiveContext, /financial account/)
+  assert.match(await book.snapshot({ maxSensitivity: 'restricted' }), /financial account/)
+  await assert.rejects(book.snapshot({ maxSensitivity: 'unknown' as never }), /invalid sensitivity ceiling/)
+
+  const reopened = new MemoryBook(path)
+  assert.equal((await reopened.all()).find((entry) => sensitive.ok && entry.id === sensitive.entry.id)?.source.sensitivity, 'sensitive')
+  await assert.rejects(new MemoryBook(join(ws, '.qs-memory', 'invalid.json')).agentWrite({ scope: 'notes', text: 'invalid label', sensitivity: 'secret' as never }, { by: 'agent:operator' }), /sensitivity must be/)
+})
+
 test('memory: supersession is cited, append-only in history, and excluded from active recall', async () => {
   const ws = await workspace()
   const path = join(ws, '.qs-memory', 'memory.json')
@@ -428,6 +454,25 @@ test('memory: altered content or provenance is detected when reopening the durab
   await assert.rejects(book.history(), /provenance integrity check failed/)
 })
 
+test('memory: legacy provenance is verified before sensitivity metadata is migrated', async () => {
+  const ws = await workspace()
+  const path = join(ws, '.qs-memory', 'memory.json')
+  const book = new MemoryBook(path)
+  const entry = await book.addStated('user', 'Prefers weekly summaries.', 'person')
+  const raw = JSON.parse(await readFile(path, 'utf8')) as { entries: Array<Record<string, any>>; events: unknown[] }
+  const legacySource = { by: 'person' }
+  raw.entries[0]!.source = legacySource
+  raw.entries[0]!.sourceHash = `sha256:${createHash('sha256').update(JSON.stringify(legacySource)).digest('hex')}`
+  await writeFile(path, JSON.stringify(raw))
+
+  const migrated = (await book.all()).find((candidate) => candidate.id === entry.id)!
+  assert.equal(migrated.source.sensitivity, 'standard')
+
+  raw.entries[0]!.source = { by: 'attacker' }
+  await writeFile(path, JSON.stringify(raw))
+  await assert.rejects(book.all(), /provenance integrity check failed/)
+})
+
 test('memory: explicit effectiveness feedback is idempotent per reviewer and survives reopening', async () => {
   const ws = await workspace()
   const path = join(ws, '.qs-memory', 'memory.json')
@@ -493,15 +538,32 @@ test('memory: exports verify, restore into an empty book, and continue the audit
   const source = new MemoryBook(sourcePath)
   await source.addStated('user', 'Prefers weekly status notes.', 'person')
   const note = await source.agentWrite({ scope: 'notes', text: 'Use the release checklist.', retentionDays: 60 }, { by: 'agent:operator', decisionId: 'decision-restore' })
+  const sensitive = await source.agentWrite({ scope: 'notes', text: 'Medication prescription should be reviewed.' }, { by: 'agent:operator', decisionId: 'decision-sensitive' })
   assert.ok(note.ok)
+  assert.ok(sensitive.ok)
+  assert.equal(sensitive.entry.source.sensitivity, 'sensitive')
   await source.recordEffectiveness(note.entry.id, 'useful', 'reviewer-1')
   const backup = await source.exportData('2026-09-30T13:00:00.000Z')
   const target = new MemoryBook(join(ws, '.qs-memory', 'restored.json'))
   assert.equal(await target.restore(backup, 'recovery-operator', '2026-09-30T14:00:00.000Z'), true)
-  assert.deepEqual((await target.all()).map(({ id, text, status, effectiveness }) => ({ id, text, status, effectiveness })), (await source.all()).map(({ id, text, status, effectiveness }) => ({ id, text, status, effectiveness })))
+  assert.deepEqual((await target.all()).map(({ id, text, status, effectiveness, source: { sensitivity } }) => ({ id, text, status, effectiveness, sensitivity })), (await source.all()).map(({ id, text, status, effectiveness, source: { sensitivity } }) => ({ id, text, status, effectiveness, sensitivity })))
+  assert.doesNotMatch(await target.snapshot(), /Medication prescription/, 'restored sensitivity remains excluded by default')
   assert.equal((await target.history()).at(-1)?.action, 'restored')
   assert.equal((await target.history()).at(-1)?.previousHash, backup.headHash)
   assert.equal(await target.restore(backup, 'recovery-operator'), false, 'restore cannot overwrite existing memories')
+  const legacyPayload = {
+    ...backup,
+    entries: backup.entries.map((entry) => {
+      const { sensitivity: _sensitivity, ...source } = entry.source
+      return { ...entry, source, sourceHash: `sha256:${createHash('sha256').update(JSON.stringify(source)).digest('hex')}` }
+    }),
+  }
+  const { digest: _digest, ...legacyBody } = legacyPayload
+  const legacyBundle = { ...legacyBody, digest: `sha256:${createHash('sha256').update(JSON.stringify(legacyBody)).digest('hex')}` }
+  const legacyTarget = new MemoryBook(join(ws, '.qs-memory', 'legacy-restored.json'))
+  assert.equal(await legacyTarget.restore(legacyBundle, 'recovery-operator'), true, 'pre-sensitivity exports remain restorable')
+  assert.equal((await legacyTarget.all()).find((entry) => entry.text.includes('Medication'))?.source.sensitivity, 'sensitive')
+  assert.doesNotMatch(await legacyTarget.snapshot(), /Medication prescription/)
   const tampered = { ...backup, entries: backup.entries.map((entry) => ({ ...entry, text: entry.text ? `${entry.text}!` : '' })) }
   await assert.rejects(new MemoryBook(join(ws, '.qs-memory', 'bad.json')).restore(tampered, 'recovery-operator'), /digest does not match/)
   const unsafePayload = { ...backup, entries: backup.entries.map((entry) => entry.status === 'deleted' ? entry : { ...entry, text: 'API key: abcdefghijklmnop', contentHash: `sha256:${createHash('sha256').update('API key: abcdefghijklmnop').digest('hex')}` }) }

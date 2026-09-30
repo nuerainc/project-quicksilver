@@ -5,8 +5,10 @@ import { executeWorkflowGraph, validateWorkflowGraph, type NqcEvaluationResponse
 import { persistEvaluations } from '@/lib/evaluation-store'
 import { guardWebRoute } from '@/lib/route-guard'
 import { isProductionEnv } from '@quicksilver/kernel/production-flags'
-import { executeGovernedAgent, isLlmConfigured, queryQuicksilverAgent, type GovernedNueraAgentResult, type QueryAgentOutput } from '@quicksilver/agent'
+import { estimateModelCostUsd, executeGovernedAgent, isLlmConfigured, queryQuicksilverAgent, type GovernedNueraAgentResult, type QueryAgentOutput } from '@quicksilver/agent'
 import { WorkflowPublicationFault, getActivePublishedWorkflow, recordWorkflowExecution } from '@/lib/workflow-publication-store'
+import { persistTraceSpans } from '@/lib/telemetry-store'
+import type { TraceSpanInput } from '@/lib/telemetry'
 
 const workflowIdSchema = z.string().min(1).max(128).regex(/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/)
 const requestSchema = z.union([
@@ -73,13 +75,17 @@ export async function POST(request: Request) {
   if (highImpactAgents.length) return NextResponse.json({ error: 'Live read-only query steps cannot be marked high or critical impact.', nodes: highImpactAgents.map((node) => node.id) }, { status: 422 })
 
   const agentResults = new Map<string, GovernedNueraAgentResult<QueryAgentOutput>>()
+  const agentTimings = new Map<string, { startedAt: number; durationMs: number }>()
   const evaluations: Record<string, NqcEvaluationResponse> = {}
   const startedAt = Date.now()
-  const runId = `workflow-${randomUUID()}`
+  const traceId = randomUUID()
+  const traceSpanId = randomUUID()
+  const runId = `workflow-${traceId}`
   let result: Awaited<ReturnType<typeof executeWorkflowGraph>>
   try {
     result = await executeWorkflowGraph(graph, parsed.data.input, {
     runAgent: async (node, context) => {
+      const agentStartedAt = Date.now()
       const previous = Object.values(context.outputs).at(-1)
       const priorContext = previous === undefined || previous === parsed.data.input
         ? ''
@@ -92,6 +98,7 @@ export async function POST(request: Request) {
         signal: context.signal,
       })
       agentResults.set(node.id, agentResult)
+      agentTimings.set(node.id, { startedAt: agentStartedAt, durationMs: Date.now() - agentStartedAt })
       return {
         question: agentResult.output.question,
         entities: agentResult.output.entities,
@@ -111,6 +118,12 @@ export async function POST(request: Request) {
     },
     }, { maxConcurrentAgents: MAX_QUERY_AGENT_STEPS, signal: request.signal })
   } catch (error) {
+    const completedAt = Date.now()
+    const telemetry = await persistTraceSpans([{
+      traceId, spanId: traceSpanId, source: 'workflow', kind: 'workflow', name: 'workflow.run', status: 'error',
+      startedAt, durationMs: completedAt - startedAt, requestedBy: requester.principalId, runId,
+      workflowId: pinned?.workflowId ?? null,
+    }])
     if (pinned) {
       await recordWorkflowExecution({
         runId, workflowId: pinned.workflowId, version: pinned.version, digest: pinned.digest,
@@ -119,7 +132,7 @@ export async function POST(request: Request) {
       }).catch((historyError) => console.error('[workflow-run] failed-run history write failed', historyError instanceof Error ? historyError.name : 'UnknownError'))
     }
     console.error('[workflow-run] execution failed', error instanceof Error ? error.name : 'UnknownError')
-    return NextResponse.json({ error: 'Workflow execution failed.' }, { status: 500 })
+    return NextResponse.json({ error: 'Workflow execution failed.', telemetry: { traceId, persisted: telemetry.persisted } }, { status: 500 })
   }
 
   const audit = await persistEvaluations(
@@ -151,5 +164,41 @@ export async function POST(request: Request) {
     }
   }
 
-  return NextResponse.json({ mode: 'live-read-only', externalEffectsEnabled: false, ...(pinned ? { publishedWorkflow: pinned, historyPersisted } : {}), ...result, evaluations, audit: { persisted: audit.persisted, evaluationRecordIds: audit.ids, ...(audit.error ? { error: audit.error } : {}) } })
+  const completedAt = Date.now()
+  const workflowStatus = result.status === 'completed' ? 'ok' : result.status === 'blocked' ? 'blocked' : 'error'
+  const traceSpans: TraceSpanInput[] = [{
+    traceId, spanId: traceSpanId, source: 'workflow', kind: 'workflow', name: 'workflow.run', status: workflowStatus,
+    startedAt, durationMs: completedAt - startedAt, requestedBy: requester.principalId, runId,
+    workflowId: pinned?.workflowId ?? null,
+  }, ...[...agentResults.entries()].flatMap(([nodeId, agentResult]): TraceSpanInput[] => {
+    const modelSpanId = randomUUID()
+    return [
+      {
+        traceId, spanId: modelSpanId, parentSpanId: traceSpanId, source: 'workflow', kind: 'model', name: 'workflow.agent-model',
+        status: 'ok', startedAt: agentTimings.get(nodeId)?.startedAt ?? startedAt,
+        durationMs: agentTimings.get(nodeId)?.durationMs ?? completedAt - startedAt, requestedBy: requester.principalId,
+        runId, workflowId: pinned?.workflowId ?? null, agentId: agentResult.agentId, modelId: agentResult.modelId,
+        inputTokens: agentResult.usage?.inputTokens ?? null, outputTokens: agentResult.usage?.outputTokens ?? null,
+        totalTokens: agentResult.usage?.totalTokens ?? null,
+        estimatedCostUsd: estimateModelCostUsd(agentResult.modelId, agentResult.usage?.totalTokens ?? null),
+      },
+      ...(agentResult.toolCalls ?? []).map((toolCall): TraceSpanInput => ({
+        traceId, parentSpanId: modelSpanId, source: 'workflow', kind: 'tool', name: 'workflow.agent-tool',
+        status: toolCall.succeeded ? 'ok' : 'error', startedAt: Math.max(startedAt, completedAt - (toolCall.durationMs ?? 0)),
+        durationMs: toolCall.durationMs ?? 0, requestedBy: requester.principalId, runId,
+        workflowId: pinned?.workflowId ?? null, agentId: agentResult.agentId,
+        toolName: toolCall.name, toolSucceeded: toolCall.succeeded,
+      })),
+      {
+        traceId, parentSpanId: traceSpanId, source: 'workflow', kind: 'evaluation', name: 'workflow.agent-evaluation',
+        status: agentResult.evaluation.safetyDecision === 'ALLOW' ? 'ok' : 'blocked',
+        startedAt: agentTimings.get(nodeId)?.startedAt ?? completedAt,
+        durationMs: agentTimings.get(nodeId)?.durationMs ?? 0,
+        requestedBy: requester.principalId, runId, workflowId: pinned?.workflowId ?? null,
+        agentId: agentResult.agentId, modelId: agentResult.modelId, safetyDecision: agentResult.evaluation.safetyDecision,
+      },
+    ]
+  })]
+  const telemetry = await persistTraceSpans(traceSpans)
+  return NextResponse.json({ mode: 'live-read-only', externalEffectsEnabled: false, ...(pinned ? { publishedWorkflow: pinned, historyPersisted } : {}), ...result, evaluations, audit: { persisted: audit.persisted, evaluationRecordIds: audit.ids, ...(audit.error ? { error: audit.error } : {}) }, telemetry: { traceId, persisted: telemetry.persisted } })
 }

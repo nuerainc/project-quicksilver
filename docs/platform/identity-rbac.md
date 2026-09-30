@@ -69,6 +69,7 @@ The token is shown once. The printed JSON entry holds only the digest.
 | Plan, query and workflow routes | A valid bearer token is required (401 without one; 503 when neither `QUICKSILVER_PRINCIPALS` nor the shared token is configured): `/api/plan` needs `decision:propose`, `/api/query` `decision:read`, `/api/workflows/validate` and `/simulate` `workflow:read`, `/api/workflows/run` `run:enqueue` (403 otherwise). The verified principal is recorded as the decision's `requestedBy` or the evaluation record's requester; nothing in the body can name one (threat model A-3, `apps/web/lib/route-guard.ts`). |
 | Hosted runtime | Every `/api` route on the host needs a bearer token and the matching permission; see [hosted runtime](hosted-runtime.md). The host refuses principals from any other tenant. |
 | Secrets vault | `secret:use`, `secret:read` and `secret:write`, checked on every vault operation. |
+| Operator memory CLI | `--memory review|feedback|export|restore` and `--remember` require a bearer token for a human principal with `memory:approve` in `QUICKSILVER_PRINCIPALS`; the raw CLI credential is `QUICKSILVER_OPERATOR_TOKEN`. Allow and deny decisions are appended to the workspace's hash-chained Operator audit log before the operation. |
 
 ## Separation of duties in decisions
 

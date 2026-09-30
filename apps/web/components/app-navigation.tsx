@@ -14,6 +14,7 @@ const SHELL_ROUTE_GROUP: Record<string, (typeof SHELL_GROUP_ORDER)[number]> = {
   '/workflows': 'Build',
   '/agents': 'Govern',
   '/monitoring': 'Observe',
+  '/monitoring/traces': 'Observe',
 }
 const APP_DESTINATIONS = APP_NAVIGATION_GROUPS.flatMap(({ links }) => links)
 

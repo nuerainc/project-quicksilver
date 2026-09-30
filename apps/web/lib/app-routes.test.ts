@@ -216,6 +216,7 @@ test('web route permissions (A-3): plan/query/workflows and agent lifecycle use 
   assert.deepEqual(WEB_ROUTE_ACCESS.query.permissions, ['decision:read'])
   assert.deepEqual(WEB_ROUTE_ACCESS['dashboard/overview'].permissions, ['decision:read'])
   assert.deepEqual(WEB_ROUTE_ACCESS['dashboard/finance'].permissions, ['finance:read'])
+  assert.deepEqual(WEB_ROUTE_ACCESS['monitoring/traces'].permissions, ['audit:read'])
   assert.equal(checkWebRoute('dashboard/finance', `Bearer ${TOKENS.viewer}`, env).ok, false, 'ordinary viewers cannot read ledger totals')
   assert.equal(checkWebRoute('dashboard/finance', `Bearer ${TOKENS.supervisor}`, env).ok, true, 'supervisors can read ledger totals')
   assert.deepEqual(WEB_ROUTE_ACCESS['workflows/validate'].permissions, ['workflow:read'])

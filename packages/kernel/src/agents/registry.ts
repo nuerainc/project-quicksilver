@@ -79,7 +79,26 @@ export const BUILT_IN_AGENT_MANIFESTS: readonly AgentManifest[] = Object.freeze(
   Object.freeze({ id: 'nuera-quicksilver:intent', version: 1, authority: 'propose', tasks: Object.freeze(['reasoning'] as EvaluationTaskType[]), maximumImpact: 'low', requiresEvaluation: true }),
   // Onboard shadow stage (M4): proposes actions for the owner to judge; nothing it proposes is executed.
   Object.freeze({ id: 'nuera-quicksilver:shadow', version: 1, authority: 'propose', tasks: Object.freeze(['planning'] as EvaluationTaskType[]), maximumImpact: 'moderate', requiresEvaluation: true }),
+  // Business-specialist workers produce evaluated proposals only. Integrations
+  // and side-effecting work remain behind separately authorized kernel tools.
+  Object.freeze({ id: 'nuera-quicksilver:research', version: 1, authority: 'propose', tasks: Object.freeze(['reasoning'] as EvaluationTaskType[]), maximumImpact: 'moderate', requiresEvaluation: true }),
+  Object.freeze({ id: 'nuera-quicksilver:offer', version: 1, authority: 'propose', tasks: Object.freeze(['planning'] as EvaluationTaskType[]), maximumImpact: 'moderate', requiresEvaluation: true }),
+  Object.freeze({ id: 'nuera-quicksilver:content', version: 1, authority: 'propose', tasks: Object.freeze(['bulk'] as EvaluationTaskType[]), maximumImpact: 'moderate', requiresEvaluation: true }),
+  Object.freeze({ id: 'nuera-quicksilver:outreach', version: 1, authority: 'propose', tasks: Object.freeze(['bulk'] as EvaluationTaskType[]), maximumImpact: 'moderate', requiresEvaluation: true }),
+  Object.freeze({ id: 'nuera-quicksilver:sales', version: 1, authority: 'propose', tasks: Object.freeze(['planning'] as EvaluationTaskType[]), maximumImpact: 'moderate', requiresEvaluation: true }),
+  Object.freeze({ id: 'nuera-quicksilver:fulfillment', version: 1, authority: 'propose', tasks: Object.freeze(['tool'] as EvaluationTaskType[]), maximumImpact: 'moderate', requiresEvaluation: true }),
+  Object.freeze({ id: 'nuera-quicksilver:finance', version: 1, authority: 'propose', tasks: Object.freeze(['planning'] as EvaluationTaskType[]), maximumImpact: 'moderate', requiresEvaluation: true }),
 ])
+
+export const BUSINESS_AGENT_IDS = Object.freeze([
+  'nuera-quicksilver:research',
+  'nuera-quicksilver:offer',
+  'nuera-quicksilver:content',
+  'nuera-quicksilver:outreach',
+  'nuera-quicksilver:sales',
+  'nuera-quicksilver:fulfillment',
+  'nuera-quicksilver:finance',
+] as const)
 
 export function createBuiltInAgentRegistry(): AgentRegistry {
   const registry = new AgentRegistry()

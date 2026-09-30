@@ -13,7 +13,7 @@ import { generateText, Output, stepCountIs } from 'ai'
 import { z } from 'zod'
 
 import { PLANNER_SYSTEM_PROMPT } from './prompts.ts'
-import { getMode, isLlmConfigured, modelForRole, resolveId } from './models.ts'
+import { getMode, isLlmConfigured, resolveId } from './models.ts'
 import {
   closeAll,
   createSanityContextClients,
@@ -23,6 +23,8 @@ import {
 import type { EvaluatorToolCall, ProposedAction } from '@quicksilver/kernel'
 import { assertAgentDispatch } from './governance.ts'
 import type { NueraQuicksilverAgent } from './contracts.ts'
+import { withMeasuredProviderFallback } from './provider-fallback.ts'
+import { normalizeModelTokenUsage } from './usage.ts'
 
 export interface PlannerInput {
   objective: string
@@ -34,6 +36,7 @@ export interface PlannerOutput extends z.infer<typeof PlanOutputSchema> {
   /** Runtime metadata, not model-generated structured output. */
   toolCalls: EvaluatorToolCall[]
   modelId: string
+  usage: import('./contracts.ts').ModelTokenUsage
 }
 
 const ProposedActionSchema = z.object({
@@ -90,8 +93,11 @@ export async function planObjective(input: PlannerInput): Promise<PlannerOutput>
     // to discover entities/capabilities/policies/evidence, then emits a plan
     // matching the ProposedAction shape — which the kernel can authorize
     // directly without further transformation.
-    const result = await generateText({
-      model: modelForRole('planner'),
+    let selectedModelId = resolveId('planner', getMode())
+    const result = await withMeasuredProviderFallback('planner', (model, modelId) => {
+      selectedModelId = modelId
+      return generateText({
+      model,
       system: PLANNER_SYSTEM_PROMPT,
       prompt: `Decompose this company objective and propose candidate actions:
 
@@ -113,7 +119,8 @@ The kernel will compute risk and authorization from your candidate actions. Be s
       experimental_output: Output.object({ schema: PlanOutputSchema }),
       stopWhen: stepCountIs(PLANNER_MAX_STEPS),
       maxRetries: 2,
-    } as Parameters<typeof generateText>[0])
+      } as Parameters<typeof generateText>[0])
+    })
 
     const parsed = (result as unknown as { experimental_output?: PlannerOutput }).experimental_output
     if (!parsed || parsed.candidateActions.length === 0) {
@@ -122,7 +129,8 @@ The kernel will compute risk and authorization from your candidate actions. Be s
     return {
       ...parsed,
       toolCalls,
-      modelId: resolveId('planner', getMode()),
+      modelId: selectedModelId,
+      usage: normalizeModelTokenUsage(result.totalUsage),
     }
   } finally {
     await closeAll(clients)

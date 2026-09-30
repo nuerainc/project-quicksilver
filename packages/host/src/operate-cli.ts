@@ -5,6 +5,9 @@
  *   npm run operate -- status
  *   npm run operate -- plan --cash <usd>
  *   npm run operate -- approve-plan --cash <usd> ["note"]
+ *   npm run operate -- departments propose <economics-input.json>
+ *   npm run operate -- departments decide <proposalId> --approve <id,id> --reject <id,id> --note "..."
+ *   npm run operate -- departments apply <proposalId>
  *   npm run operate -- experiment draft <definition.json>
  *   npm run operate -- experiment start <experimentId>
  *   npm run operate -- measure <experimentId> <value> "<source>"
@@ -59,9 +62,12 @@ import {
   type OperateConfig,
   type ReinvestmentPlan,
 } from '@quicksilver/kernel/playbooks/operate'
+import { decideDepartmentPortfolio, proposeDepartmentPortfolio, type DepartmentEconomicsCandidate, type DepartmentEconomicsPolicy } from '@quicksilver/kernel/playbooks/department-economics'
 
 import { loadHostConfig } from './config.ts'
 import { departmentStatus, OperateStore } from './operate-store.ts'
+import { createSanityStoreClient } from './sanity-client.ts'
+import { SanityDepartmentExecutor } from './department-executor.ts'
 import { SecretsVault } from './vault.ts'
 import { CLI_VALUE_FLAGS, parseCommandArgs } from './cli-args.ts'
 
@@ -132,6 +138,19 @@ function currentPlan(cashOnHandUsd: number) {
   const totals = periodTotals(ledger, period.from, period.to)
   return { period, totals, plan: reinvestmentPlan(config, totals, cashOnHandUsd) }
 }
+function departmentCapitalReserved(records: Awaited<ReturnType<OperateStore['departmentProposals']>>, approvedPlan: NonNullable<typeof plans[number]>, exceptProposalId?: string): number {
+  const since = Date.parse(approvedPlan.approvedAt)
+  return Math.round(records.filter((record) => record.portfolio.proposalId !== exceptProposalId && Date.parse(record.portfolio.proposedAt) >= since)
+    .reduce((total, record) => {
+      const decisions = record.decisions.at(-1)
+      if (!decisions) return total
+      const approved = new Set(decisions.approvedActionIds)
+      return total + record.portfolio.proposals.filter((proposal) => approved.has(proposal.proposalId)).reduce((sum, proposal) => sum + proposal.additionalCapitalUsd, 0)
+    }, 0) * 100) / 100
+}
+function csvFlag(name: string): string[] {
+  return (flag(name) ?? '').split(',').map((value) => value.trim()).filter(Boolean)
+}
 function printPlan(p: ReinvestmentPlan) {
   console.log(`  Surplus ${usd(p.surplusUsd)}: reserve top-up ${usd(p.toReserveUsd)}, reinvest ${usd(p.reinvestUsd)} (experiment pool ${usd(p.experimentPoolUsd)}), kept ${usd(p.keptUsd)}.`)
   for (const n of p.notes) console.log(`  - ${n}`)
@@ -168,6 +187,73 @@ switch (cmd) {
     const facts = operateFacts({ config, departments, period: t, plans, ledger, experiments, now })
     console.log('Facts:', facts)
     console.log(`Ledger: ${ledger.entries.length} entries, chain verified.`)
+    break
+  }
+  case 'departments': {
+    const [sub, value] = positional
+    if (sub === 'propose') {
+      if (!value) fail('Usage: npm run operate -- departments propose <economics-input.json>')
+      const raw: unknown = JSON.parse(await readFile(resolve(root, value), 'utf8'))
+      if (!raw || typeof raw !== 'object' || Array.isArray(raw) || Object.keys(raw).some((key) => !['policy', 'candidates'].includes(key))) fail('The input must contain only a versioned policy and a candidates list.')
+      const input = raw as { policy?: DepartmentEconomicsPolicy; candidates?: DepartmentEconomicsCandidate[] }
+      if (!input.policy || !Array.isArray(input.candidates)) fail('The input must contain policy and candidates.')
+      if (input.policy.owner !== config.owner) fail(`The department policy owner must match the Operate founder (${config.owner}).`)
+      const plan = plans.at(-1)
+      if (!plan) fail('No approved reinvestment plan exists; departments cannot be proposed for funding before founder capital allocation.')
+      const records = await store.departmentProposals()
+      const capitalCeiling = Math.max(0, plan.plan.reinvestUsd - plan.plan.experimentPoolUsd)
+      const availableCapitalUsd = Math.max(0, capitalCeiling - departmentCapitalReserved(records, plan))
+      const evidenceSources = new Set<string>(ledger.entries.flatMap((entry) => [entry.source.ref, `ledger:${entry.seq}`, ...(entry.experimentId ? [`experiment:${entry.experimentId}`] : [])]))
+      for (const experiment of experiments) {
+        evidenceSources.add(`experiment:${experiment.definition.id}`)
+        for (const measurement of experiment.measurements) evidenceSources.add(measurement.source)
+      }
+      const unverified = input.candidates.flatMap((candidate) => Array.isArray(candidate?.evidenceRefs) ? candidate.evidenceRefs.filter((ref) => typeof ref === 'string' && !evidenceSources.has(ref)) : [])
+      if (unverified.length) fail(`Evidence references are not present in the verified Operate ledger or experiment records: ${[...new Set(unverified)].join(', ')}`)
+      const result = proposeDepartmentPortfolio({ policy: input.policy, candidates: input.candidates, availableCapitalUsd, proposedBy: 'kernel:operate', now })
+      if (!result.ok) fail(`Department proposal refused:\n  - ${result.reasons.join('\n  - ')}`)
+      await store.appendDepartmentProposal(result.portfolio)
+      console.log(`Kernel department proposal ${result.portfolio.proposalId} (digest ${result.portfolio.digest.slice(0, 16)}…)`)
+      console.log(`Playbook ${result.portfolio.playbookId} v${result.portfolio.playbookVersion}; available capital ${usd(availableCapitalUsd)}; proposed capital ${usd(result.portfolio.allocatedCapitalUsd)}.`)
+      for (const proposal of result.portfolio.proposals) console.log(`  ${proposal.departmentId}: ${proposal.action} · ${proposal.returnMultiple ?? 'n/a'}× · budget ${usd(proposal.currentBudgetUsd)} → ${usd(proposal.proposedBudgetUsd)} · ${proposal.proposalId}\n    ${proposal.rationale}`)
+      console.log('No department was changed and no money moved. Decide every actionable proposal with the founder command; approval records intent only.')
+    } else if (sub === 'decide') {
+      if (!value) fail('Usage: npm run operate -- departments decide <portfolioProposalId> --approve <id,id> --reject <id,id> --note "..."')
+      if (actor.kind !== 'human') fail('Only a human founder can decide department proposals.')
+      const records = await store.departmentProposals()
+      const stored = records.find((record) => record.portfolio.proposalId === value)
+      if (!stored) fail(`No department proposal "${value}" was found.`)
+      const latestPlan = plans.at(-1)
+      if (!latestPlan || Date.parse(stored.portfolio.proposedAt) < Date.parse(latestPlan.approvedAt)) fail('The proposal was created under an older capital plan. Generate a fresh proposal against the current approved plan.')
+      const decision = decideDepartmentPortfolio(stored.portfolio, actor, { approve: csvFlag('--approve'), reject: csvFlag('--reject'), note: flag('--note') ?? '' }, now)
+      if (!decision.ok) fail(`Department decision refused:\n  - ${decision.reasons.join('\n  - ')}`)
+      const available = Math.max(0, latestPlan.plan.reinvestUsd - latestPlan.plan.experimentPoolUsd - departmentCapitalReserved(records, latestPlan, stored.portfolio.proposalId))
+      const approvedCapital = stored.portfolio.proposals.filter((proposal) => decision.decision.approvedActionIds.includes(proposal.proposalId)).reduce((sum, proposal) => sum + proposal.additionalCapitalUsd, 0)
+      if (approvedCapital > available) fail(`The selected actions need ${usd(approvedCapital)}, but only ${usd(available)} remains in this plan's department capital allocation.`)
+      await store.appendDepartmentDecision(decision.decision)
+      console.log(`Recorded founder decision for proposal ${value}: ${decision.decision.approvedActionIds.length} approved, ${decision.decision.rejectedActionIds.length} rejected.`)
+      console.log(`Approved capital ${usd(approvedCapital)}. Approval records intent only; apply it with: npm run operate -- departments apply ${value}`)
+    } else if (sub === 'apply') {
+      if (!value) fail('Usage: npm run operate -- departments apply <portfolioProposalId>')
+      if (actor.kind !== 'human' || actor.id !== config.owner) fail(`Only the configured founder (${config.owner}) may execute approved department changes.`)
+      const records = await store.departmentProposals()
+      const stored = records.find((record) => record.portfolio.proposalId === value)
+      if (!stored) fail(`No department proposal "${value}" was found.`)
+      const approval = stored.decisions.at(-1)
+      if (!approval) fail('The proposal has no recorded founder decision; refusing to execute.')
+      const latestPlan = plans.at(-1)
+      if (!latestPlan || Date.parse(stored.portfolio.proposedAt) < Date.parse(latestPlan.approvedAt)) fail('The proposal was created under an older capital plan. Generate and approve a fresh proposal against the current plan.')
+      const available = Math.max(0, latestPlan.plan.reinvestUsd - latestPlan.plan.experimentPoolUsd - departmentCapitalReserved(records, latestPlan, stored.portfolio.proposalId))
+      const approvedCapital = stored.portfolio.proposals.filter((proposal) => approval.approvedActionIds.includes(proposal.proposalId)).reduce((sum, proposal) => sum + proposal.additionalCapitalUsd, 0)
+      if (approvedCapital > available) fail(`The selected actions need ${usd(approvedCapital)}, but only ${usd(available)} remains in this plan's department capital allocation.`)
+      const sanity = await createSanityStoreClient()
+      if (!sanity) fail('No dedicated Nuera Sanity write client is configured. Set the Nuera project ID and SANITY_WRITE_TOKEN; department changes were not applied.')
+      const result = await new SanityDepartmentExecutor(sanity, companyId, config.runId).apply(stored.portfolio, approval, actor, now)
+      console.log(`Department proposal ${value}: ${result.status}; ${result.changed} department record(s) changed; ${result.auditIds.length} audit record(s) ${result.status === 'already-applied' ? 'verified' : 'written'}.`)
+      console.log('This applies internal department status/budget metadata only. No funds move and no external tools are dispatched.')
+    } else {
+      fail('Usage: departments propose <economics-input.json> | departments decide <proposalId> --approve <id,id> --reject <id,id> --note "..." | departments apply <proposalId>')
+    }
     break
   }
   case 'plan': {

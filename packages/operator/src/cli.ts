@@ -28,9 +28,11 @@
  * with recall), the agent's notes, and your profile. Project context files
  * (QUICKSILVER.md, AGENTS.md, CLAUDE.md) in the workspace are loaded as data.
  *
- * Calls that need a person are asked here (y/n). Who approves is
- * NQC_SUPERVISOR_ID (or QUICKSILVER_OPERATOR_APPROVER). The model is the
- * agent package's `executor` role (see packages/agent/src/models.ts).
+ * Calls that need a person are asked here (y/n). Interactive tool approvals
+ * use NQC_SUPERVISOR_ID (or QUICKSILVER_OPERATOR_APPROVER). Sensitive memory
+ * management commands require QUICKSILVER_OPERATOR_TOKEN and a human principal
+ * with memory:approve in QUICKSILVER_PRINCIPALS. The model is the agent
+ * package's `executor` role (see packages/agent/src/models.ts).
  * The audit log is <workspace>/.qs-audit/operator.jsonl.
  */
 import { createInterface } from 'node:readline/promises'
@@ -40,6 +42,8 @@ import { dirname, join, resolve } from 'node:path'
 
 import { loadRepoEnv } from '@quicksilver/agent/decision-predictor'
 import { modelForRole } from '@quicksilver/agent/models'
+import { AccessController } from '@quicksilver/kernel/identity'
+import { StaticTokenIdentityProvider, principalsFromJson } from '@quicksilver/kernel/identity/tokens'
 
 import { aiSdkDriver } from './ai-driver.ts'
 import { FileAuditSink, verifyAudit } from './audit.ts'
@@ -48,6 +52,7 @@ import { Gate, type Approver } from './gate.ts'
 import { runOperator } from './loop.ts'
 import { loadProjectContext, MemoryBook, memoryTools, SessionArchive, type MemoryEffectivenessOutcome, type MemoryExportBundle } from './memory.ts'
 import { lineDiff, SkillLibrary, skillTools } from './skills.ts'
+import { configuredWebSearchTools } from './web-search.ts'
 import { homedir } from 'node:os'
 import { DockerSandbox } from './sandbox/docker.ts'
 import { LocalSandbox } from './sandbox/local.ts'
@@ -56,6 +61,36 @@ import { ensureWorkspace, FILE_TOOLS } from './tools/files.ts'
 import type { ApprovalMode, Sandbox } from './types.ts'
 
 loadRepoEnv()
+
+/** Human authorization is verified from a bearer token and audited before a sensitive memory operation. */
+async function authorizeMemoryOperation(operation: string): Promise<string> {
+  let principal: ReturnType<StaticTokenIdentityProvider['authenticate']>
+  let misconfigured = false
+  try {
+    const provider = new StaticTokenIdentityProvider(principalsFromJson(process.env.QUICKSILVER_PRINCIPALS))
+    principal = provider.authenticate(process.env.QUICKSILVER_OPERATOR_TOKEN)
+  } catch {
+    misconfigured = true
+  }
+  const tenantId = process.env.QUICKSILVER_TENANT_ID?.trim() || 'default'
+  const access = new AccessController()
+  const authorization = access.authorize(principal, 'memory:approve', { tenantId, kind: 'operator-memory', id: operation })
+  const decision = misconfigured
+    ? { ...authorization, allowed: false, grantedBy: [], reasons: [...authorization.reasons, 'Principal configuration is invalid.'] }
+    : authorization
+  try {
+    await new FileAuditSink(join(workspace, '.qs-audit', 'operator.jsonl')).append({
+      runId: `memory-auth-${randomUUID()}`,
+      kind: 'approval',
+      at: new Date(decision.at).toISOString(),
+      data: { event: 'memory.authorization', operation, decision },
+    })
+  } catch {
+    throw new Error('Memory access audit persistence failed; operation denied.')
+  }
+  if (!decision.allowed || principal?.kind !== 'human') throw new Error(`Memory operation denied: ${decision.reasons.join(' ') || 'a human principal is required.'}`)
+  return principal.id
+}
 
 function args(argv: string[]) {
   const out: { goal: string[]; verify: string[]; [k: string]: string | string[] | boolean | undefined } = { goal: [], verify: [] }
@@ -85,30 +120,34 @@ const archive = new SessionArchive(join(workspace, '.qs-memory'))
 const approverId = process.env.QUICKSILVER_OPERATOR_APPROVER || process.env.NQC_SUPERVISOR_ID || 'local-human'
 
 if (o.remember) {
-  const e = await book.addStated('user', String(o.remember), approverId)
+  const principalId = await authorizeMemoryOperation('remember')
+  const e = await book.addStated('user', String(o.remember), principalId)
   console.log(`Remembered (${e.id}).`)
   process.exit(0)
 }
 if (o.memory === 'review') {
+  const reviewerId = await authorizeMemoryOperation('review')
   const pending = (await book.all()).filter((e) => e.status === 'pending')
   if (!pending.length) { console.log('Nothing waiting for review.'); process.exit(0) }
   const r = createInterface({ input: process.stdin, output: process.stdout })
   for (const e of pending) {
     const a = (await r.question(`The agent thinks: "${e.text}" (run ${e.source.runId ?? '?'}). Keep it? (y/N) `)).trim().toLowerCase()
-    await book.review(e.id, a === 'y' || a === 'yes', approverId)
+    await book.review(e.id, a === 'y' || a === 'yes', reviewerId)
   }
   r.close()
   process.exit(0)
 }
 if (o.memory === 'feedback') {
+  const reviewerId = await authorizeMemoryOperation('feedback')
   const id = String(o['memory-id'] ?? '')
   const outcome = String(o.outcome ?? '') as MemoryEffectivenessOutcome
   if (!id || !['useful', 'stale', 'harmful'].includes(outcome)) throw new Error('Usage: --memory feedback --memory-id <id> --outcome useful|stale|harmful')
-  if (!await book.recordEffectiveness(id, outcome, approverId)) throw new Error(`Feedback was not recorded for active memory "${id}". Check the id, reviewer, and whether this version already has feedback.`)
+  if (!await book.recordEffectiveness(id, outcome, reviewerId)) throw new Error(`Feedback was not recorded for active memory "${id}". Check the id, reviewer, and whether this version already has feedback.`)
   console.log(`Recorded ${outcome} feedback for ${id}.`)
   process.exit(0)
 }
 if (o.memory === 'export') {
+  await authorizeMemoryOperation('export')
   const file = String(o['memory-file'] ?? '')
   if (!file) throw new Error('Usage: --memory export --memory-file <path>. The backup contains plaintext memory.')
   const target = resolve(root, file)
@@ -124,10 +163,11 @@ if (o.memory === 'export') {
   process.exit(0)
 }
 if (o.memory === 'restore') {
+  const reviewerId = await authorizeMemoryOperation('restore')
   const file = String(o['memory-file'] ?? '')
   if (!file) throw new Error('Usage: --memory restore --memory-file <path>.')
   const bundle = JSON.parse(await readFile(resolve(root, file), 'utf8')) as MemoryExportBundle
-  if (!await book.restore(bundle, approverId)) throw new Error('Restore requires an empty memory book; existing entries were left unchanged.')
+  if (!await book.restore(bundle, reviewerId)) throw new Error('Restore requires an empty memory book; existing entries were left unchanged.')
   console.log(`Restored verified memory into ${join(workspace, '.qs-memory')}.`)
   process.exit(0)
 }
@@ -181,7 +221,7 @@ const usedSkills: string[] = []
 
 console.log(`Operator — ${mode} mode, ${sandbox.describe()}\nWorkspace: ${workspace}\n`)
 const result = await runOperator({
-  gate: new Gate([...FILE_TOOLS, ...EXEC_TOOLS, ...memoryTools(book, archive), ...skillTools(skills, usedSkills)], { mode, workspace, audit }),
+  gate: new Gate([...FILE_TOOLS, ...EXEC_TOOLS, ...memoryTools(book, archive), ...skillTools(skills, usedSkills), ...configuredWebSearchTools()], { mode, workspace, audit }),
   sandbox,
   checkpoints,
   audit,

@@ -22,6 +22,7 @@ import type { ProposedAction } from '@quicksilver/kernel'
 import { assertAgentDispatch } from './governance.ts'
 import type { NueraQuicksilverAgent } from './contracts.ts'
 import { withMeasuredProviderFallback } from './provider-fallback.ts'
+import { normalizeModelTokenUsage } from './usage.ts'
 
 // NOTE: no `.default([])` on these array fields. A Zod default marks the field
 // optional in the generated JSON Schema, which fails Azure/OpenAI's strict
@@ -60,9 +61,10 @@ function unreviewed(reason: string): ReviewResult {
   }
 }
 
-export async function reviewProposedAction(input: ReviewInput): Promise<ReviewResult> {
+async function reviewProposedActionWithModel(input: ReviewInput): Promise<{ review: ReviewResult; modelId: string; usage?: import('./contracts.ts').ModelTokenUsage }> {
   assertAgentDispatch('nuera-quicksilver:reviewer', 'evaluation')
   const { action, actor, capability, policies, evidence } = input
+  let selectedModelId = resolveId('reviewer', getMode())
 
   const policyList = policies.length
     ? policies.map((p) => `- ${p.name} (scope: ${p.scope}, priority: ${p.priority}, id: ${p.id})`).join('\n')
@@ -72,7 +74,9 @@ export async function reviewProposedAction(input: ReviewInput): Promise<ReviewRe
     : '(none resolved)'
 
   try {
-    const result = await withMeasuredProviderFallback('reviewer', (model) => generateText({
+    const result = await withMeasuredProviderFallback('reviewer', (model, modelId) => {
+      selectedModelId = modelId
+      return generateText({
       model,
       system: REVIEWER_SYSTEM_PROMPT,
       prompt: `Proposed action: ${action.description}
@@ -94,13 +98,18 @@ Uncertainty: ${action.uncertainty}/5
 Review this proposed action independently. Flag any policy conflicts, missing evidence, or risk concerns you see. Do not simply restate the kernel's own computation -- add what an independent reviewer would actually catch.`,
       experimental_output: Output.object({ schema: ReviewResultSchema }),
       maxRetries: 1,
-    } as Parameters<typeof generateText>[0]))
+      } as Parameters<typeof generateText>[0])
+    })
 
     const parsed = (result as unknown as { experimental_output?: ReviewResult }).experimental_output
-    return parsed ?? unreviewed('model did not return structured output')
+    return { review: parsed ?? unreviewed('model did not return structured output'), modelId: selectedModelId, usage: normalizeModelTokenUsage(result.totalUsage) }
   } catch (err) {
-    return unreviewed((err as Error).message)
+    return { review: unreviewed((err as Error).message), modelId: selectedModelId }
   }
+}
+
+export async function reviewProposedAction(input: ReviewInput): Promise<ReviewResult> {
+  return (await reviewProposedActionWithModel(input)).review
 }
 
 /**
@@ -112,10 +121,11 @@ export const reviewerQuicksilverAgent: NueraQuicksilverAgent<ReviewInput, Review
   version: 1,
   tasks: ['evaluation'],
   async execute(request) {
-    const review = await reviewProposedAction(request.input)
+    const { review, modelId, usage } = await reviewProposedActionWithModel(request.input)
     return {
       output: review,
-      modelId: resolveId('reviewer', getMode()),
+      modelId,
+      ...(usage ? { usage } : {}),
       evaluationContext: request.input.evidence.map((e) => `${e.id}: ${e.title}`),
     }
   },
