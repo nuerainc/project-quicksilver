@@ -12,7 +12,7 @@ export const APP_NAVIGATION_GROUPS: readonly AppNavigationGroup[] = [
       { href: '/monitoring/traces', label: 'Traces & alerts' },
     ],
   },
-  { label: 'Govern', links: [{ href: '/agents', label: 'Agents' }] },
+  { label: 'Govern', links: [{ href: '/entities', label: 'Company data' }, { href: '/agents', label: 'Agents' }] },
 ] as const
 
 export const APP_NAVIGATION_DESTINATIONS = APP_NAVIGATION_GROUPS.flatMap((group) => group.links)

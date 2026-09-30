@@ -40,6 +40,7 @@ const RATE_LIMIT_ENV: Readonly<Record<WebRateLimitClass, string>> = Object.freez
 /** The routes (other than the decision routes, which have their own checks) and what each needs. */
 export type WebRoute =
   | 'plan' | 'query' | 'dashboard/overview' | 'dashboard/finance'
+  | 'entities'
   | 'monitoring/workflows' | 'monitoring/traces'
   | 'agents/catalog' | 'agents/definitions' | 'agents/drafts' | 'agents/drafts/submit' | 'agents/review' | 'agents/publish' | 'agents/rollback'
   | 'workflows/validate' | 'workflows/simulate' | 'workflows/run' | 'workflows/diff'
@@ -51,6 +52,8 @@ export const WEB_ROUTE_ACCESS: Readonly<Record<WebRoute, { permissions: readonly
   plan: { permissions: Object.freeze<Permission[]>(['decision:propose']), rateLimit: 'model' },
   // A question to the query agent (a model) that writes an evaluation record.
   query: { permissions: Object.freeze<Permission[]>(['decision:read']), rateLimit: 'model' },
+  // The entity directory uses the same company-read boundary as Ask mode.
+  entities: { permissions: Object.freeze<Permission[]>(['decision:read']) },
   'dashboard/overview': { permissions: Object.freeze<Permission[]>(['decision:read']) },
   'dashboard/finance': { permissions: Object.freeze<Permission[]>(['finance:read']) },
   'monitoring/workflows': { permissions: Object.freeze<Permission[]>(['workflow:read']) },

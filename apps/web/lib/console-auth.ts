@@ -66,6 +66,7 @@ const TOKEN_PATHS: ReadonlySet<string> = new Set([
   '/api/monitoring/traces',
   '/api/dashboard/overview',
   '/api/dashboard/finance',
+  '/api/entities',
   '/api/agents/catalog',
   '/api/agents/definitions',
   '/api/agents/drafts',
@@ -109,6 +110,7 @@ export type ConsoleDecisionRoute = 'action' | 'execute' | 'observe' | 'resume' |
 /** Every console call that can be refused for auth: the decision routes plus plan, query and the workflow builder. */
 export type ConsoleRoute = ConsoleDecisionRoute | 'plan' | 'query'
   | 'dashboard/overview' | 'dashboard/finance'
+  | 'entities'
   | 'monitoring/workflows' | 'monitoring/traces'
   | 'agents/catalog' | 'agents/definitions' | 'agents/drafts' | 'agents/drafts/submit' | 'agents/review' | 'agents/publish' | 'agents/rollback'
   | 'workflows/validate' | 'workflows/simulate' | 'workflows/run'
@@ -128,6 +130,7 @@ export const CONSOLE_ROUTE_PERMISSION: Readonly<Record<ConsoleRoute, string>> = 
   'monitoring/traces': 'audit:read',
   'dashboard/overview': 'decision:read',
   'dashboard/finance': 'finance:read',
+  entities: 'decision:read',
   'agents/catalog': 'agent:read',
   'agents/definitions': 'agent:read',
   'agents/drafts': 'agent:write',
