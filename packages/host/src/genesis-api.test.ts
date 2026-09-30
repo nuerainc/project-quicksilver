@@ -12,6 +12,7 @@ import type { GenesisRunConfig } from '@quicksilver/kernel/playbooks/genesis'
 
 import { parseHostConfig } from './config.ts'
 import { FileGenesisStore, MemoryGenesisStore, type GenesisStore } from './genesis-api.ts'
+import type { WaesServiceAssessment, WaesServiceInput } from './genesis-reviews.ts'
 import { QuicksilverHost } from './host.ts'
 import { Logger } from './log.ts'
 
@@ -47,7 +48,7 @@ const definition = (id = 'exp-landing', over: Partial<ExperimentDefinition> = {}
   ...over,
 })
 
-async function start(options: { config?: GenesisRunConfig; vault?: string[]; store?: GenesisStore; genesis?: boolean } = {}) {
+async function start(options: { config?: GenesisRunConfig; vault?: string[]; store?: GenesisStore; genesis?: boolean; runWaes?: (input: WaesServiceInput) => Promise<WaesServiceAssessment> } = {}) {
   const founder = who('entity-founder', 'human', ['intent-provider'])
   const agent = who('agent-genesis', 'agent', ['agent-worker'])
   const viewer = who('entity-viewer', 'human', ['viewer'])
@@ -59,7 +60,7 @@ async function start(options: { config?: GenesisRunConfig; vault?: string[]; sto
     env: { QUICKSILVER_AUTHORIZATION_AUDIT_PATH: join(auditDir, 'authorization.jsonl') },
     logger: new Logger({ level: 'error', sink: { write: () => {} } }),
     intent: { graphs, ledger: new MemoryLedgerStore() },
-    ...(options.genesis === false ? {} : { genesis: { config: options.config ?? runConfig(), store, vaultNames: async () => options.vault ?? ['genesis-card'] } }),
+    ...(options.genesis === false ? {} : { genesis: { config: options.config ?? runConfig(), store, vaultNames: async () => options.vault ?? ['genesis-card'], ...(options.runWaes ? { runWaes: options.runWaes } : {}) } }),
   })
   const { port } = await host.start()
   const call = (path: string, token: string, body?: unknown) => fetch(`http://127.0.0.1:${port}${path}`, {
@@ -284,6 +285,51 @@ test('the file store uses the CLI layout: <dir>/<runId>/{experiments,ledger,run}
 
 const R = '/api/genesis/reviews'
 const offer = 'Get a margin report for your feed store in 48 hours.'
+const waesPass: WaesServiceAssessment = { verdict: 'pass', components: ['TRUTHFULNESS-v1', 'WELLBEING-v1', 'SAFETY-v1'].map((component) => ({ component, verdict: 'pass', findings: [] })), summary: 'No material issue identified.' }
+
+test('WAES service review records only a complete evaluator result bound to exact text; NQC remains the action gate', async () => {
+  const store = new MemoryGenesisStore()
+  let received: WaesServiceInput | undefined
+  const { host, call, tokens } = await start({ store, runWaes: async (input) => { received = input; return waesPass } })
+  try {
+    const path = `${R}/waes`
+    const payload = { text: offer, channel: 'landing-page', evidence: [{ ref: 'report:2026-q3', summary: 'The report supports a 48-hour turnaround.' }] }
+    assert.equal((await call(path, tokens.agent, payload)).status, 403)
+    assert.equal((await call(path, tokens.viewer, payload)).status, 403)
+    assert.equal((await call(path, tokens.founder, { ...payload, verdict: 'pass' })).status, 422, 'caller cannot supply verdict')
+    assert.equal((await call(path, tokens.founder, payload)).status, 201)
+    assert.deepEqual(received?.evidence, payload.evidence)
+    const saved = (await call('/api/genesis', tokens.viewer)).body.reviews[0]
+    assert.equal(saved.kind, 'waes')
+    assert.equal(saved.reviewer, 'svc:nuera-waes')
+    assert.equal(saved.reviewerKind, 'service')
+    assert.equal(saved.text, offer)
+    assert.equal(saved.contentDigest, (await import('@quicksilver/kernel/waes')).waesContentDigest(offer))
+    assert.deepEqual(saved.components, ['TRUTHFULNESS-v1', 'WELLBEING-v1', 'SAFETY-v1'])
+    assert.equal((await call('/api/genesis', tokens.viewer)).body.reviewSummary.waes.pass, 1)
+    assert.equal((await call(path, tokens.founder, { ...payload, text: `${offer} altered` })).status, 201)
+    assert.equal((await call('/api/genesis', tokens.viewer)).body.reviews[0].contentDigest, (await import('@quicksilver/kernel/waes')).waesContentDigest(`${offer} altered`))
+  } finally { await host.stop() }
+})
+
+test('WAES service fails closed on absent, failed, or malformed evaluator output and unknown experiment', async () => {
+  const payload = { text: offer, channel: 'email' }
+  const absent = await start()
+  try { assert.equal((await absent.call(`${R}/waes`, absent.tokens.founder, payload)).status, 503) } finally { await absent.host.stop() }
+  const failed = await start({ runWaes: async () => { throw new Error('provider secret detail') } })
+  try {
+    const response = await failed.call(`${R}/waes`, failed.tokens.founder, payload)
+    assert.equal(response.status, 503)
+    assert.doesNotMatch(JSON.stringify(response.body), /provider secret detail/)
+    assert.equal((await failed.call('/api/genesis', failed.tokens.viewer)).body.reviews.length, 0)
+  } finally { await failed.host.stop() }
+  const malformed = await start({ runWaes: async () => ({ ...waesPass, components: waesPass.components.slice(0, 2) }) })
+  try {
+    assert.equal((await malformed.call(`${R}/waes`, malformed.tokens.founder, payload)).status, 502)
+    assert.equal((await malformed.call('/api/genesis', malformed.tokens.viewer)).body.reviews.length, 0)
+    assert.equal((await malformed.call(`${R}/waes`, malformed.tokens.founder, { ...payload, experimentId: 'missing' })).status, 404)
+  } finally { await malformed.host.stop() }
+})
 
 test('reviews: only a human provider records a manual founder review, with the caller as reviewer; GET lists them apart from WAES', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'genesis-reviews-'))

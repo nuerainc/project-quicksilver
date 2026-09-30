@@ -2,6 +2,7 @@ import { defineConfig } from 'sanity'
 import { structureTool } from 'sanity/structure'
 import { workflow } from 'sanity-plugin-workflow'
 import { schemaTypes } from './schemas'
+import { dedicatedSanityProjectId } from './lib/sanity-project-id'
 
 /**
  * Sanity Workflows (the actual product feature, not our own `workflow`
@@ -16,13 +17,6 @@ import { schemaTypes } from './schemas'
  * Approved/Rejected/Executed as a lightweight editorial view alongside the
  * app's own approve/reject buttons. Path Two bonus feature.
  */
-function dedicatedProjectId(): string {
-  const projectId = process.env.SANITY_STUDIO_PROJECT_ID
-  if (!projectId || projectId === 'd280bqjc') {
-    throw new Error('SANITY_STUDIO_PROJECT_ID must identify the dedicated Nuera Quicksilver Sanity project; legacy challenge access is blocked.')
-  }
-  return projectId
-}
 const decisionWorkflow = workflow({
   schemaTypes: ['decision'],
   states: [
@@ -56,8 +50,11 @@ const decisionWorkflow = workflow({
 export default defineConfig({
   name: 'nuera-quicksilver',
   title: 'Nuera Quicksilver',
+  // The Vercel services deployment mounts Studio at /studio. Keep the
+  // existing standalone Sanity Studio deployment at / unless overridden.
+  basePath: process.env.SANITY_STUDIO_BASE_PATH || (process.env.VERCEL ? '/studio' : '/'),
 
-  projectId: dedicatedProjectId(),
+  projectId: dedicatedSanityProjectId(),
   dataset: process.env.SANITY_STUDIO_DATASET || 'production',
 
   plugins: [structureTool(), decisionWorkflow],

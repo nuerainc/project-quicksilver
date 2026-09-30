@@ -95,6 +95,7 @@ export const HOST_ROUTES: readonly HostRoute[] = Object.freeze<HostRoute[]>([
   { method: 'POST', path: '/api/genesis/experiments', feature: 'genesis', rateLimit: 'write', access: anyOf('intent:provide', 'decision:propose') },
   { method: 'POST', path: '/api/genesis/money', feature: 'genesis', rateLimit: 'write', access: anyOf('intent:provide') },
   { method: 'POST', path: '/api/genesis/reviews', feature: 'genesis', rateLimit: 'write', access: anyOf('intent:provide') },
+  { method: 'POST', path: '/api/genesis/reviews/waes', feature: 'genesis', rateLimit: 'model', access: anyOf('intent:provide') },
   { method: 'POST', path: '/api/genesis/experiments/:id/start', feature: 'genesis', rateLimit: 'write', access: anyOf('intent:provide') },
   { method: 'POST', path: '/api/genesis/experiments/:id/measurements', feature: 'genesis', rateLimit: 'write', access: anyOf('intent:provide', 'decision:propose') },
   // Evaluate can apply a kill or close (stopping never needs more than decision:read, by design); it still writes.

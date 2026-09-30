@@ -22,7 +22,7 @@ import {
 } from '@quicksilver/kernel/playbooks/economics'
 import { decideSpend, genesisBlockers, genesisFacts, validateGenesisConfig, type GenesisRunConfig } from '@quicksilver/kernel/playbooks/genesis'
 
-import { checkReviewAppend, createManualReview, MANUAL_REVIEW_LABEL, parseContentReviewInput, reviewSummary, sortReviews, type ContentReviewRecord } from './genesis-reviews.ts'
+import { checkReviewAppend, createManualReview, createWaesServiceReview, MANUAL_REVIEW_LABEL, parseContentReviewInput, parseWaesServiceInput, reviewSummary, sortReviews, type ContentReviewRecord, type WaesServiceAssessment, type WaesServiceInput } from './genesis-reviews.ts'
 import { FileContentReviewStore } from './genesis-store.ts'
 
 /**
@@ -75,6 +75,8 @@ export interface GenesisApiDeps {
   /** Names of active vault secrets (never values). The host supplies its own vault's names when this is absent. */
   vaultNames?: () => Promise<string[]>
   now?: () => number
+  /** Optional model-backed WAES evaluator. Absence fails closed with 503. */
+  runWaes?: (input: WaesServiceInput) => Promise<WaesServiceAssessment>
 }
 
 export interface GenesisApiContext {
@@ -380,6 +382,34 @@ export async function handleGenesisRoute(ctx: GenesisApiContext, deps: GenesisAp
   }
 
   // POST /api/genesis/reviews
+  if (parts.length === 4 && parts[2] === 'reviews' && parts[3] === 'waes' && method === 'POST') {
+    const denied = needAny('intent:provide')
+    if (denied) return denied
+    if (principal.kind !== 'human') return { status: 403, body: { error: 'Only a human may request a WAES evaluation.' } }
+    if (!deps.runWaes) return { status: 503, body: { error: 'WAES evaluation is unavailable; no review was recorded.' } }
+    const body = await bodyOf()
+    if (!body.ok) return body.res
+    const parsed = parseWaesServiceInput(body.value)
+    if (!parsed.ok) return { status: 422, body: { error: parsed.error } }
+    const input = parsed.input
+    return withLock(config.runId, async () => {
+      if (input.experimentId) {
+        const s = await store.load(config)
+        if (!s.experiments.some((e) => e.definition.id === input.experimentId)) return { status: 404, body: { error: `No experiment "${input.experimentId}".` } }
+      }
+      let assessment: WaesServiceAssessment
+      try {
+        assessment = await deps.runWaes!(input)
+      } catch {
+        return { status: 503, body: { error: 'WAES evaluation failed; no review was recorded.' } }
+      }
+      const created = createWaesServiceReview(input, assessment, now())
+      if (!created.ok) return { status: 502, body: { error: 'WAES returned an incomplete or invalid assessment; no review was recorded.', reasons: created.reasons } }
+      await store.appendReview(config.runId, created.review)
+      return { status: 201, body: { review: created.review, label: 'WAES service evaluation', executed: false, note: 'Review recorded only. Nothing was sent or published. NQC Kernel authorization remains required.' } }
+    })
+  }
+
   if (parts.length === 3 && parts[2] === 'reviews' && method === 'POST') {
     const denied = humanOnly('records a manual founder review')
     if (denied) return denied

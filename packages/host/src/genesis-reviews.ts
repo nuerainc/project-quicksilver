@@ -15,9 +15,8 @@ import {
 /**
  * Content reviews for a Genesis run (M5).
  *
- * Until the WAES suites run as a service, the founder approves customer-facing
- * text himself. Each decision is recorded here as a MANUAL FOUNDER REVIEW of
- * the exact text (bound by its content digest), never presented as a WAES run:
+ * Founder decisions remain separately labeled as MANUAL FOUNDER REVIEW of
+ * exact text (bound by its content digest), never presented as a WAES run:
  * `kind: 'manual'`, `reviewerKind: 'human'`, `components: ['MANUAL-FOUNDER-REVIEW']`.
  *
  * Records are append-only. A new decision on the same text is a new record
@@ -31,6 +30,8 @@ export const REVIEW_TEXT_MAX = 20_000
 const CHANNEL = /^[a-z][a-z0-9-]{0,39}$/
 const EXP_ID = /^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/
 const REVIEW_ID = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$/
+const WAES_COMPONENTS = ['TRUTHFULNESS-v1', 'WELLBEING-v1', 'SAFETY-v1'] as const
+const EVIDENCE_REF = /^[a-zA-Z0-9][a-zA-Z0-9._:/#-]{0,199}$/
 
 export interface ContentReviewRecord {
   reviewId: string
@@ -57,6 +58,19 @@ export interface ContentReviewInput {
   verdict: WaesVerdict
   note?: string
   experimentId?: string
+}
+
+export interface WaesServiceInput {
+  text: string
+  channel: string
+  evidence: { ref: string; summary: string }[]
+  experimentId?: string
+}
+
+export interface WaesServiceAssessment {
+  verdict: WaesVerdict
+  components: { component: string; verdict: WaesVerdict; findings: string[] }[]
+  summary: string
 }
 
 export class ContentReviewRecordError extends Error {
@@ -96,6 +110,51 @@ export function parseContentReviewInput(value: unknown): { ok: true; input: Cont
   }
 }
 
+/** Strict request contract for model-backed reviews; callers cannot provide a verdict or reviewer. */
+export function parseWaesServiceInput(value: unknown): { ok: true; input: WaesServiceInput } | { ok: false; error: string } {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return { ok: false, error: 'The WAES request must be an object.' }
+  const body = value as Record<string, unknown>
+  if (Object.keys(body).some((key) => !['text', 'channel', 'evidence', 'experimentId'].includes(key))) return { ok: false, error: 'The WAES request contains unsupported fields.' }
+  if (typeof body.text !== 'string' || !body.text.trim() || body.text.length > REVIEW_TEXT_MAX) return { ok: false, error: `text is required and must be at most ${REVIEW_TEXT_MAX.toLocaleString('en-US')} characters.` }
+  if (typeof body.channel !== 'string' || !CHANNEL.test(body.channel)) return { ok: false, error: 'channel must be lowercase letters, digits and "-", up to 40 characters.' }
+  if (body.evidence !== undefined && (!Array.isArray(body.evidence) || body.evidence.length > 50)) return { ok: false, error: 'evidence must contain at most 50 reference summaries.' }
+  const evidence: { ref: string; summary: string }[] = []
+  for (const item of (body.evidence ?? []) as unknown[]) {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) return { ok: false, error: 'Each evidence item must have a ref and summary.' }
+    const record = item as Record<string, unknown>
+    if (Object.keys(record).some((key) => !['ref', 'summary'].includes(key)) || typeof record.ref !== 'string' || !EVIDENCE_REF.test(record.ref) || typeof record.summary !== 'string' || !record.summary.trim() || record.summary.length > 2000) return { ok: false, error: 'Each evidence item needs a valid ref and a summary of at most 2,000 characters.' }
+    evidence.push({ ref: record.ref, summary: record.summary })
+  }
+  if (body.experimentId !== undefined && (typeof body.experimentId !== 'string' || !EXP_ID.test(body.experimentId))) return { ok: false, error: 'experimentId is invalid.' }
+  return { ok: true, input: { text: body.text, channel: body.channel, evidence, ...(typeof body.experimentId === 'string' ? { experimentId: body.experimentId } : {}) } }
+}
+
+/** Creates a service-authored append-only WAES record only from a complete, structurally valid three-component assessment. */
+export function createWaesServiceReview(input: WaesServiceInput, assessment: WaesServiceAssessment, now: Date): { ok: true; review: ContentReviewRecord } | { ok: false; reasons: string[] } {
+  const reasons: string[] = []
+  if (!assessment || !REVIEW_VERDICTS.includes(assessment.verdict)) reasons.push('The overall WAES verdict is invalid.')
+  const components = Array.isArray(assessment?.components) ? assessment.components : []
+  const names = components.map((item) => item?.component)
+  if (names.length !== WAES_COMPONENTS.length || new Set(names).size !== WAES_COMPONENTS.length || WAES_COMPONENTS.some((name) => !names.includes(name))) reasons.push('The complete, unique WAES component suite is required.')
+  for (const component of components) {
+    if (!REVIEW_VERDICTS.includes(component.verdict) || !Array.isArray(component.findings) || component.findings.length > 6 || component.findings.some((finding) => typeof finding !== 'string' || !finding.trim() || finding.length > 280)) reasons.push('A WAES component result is malformed.')
+  }
+  const expected = components.some((item) => item.verdict === 'block') ? 'block' : components.some((item) => item.verdict === 'revise') ? 'revise' : 'pass'
+  if (assessment?.verdict !== expected) reasons.push('The overall WAES verdict does not match its component verdicts.')
+  if (typeof assessment?.summary !== 'string' || !assessment.summary.trim() || assessment.summary.length > 500) reasons.push('The WAES summary is invalid.')
+  if (reasons.length) return { ok: false, reasons }
+  const reviewedAt = now.toISOString()
+  const review: ContentReviewRecord = {
+    reviewId: `waes-${reviewedAt.replace(/[^0-9]/g, '').slice(0, 14)}-${waesContentDigest(input.text).slice(0, 8)}-${randomUUID().slice(0, 8)}`,
+    kind: 'waes', contentDigest: waesContentDigest(input.text), text: input.text,
+    verdict: assessment.verdict, components: WAES_COMPONENTS.map((name) => name),
+    reviewer: 'svc:nuera-waes', reviewerKind: 'service', reviewedAt,
+    note: assessment.summary.trim(), ...(input.experimentId ? { experimentId: input.experimentId } : {}), channel: input.channel,
+  }
+  const problems = contentReviewProblems(review)
+  return problems.length ? { ok: false, reasons: problems } : { ok: true, review }
+}
+
 /** Why a record is not a valid stored review (empty when it is). */
 export function contentReviewProblems(r: ContentReviewRecord): string[] {
   const problems: string[] = []
@@ -112,7 +171,9 @@ export function contentReviewProblems(r: ContentReviewRecord): string[] {
     if (r.reviewerKind !== 'human') problems.push('a manual review must be made by a human.')
     if (components.length !== 1 || components[0] !== MANUAL_REVIEW_COMPONENT) problems.push(`a manual review names only ${MANUAL_REVIEW_COMPONENT}.`)
   } else if (r.kind === 'waes') {
-    if (!components.length) problems.push('a WAES review names the components that ran.')
+    if (r.reviewerKind !== 'service') problems.push('a WAES review must be made by the service.')
+    if (r.reviewer !== 'svc:nuera-waes') problems.push('a WAES review must use the registered WAES service identity.')
+    if (components.length !== WAES_COMPONENTS.length || WAES_COMPONENTS.some((name) => !components.includes(name)) || new Set(components).size !== WAES_COMPONENTS.length) problems.push('a WAES review names the complete, unique component suite.')
     if (components.includes(MANUAL_REVIEW_COMPONENT)) problems.push(`only a manual review may name ${MANUAL_REVIEW_COMPONENT}.`)
   }
   return problems

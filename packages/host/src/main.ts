@@ -191,12 +191,17 @@ async function buildGenesis(config: HostConfig, log: Logger): Promise<GenesisApi
     ? resolve(baseDir, process.env.QUICKSILVER_GENESIS_DIR)
     : config.store.kind === 'file' ? join(dirname(config.store.path), 'genesis') : undefined
   if (!dir) log.warn('the Genesis ledger and experiments are kept in memory; use a file store or QUICKSILVER_GENESIS_DIR to keep them')
+  const agent = await import('@quicksilver/agent')
+  const runWaes: GenesisApiDeps['runWaes'] = agent.isLlmConfigured()
+    ? (input) => agent.reviewCustomerFacingContent(input)
+    : undefined
+  if (!runWaes) log.warn('no model provider is configured; model-backed WAES reviews will fail closed')
   if ((process.env.QUICKSILVER_GENESIS_STORE ?? 'file').trim() === 'sanity') {
     const { genesisStoresFromEnv, StoresGenesisAdapter } = await import('./genesis-store.ts')
     const stores = await genesisStoresFromEnv({ dir: dir ?? join(baseDir, 'data', 'genesis'), budgetUsd: genesis.budgetUsd })
-    return { config: genesis, store: new StoresGenesisAdapter(stores) }
+    return { config: genesis, store: new StoresGenesisAdapter(stores), ...(runWaes ? { runWaes } : {}) }
   }
-  return { config: genesis, store: dir ? new FileGenesisStore(dir) : new MemoryGenesisStore() }
+  return { config: genesis, store: dir ? new FileGenesisStore(dir) : new MemoryGenesisStore(), ...(runWaes ? { runWaes } : {}) }
 }
 
 async function buildAgentRunner(log: Logger): Promise<AgentRunner | undefined> {

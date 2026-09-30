@@ -17,6 +17,7 @@ import {
   contentReviewProblems,
   contentStatus,
   createManualReview,
+  createWaesServiceReview,
   parseContentReviewInput,
   readContentArg,
   reviewSummary,
@@ -79,6 +80,26 @@ test('the gate: a manual pass unlocks the exact text only when the run allows it
   assert.equal(changed.facts['waes.review'], 'missing', 'changed text has no review of its own')
   assert.equal(changed.review, null)
   assert.equal(contentStatus(config(true), records, text.replace(/\n/g, '\r\n') + '\n', 'agent-genesis').passes, true, 'line endings and outer whitespace do not matter')
+})
+
+test('a complete service WAES pass unlocks only the reviewed text for a different proposer', () => {
+  const input = { text, channel: 'landing-page', evidence: [] }
+  const suite = ['TRUTHFULNESS-v1', 'WELLBEING-v1', 'SAFETY-v1'].map((component) => ({ component, verdict: 'pass' as const, findings: [] }))
+  const created = createWaesServiceReview(input, { verdict: 'pass', components: suite, summary: 'No material issue identified.' }, T0)
+  assert.ok(created.ok)
+  const status = contentStatus(config(), [created.review], text, 'agent-genesis')
+  assert.equal(status.passes, true)
+  assert.equal(status.manual, false)
+  assert.equal(status.facts['waes.reviewKind'], 'waes')
+  assert.equal(contentStatus(config(), [created.review], `${text}!`, 'agent-genesis').facts['waes.review'], 'missing', 'a different digest has no matching review')
+  assert.equal(contentStatus(config(), [created.review], text, 'svc:nuera-waes').facts['waes.review'], 'self-reviewed')
+
+  const actor: EntityRef = { id: 'agent-genesis', name: 'Genesis', entityType: 'agent', capabilityIds: ['cap-send'] }
+  const capabilities: CapabilityRef[] = [{ id: 'cap-send', name: 'Publish', baseRiskLevel: 1, authorizedEntityIds: ['agent-genesis'] }]
+  const action: ProposedAction = { description: 'Publish the landing page', actorId: actor.id, capabilityId: 'cap-send', applicablePolicyIds: [], evidenceIds: ['ev'], reversible: true, operationalImpact: 1, uncertainty: 1, customerFacing: true }
+  const run = (facts: Record<string, string | number | boolean>) => authorize({ action, actor, capabilities, policies: [], evidence: [{ id: 'ev', title: 'signal', confidence: 0.9 }], facts }).recommendation
+  assert.equal(run(status.facts as Record<string, string>), 'execute-autonomously')
+  assert.equal(run(contentStatus(config(), [created.review], `${text}!`, actor.id).facts as Record<string, string>), 'reject')
 })
 
 test('the latest decision on the same text decides', () => {
