@@ -54,7 +54,8 @@ export class AgentRegistry {
   }
 }
 
-function validateAgentManifest(manifest: AgentManifest): string[] {
+/** Validate an untrusted manifest before it enters the registry or catalog. */
+export function validateAgentManifest(manifest: AgentManifest): string[] {
   if (!manifest || typeof manifest !== 'object') return ['Manifest must be an object.']
   const errors: string[] = []
   if (typeof manifest.id !== 'string' || !/^nuera-quicksilver:[a-z][a-z0-9-]{0,62}$/.test(manifest.id)) errors.push('id must be a namespaced stable identifier.')

@@ -21,6 +21,9 @@ import auraVerdictLearner from './aura-verdict-learner'
 import moneyEntry from './money-entry'
 import experimentRecord from './experiment-record'
 import contentReview from './content-review'
+import agentDefinition from './agent-definition'
+import agentPublicationAudit from './agent-publication-audit'
+import agentPublicationHead from './agent-publication-head'
 
 export const schemaTypes = [
   organization,
@@ -46,4 +49,7 @@ export const schemaTypes = [
   moneyEntry,
   experimentRecord,
   contentReview,
+  agentDefinition,
+  agentPublicationAudit,
+  agentPublicationHead,
 ]

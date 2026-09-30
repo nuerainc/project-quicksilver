@@ -3,11 +3,13 @@ import type { Permission } from '@quicksilver/kernel'
 import { checkRouteCaller } from './nqc-approval.ts'
 import { guardWebRoute, WEB_ROUTE_ACCESS, type GuardRefusal, type WebRoute } from './route-guard.ts'
 import { WorkflowPublicationFault, type PublicationActor } from './workflow-publication-store.ts'
+import { AgentCatalogFault } from './agent-catalog-contract.ts'
 
 const MAX_BODY_BYTES = 256 * 1024
 
 export type PublicationMutationRoute = Extract<WebRoute,
-  'workflows/drafts' | 'workflows/drafts/submit' | 'workflows/review' | 'workflows/publish' | 'workflows/rollback'>
+  'workflows/drafts' | 'workflows/drafts/submit' | 'workflows/review' | 'workflows/publish' | 'workflows/rollback'
+  | 'agents/drafts' | 'agents/drafts/submit' | 'agents/review' | 'agents/publish'>
 
 export type PublicationActorResult =
   | { ok: true; actor: PublicationActor }
@@ -56,6 +58,9 @@ export function publicationRefusal(refusal: GuardRefusal): Response {
 }
 
 export function publicationFailure(error: unknown, fallback: string): Response {
+  if (error instanceof AgentCatalogFault) {
+    return NextResponse.json({ error: error.message }, { status: error.status })
+  }
   if (error instanceof WorkflowPublicationFault) {
     return NextResponse.json({ error: error.message }, { status: error.status })
   }
