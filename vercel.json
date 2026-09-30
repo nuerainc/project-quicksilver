@@ -8,13 +8,21 @@
     "web": {
       "root": "apps/web",
       "framework": "nextjs"
-    },
-    "sdk-python": {
-      "root": "packages/sdk-python",
-      "runtime": "python"
     }
   },
   "rewrites": [
+    {
+      "source": "/studio",
+      "destination": {
+        "service": "studio"
+      }
+    },
+    {
+      "source": "/studio/(.*)",
+      "destination": {
+        "service": "studio"
+      }
+    },
     {
       "source": "/(.*)",
       "destination": {
