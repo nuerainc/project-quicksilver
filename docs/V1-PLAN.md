@@ -26,18 +26,24 @@ Apply these rules to every phase:
 
 ## 2. Gate 0 — decide what “v1 baseline” means
 
-The parity document currently lists P-017–P-031 as the platform baseline: agent runtime, memory, skills, automation, delegation, channels, compute, web/browser, media, hosting, commerce, integrations, governance, interfaces, and research tooling. The M8–M9 decision now commits all capabilities in the authoritative enterprise specification to completion by M9. Any baseline row excluded from the product gate must be explicitly classified in `V1-SCOPE.md` with an owner, rationale, replacement behavior, and product-owner exception; nothing may be silently moved post-1.0.0.
+The product owner selected the **literal baseline** on 2026-09-29. The decision
+and remaining owner/evidence checklist are tracked in [`V1-SCOPE.md`](V1-SCOPE.md).
+Gate 0 remains open until the parity classification and operational decisions
+are completed.
 
-This is a blocking product decision. Choose and document one:
-
-- **Literal baseline:** build every P-017–P-031 capability before 1.0.0.
-- **Mode-critical baseline:** define the exact capabilities required by Genesis, Onboard, and Operate, while still completing every capability in the authoritative enterprise specification by M9; any other baseline exception must be documented and approved rather than silently deferred.
-
-Recommended mode-critical starting scope, subject to owner approval: one customer channel plus email behind WAES; one payment/commerce path that reconciles to the ledger; one experiment-page hosting path with teardown; the browser/research and media paths only if the selected Genesis experiment requires them; and the Sanity, bookkeeping, payments, CRM, and email connectors required by Onboard. Do not claim a general marketplace, desktop app, remote-machine control, or all channels unless implemented and evidenced.
+The parity document currently lists P-017–P-031 as the platform baseline:
+agent runtime, memory, skills, automation, delegation, channels, compute,
+web/browser, media, hosting, commerce, integrations, governance, interfaces,
+and research tooling. The product owner selected the literal baseline, so every
+P-017–P-031 capability is required before 1.0.0. The M8–M9 decision also
+commits all capabilities in the authoritative enterprise specification by M9.
+Any exception requires an explicit owner, rationale, replacement behavior,
+evidence, and product-owner approval; nothing may be silently moved post-1.0.0.
 
 ### Gate 0 checklist
 
-- [ ] Record the choice in `docs/V1-SCOPE.md` and update `docs/NUERA-QUICKSILVER-PRODUCT.md`.
+- [x] Record the literal-baseline choice in `docs/V1-SCOPE.md`.
+- [x] Record the literal-baseline release-scope decision in `docs/NUERA-QUICKSILVER-PRODUCT.md`.
 - [ ] Mark each P-001–P-121 as `v1`, `post-v1`, or `not applicable with rationale`.
 - [ ] Name product, security, operations, data, and finance owners.
 - [ ] Choose supported Node, browsers, database, deployment platform, model providers, and Sanity dataset.

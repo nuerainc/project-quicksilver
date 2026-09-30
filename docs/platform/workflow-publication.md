@@ -32,6 +32,13 @@ transactions to serialize releases, so two concurrent publishes cannot leave
 two versions active. Audit records are separate append-only documents. Reads
 recompute and verify every graph digest before returning a version.
 
+The single-tenant host has its own file-backed publication store today. On
+restart it validates graph shape, version/digest bindings, audit references,
+and the one-active-version invariant; inconsistent snapshots stop startup.
+This detects accidental or partial snapshot corruption, but is not a signed or
+tamper-evident audit chain. Host publication state is not yet shared with the
+web app's Sanity-backed publication store.
+
 ## Storage and limits
 
 All reads and writes use the existing server-only Sanity client. The helper

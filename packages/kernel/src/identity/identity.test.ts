@@ -62,6 +62,27 @@ test('RBAC: agents never gain authority, even if a role would grant it', () => {
   }
   assert.equal(access.authorize(agent, 'decision:propose', acme).allowed, true)
   assert.equal(access.effectivePermissions(agent).has('decision:approve'), false)
+  for (const permission of ['agent:review', 'agent:publish'] as const) {
+    assert.equal(access.authorize(agent, permission, acme).allowed, false, permission)
+  }
+})
+
+test('RBAC: dedicated agent catalog permissions follow least privilege', () => {
+  const access = new AccessController()
+  const auditor: Principal = { id: 'user:audit@acme.com', kind: 'human', tenantId: 'acme', roles: ['auditor'] }
+  const agentReader: Principal = { ...agent, roles: ['agent-worker'] }
+  assert.equal(access.authorize(viewer, 'agent:read', acme).allowed, true)
+  assert.equal(access.authorize(viewer, 'agent:write', acme).allowed, false)
+  assert.equal(access.authorize(dev, 'agent:write', acme).allowed, true)
+  assert.equal(access.authorize(dev, 'agent:review', acme).allowed, false)
+  assert.equal(access.authorize(ana, 'agent:review', acme).allowed, true)
+  assert.equal(access.authorize(ana, 'agent:publish', { ...acme, requestedBy: dev.id }).allowed, true)
+  assert.equal(access.authorize(ana, 'agent:publish', { ...acme, requestedBy: ana.id }).allowed, false, 'publisher cannot publish own submission')
+  assert.equal(access.authorize(auditor, 'agent:read', acme).allowed, true)
+  assert.equal(access.authorize(auditor, 'agent:write', acme).allowed, false)
+  assert.equal(access.authorize(agentReader, 'agent:read', acme).allowed, true)
+  assert.equal(access.authorize(agentReader, 'agent:write', acme).allowed, false)
+  assert.equal(access.authorize(rival, 'agent:read', acme).allowed, false, 'agent catalog access is tenant-scoped')
 })
 
 test('RBAC: separation of duties blocks self-approval', () => {

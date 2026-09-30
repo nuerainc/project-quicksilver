@@ -155,7 +155,7 @@ test('console token: sent only as a bearer header to this app\'s own API routes 
 })
 
 test('agent catalog token access is limited to the declared same-origin routes', () => {
-  for (const url of ['/api/agents/catalog', '/api/agents/definitions?agentId=nuera-quicksilver%3Acompliance', '/api/agents/drafts', '/api/agents/drafts/submit', '/api/agents/review', '/api/agents/publish']) {
+  for (const url of ['/api/agents/catalog', '/api/agents/definitions?agentId=nuera-quicksilver%3Acompliance', '/api/agents/drafts', '/api/agents/drafts/submit', '/api/agents/review', '/api/agents/publish', '/api/agents/rollback']) {
     assert.equal(mayCarryConsoleToken(url), true, url)
     assert.equal(consoleHeaders(url, 'agent-token').authorization, 'Bearer agent-token')
   }

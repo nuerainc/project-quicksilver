@@ -132,6 +132,7 @@ export class InMemoryWorkflowPublicationStore {
   }
 
   protected restore(snapshot: WorkflowPublicationSnapshot): void {
+    validateSnapshot(snapshot)
     this.versions.clear()
     this.auditLog.length = 0
     for (const record of snapshot.versions) {
@@ -157,6 +158,49 @@ export class InMemoryWorkflowPublicationStore {
 
   private audit(event: WorkflowPublicationAudit['event'], record: WorkflowPublicationVersion, actorId: string, at: number, detail?: string): void {
     this.auditLog.push({ event, workflowId: record.workflowId, version: record.version, actorId, at, digest: record.digest, ...(detail ? { detail } : {}) })
+  }
+}
+
+/** Refuse corrupted or internally inconsistent persisted publication state. */
+function validateSnapshot(snapshot: WorkflowPublicationSnapshot): void {
+  if (!snapshot || !Array.isArray(snapshot.versions) || !Array.isArray(snapshot.audit)) {
+    throw new Error('Workflow publication snapshot is invalid.')
+  }
+
+  const records = new Map<string, WorkflowPublicationVersion>()
+  const publishedByWorkflow = new Set<string>()
+  for (const record of snapshot.versions) {
+    if (!record || typeof record.workflowId !== 'string' || !Number.isSafeInteger(record.version) || record.version < 1
+      || !['draft', 'in-review', 'published', 'deprecated'].includes(record.status)
+      || typeof record.authoredBy !== 'string' || !record.authoredBy
+      || !Number.isFinite(record.createdAt)
+      || !record.graph || record.graph.id !== record.workflowId || record.graph.version !== record.version) {
+      throw new Error('Workflow publication snapshot contains an invalid version record.')
+    }
+    const key = `${record.workflowId}@${record.version}`
+    if (records.has(key)) throw new Error(`Workflow publication snapshot repeats ${key}.`)
+    if (!validateWorkflowGraph(record.graph).valid) throw new Error(`Workflow publication snapshot contains an invalid graph at ${key}.`)
+    if (record.digest !== workflowDigest(record.graph)) throw new Error(`Workflow publication digest mismatch at ${key}.`)
+    if (record.status === 'published') {
+      if (publishedByWorkflow.has(record.workflowId)) throw new Error(`Workflow publication snapshot has multiple active versions for "${record.workflowId}".`)
+      publishedByWorkflow.add(record.workflowId)
+    }
+    records.set(key, record)
+  }
+
+  const events = new Set<WorkflowPublicationAudit['event']>(['draft-created', 'submitted-for-review', 'published', 'deprecated', 'rolled-back'])
+  let previousAt = -Infinity
+  for (const entry of snapshot.audit) {
+    if (!entry || !events.has(entry.event) || typeof entry.workflowId !== 'string'
+      || !Number.isSafeInteger(entry.version) || typeof entry.actorId !== 'string' || !entry.actorId
+      || !Number.isFinite(entry.at) || entry.at < previousAt) {
+      throw new Error('Workflow publication snapshot contains an invalid audit entry.')
+    }
+    const record = records.get(`${entry.workflowId}@${entry.version}`)
+    if (!record || record.digest !== entry.digest) {
+      throw new Error(`Workflow publication audit does not match ${entry.workflowId}@${entry.version}.`)
+    }
+    previousAt = entry.at
   }
 }
 

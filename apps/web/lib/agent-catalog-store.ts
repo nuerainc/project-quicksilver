@@ -19,18 +19,19 @@ export interface AgentDefinition {
   reviewNote?: string
   reviewedAt?: number
   publishedAt?: number
+  rollbackFrom?: { version: number; digest: string }
   builtIn?: true
 }
 export interface AgentCatalogAudit { event: string; agentId: string; version: number; actorId: string; at: number; digest: string; detail?: string }
 export interface AgentActor { id: string; kind: 'human' | 'service' | 'agent' }
-type AgentEvent = 'draft-created' | 'submitted-for-review' | 'reviewed' | 'published' | 'deprecated'
-interface DefinitionDoc extends Omit<AgentDefinition, 'digest' | 'createdAt' | 'reviewedAt' | 'publishedAt' | 'lifecycle' | 'builtIn'> {
-  _id: string; _rev: string; _type: 'agentDefinition'; tenantId: string; lifecycle: 'draft' | 'review' | 'active' | 'archived'; definitionDigest: string; createdAt: string; reviewedAt?: string; publishedAt?: string
+type AgentEvent = 'draft-created' | 'rollback-draft-created' | 'submitted-for-review' | 'reviewed' | 'published' | 'deprecated'
+interface DefinitionDoc extends Omit<AgentDefinition, 'digest' | 'createdAt' | 'reviewedAt' | 'publishedAt' | 'lifecycle' | 'builtIn' | 'rollbackFrom'> {
+  _id: string; _rev: string; _type: 'agentDefinition'; tenantId: string; lifecycle: 'draft' | 'review' | 'active' | 'archived'; definitionDigest: string; createdAt: string; reviewedAt?: string; publishedAt?: string; rollbackFromVersion?: number; rollbackFromDigest?: string
 }
 interface AuditDoc { _id: string; _type: 'agentPublicationAudit'; tenantId: string; event: AgentEvent; agentId: string; version: number; actorId: string; at: string; definitionDigest: string; detail?: string }
 interface HeadDoc { _id: string; _rev: string; _type: 'agentPublicationHead'; tenantId: string; agentId: string; activeVersion?: number }
 export interface AgentCatalogDependencies { client: SanityClient; tenantId: string }
-const projection = '{_id,_rev,_type,tenantId,agentId,displayName,description,version,lifecycle,manifest,definitionDigest,authoredBy,createdAt,reviewedBy,reviewNote,reviewedAt,publishedAt}'
+const projection = '{_id,_rev,_type,tenantId,agentId,displayName,description,version,lifecycle,manifest,definitionDigest,authoredBy,createdAt,reviewedBy,reviewNote,reviewedAt,publishedAt,rollbackFromVersion,rollbackFromDigest}'
 const tenantId = () => process.env.QUICKSILVER_TENANT_ID?.trim() || 'default'
 function dependencies(access: 'read' | 'write', provided?: AgentCatalogDependencies) {
   return { client: provided?.client ?? getSanityClient(access), tenant: provided?.tenantId ?? tenantId() }
@@ -45,7 +46,7 @@ function docId(tenant: string, agentId: string, version: number): string { retur
 function mapDoc(doc: DefinitionDoc): AgentDefinition {
   if (validateAgentManifest(doc.manifest).length || doc.agentId !== doc.manifest.id) throw new AgentCatalogFault('Stored agent definition failed its integrity check.', 409)
   assertAgentDigest({ displayName: doc.displayName, description: doc.description, manifest: doc.manifest }, doc.definitionDigest)
-  return { agentId: doc.agentId, displayName: doc.displayName, description: doc.description, version: doc.version, manifest: doc.manifest, digest: doc.definitionDigest, authoredBy: doc.authoredBy, createdAt: Date.parse(doc.createdAt), lifecycle: doc.lifecycle === 'review' ? 'in-review' : doc.lifecycle === 'active' ? 'published' : doc.lifecycle === 'archived' ? 'archived' : 'draft', ...(doc.reviewedBy ? { reviewedBy: doc.reviewedBy } : {}), ...(doc.reviewNote ? { reviewNote: doc.reviewNote } : {}), ...(doc.reviewedAt ? { reviewedAt: Date.parse(doc.reviewedAt) } : {}), ...(doc.publishedAt ? { publishedAt: Date.parse(doc.publishedAt) } : {}) }
+  return { agentId: doc.agentId, displayName: doc.displayName, description: doc.description, version: doc.version, manifest: doc.manifest, digest: doc.definitionDigest, authoredBy: doc.authoredBy, createdAt: Date.parse(doc.createdAt), lifecycle: doc.lifecycle === 'review' ? 'in-review' : doc.lifecycle === 'active' ? 'published' : doc.lifecycle === 'archived' ? 'archived' : 'draft', ...(doc.reviewedBy ? { reviewedBy: doc.reviewedBy } : {}), ...(doc.reviewNote ? { reviewNote: doc.reviewNote } : {}), ...(doc.reviewedAt ? { reviewedAt: Date.parse(doc.reviewedAt) } : {}), ...(doc.publishedAt ? { publishedAt: Date.parse(doc.publishedAt) } : {}), ...(doc.rollbackFromVersion !== undefined && doc.rollbackFromDigest ? { rollbackFrom: { version: doc.rollbackFromVersion, digest: doc.rollbackFromDigest } } : {}) }
 }
 function human(actor: AgentActor) { assertHumanAgentActor(actor) }
 function audit(tenant: string, definition: AgentDefinition, event: AgentEvent, actor: AgentActor, at: number, detail?: string): AuditDoc {
@@ -99,6 +100,42 @@ export async function createAgentDraft(input: { displayName: string; description
   const definition = { agentId: manifest.id, displayName, description, version, manifest, digest: agentDefinitionDigest({ displayName, description, manifest }), authoredBy: actor.id, createdAt: at, lifecycle: 'draft' as const }
   const document = { _id: docId(tenant, definition.agentId, version), _type: 'agentDefinition', tenantId: tenant, ...definition, definitionDigest: definition.digest, lifecycle: 'draft', createdAt: new Date(at).toISOString() }
   try { await client.transaction().create(document).create(audit(tenant, definition, 'draft-created', actor, at)).commit() }
+  catch (error) { if ((error as { statusCode?: number }).statusCode === 409) throw new AgentCatalogFault('A definition version was created concurrently; refresh and retry.', 409); throw error }
+  return definition
+}
+
+/** Start a rollback as a new draft copied from an archived version. It must pass normal independent review and publication. */
+export async function createAgentRollbackDraft(agentId: string, sourceVersion: number, actor: AgentActor, provided?: AgentCatalogDependencies): Promise<AgentDefinition> {
+  human(actor)
+  const { client, tenant } = dependencies('write', provided)
+  const sourceDoc = await getVersion(client, agentId, sourceVersion, tenant)
+  const source = mapDoc(sourceDoc)
+  if (source.lifecycle !== 'archived') throw new AgentCatalogFault('Rollback source must be an archived version; the active version cannot be rolled back to itself.', 409)
+
+  const head = await client.fetch<HeadDoc | null>('*[_type == "agentPublicationHead" && tenantId == $tenant && agentId == $id][0]{_id,_rev,_type,tenantId,agentId,activeVersion}', { tenant, id: agentId })
+  const active = await client.fetch<DefinitionDoc[]>(`*[_type == "agentDefinition" && tenantId == $tenant && agentId == $id && lifecycle == "active"]${projection}`, { tenant, id: agentId })
+  if (!head || head.activeVersion === undefined || source.version >= head.activeVersion || active.length !== 1 || active[0]?.version !== head.activeVersion) {
+    throw new AgentCatalogFault('Rollback source does not resolve to a prior version under a consistent active publication head.', 409)
+  }
+
+  const previous = await client.fetch<Array<{ version: number }>>('*[_type == "agentDefinition" && tenantId == $tenant && agentId == $id] | order(version desc)[0...1]{version}', { tenant, id: agentId })
+  const version = (previous[0]?.version ?? 0) + 1
+  const manifest: AgentManifest = { ...source.manifest, version }
+  assertValidAgentDefinition(agentId, manifest)
+  const definition: AgentDefinition = {
+    agentId, displayName: source.displayName, description: source.description, version, manifest,
+    digest: agentDefinitionDigest({ displayName: source.displayName, description: source.description, manifest }),
+    authoredBy: actor.id, createdAt: Date.now(), lifecycle: 'draft',
+    rollbackFrom: { version: source.version, digest: source.digest },
+  }
+  const { rollbackFrom, ...storedDefinition } = definition
+  const document = {
+    _id: docId(tenant, agentId, version), _type: 'agentDefinition', tenantId: tenant, ...storedDefinition,
+    definitionDigest: definition.digest, lifecycle: 'draft', createdAt: new Date(definition.createdAt).toISOString(),
+    rollbackFromVersion: source.version, rollbackFromDigest: source.digest,
+  }
+  const record = audit(tenant, definition, 'rollback-draft-created', actor, definition.createdAt, `rollback draft from archived v${source.version} (${source.digest})`)
+  try { await client.transaction().create(document).create(record).commit() }
   catch (error) { if ((error as { statusCode?: number }).statusCode === 409) throw new AgentCatalogFault('A definition version was created concurrently; refresh and retry.', 409); throw error }
   return definition
 }

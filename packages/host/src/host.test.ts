@@ -426,10 +426,26 @@ test('published workflow admission runs the immutable published graph and return
     const admittedBody = await admitted.json() as { runId: string; publication: { version: number; digest: string } }
     assert.equal(admittedBody.publication.version, 7)
     assert.match(admittedBody.publication.digest, /^sha256:/)
+    const completed = await waitForRun(h, admittedBody.runId)
+    assert.equal(completed.status, 'completed')
+    assert.equal(h.evaluations.filter((entry) => entry.runId === admittedBody.runId).length, 1)
     const run = await (await api(h, `/api/runs/${admittedBody.runId}`, { token: h.tokens.viewer })).json() as { run: { workflowVersion: number; graphDigest: string; publication: { version: number; digest: string } } }
     assert.equal(run.run.workflowVersion, 7)
     assert.equal(run.run.graphDigest, admittedBody.publication.digest)
     assert.deepEqual(run.run.publication, admittedBody.publication)
+
+    const nextGraph = { ...briefGraph, id: 'published-run', version: 8 }
+    assert.equal((await api(h, '/api/workflows/drafts', { method: 'POST', token: h.tokens.developer, body: { graph: nextGraph } })).status, 201)
+    assert.equal((await api(h, '/api/workflows/published-run/submit-review', { method: 'POST', token: h.tokens.developer, body: { version: 8 } })).status, 200)
+    assert.equal((await api(h, '/api/workflows/published-run/review', { method: 'POST', token: h.tokens.supervisor, body: { version: 8 } })).status, 200)
+    assert.equal((await api(h, '/api/workflows/published-run/publish', { method: 'POST', token: h.tokens.publisher, body: { version: 8 } })).status, 200)
+    const active = await (await api(h, '/api/workflows/published-run', { token: h.tokens.viewer })).json() as { versions: Array<{ version: number; status: string }> }
+    assert.equal(active.versions.find((version) => version.status === 'published')?.version, 8)
+
+    const afterPublish = await (await api(h, `/api/runs/${admittedBody.runId}`, { token: h.tokens.viewer })).json() as { run: { workflowVersion: number; graphDigest: string; publication: { version: number; digest: string } } }
+    assert.equal(afterPublish.run.workflowVersion, 7, 'the admitted run must remain pinned to its original immutable version')
+    assert.equal(afterPublish.run.graphDigest, admittedBody.publication.digest)
+    assert.deepEqual(afterPublish.run.publication, admittedBody.publication)
   } finally {
     await h.close()
   }

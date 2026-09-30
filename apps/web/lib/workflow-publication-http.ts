@@ -9,7 +9,7 @@ const MAX_BODY_BYTES = 256 * 1024
 
 export type PublicationMutationRoute = Extract<WebRoute,
   'workflows/drafts' | 'workflows/drafts/submit' | 'workflows/review' | 'workflows/publish' | 'workflows/rollback'
-  | 'agents/drafts' | 'agents/drafts/submit' | 'agents/review' | 'agents/publish'>
+  | 'agents/drafts' | 'agents/drafts/submit' | 'agents/review' | 'agents/publish' | 'agents/rollback'>
 
 export type PublicationActorResult =
   | { ok: true; actor: PublicationActor }

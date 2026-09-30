@@ -19,6 +19,10 @@ export const PERMISSIONS = [
   'workflow:read',
   'workflow:write',
   'workflow:publish',
+  'agent:read',
+  'agent:write',
+  'agent:review',
+  'agent:publish',
   'run:read',
   'run:enqueue',
   'run:cancel',
@@ -49,6 +53,8 @@ export type Permission = (typeof PERMISSIONS)[number]
 /** Permissions that exercise authority over actions, policy, secrets, or people. */
 export const AUTHORITY_PERMISSIONS: readonly Permission[] = Object.freeze([
   'workflow:publish',
+  'agent:review',
+  'agent:publish',
   'run:redrive',
   'decision:approve',
   'decision:execute',
@@ -69,6 +75,7 @@ export const SEPARATION_OF_DUTIES: readonly Permission[] = Object.freeze([
   'memory:approve',
   'routing:approve',
   'workflow:publish',
+  'agent:publish',
 ])
 
 export type PrincipalKind = 'human' | 'service' | 'agent'
@@ -130,17 +137,17 @@ const PERMISSION_SET = new Set<string>(PERMISSIONS)
 
 /** Built-in roles. Custom tenant roles may compose any valid permissions. */
 export const BUILT_IN_ROLES: readonly RoleDefinition[] = Object.freeze([
-  role('viewer', 'Read workflows, runs, and decisions.', ['workflow:read', 'run:read', 'decision:read']),
+  role('viewer', 'Read workflows, agent definitions, runs, and decisions.', ['workflow:read', 'agent:read', 'run:read', 'decision:read']),
   role('operator', 'Start and cancel runs of published workflows.', ['workflow:read', 'run:read', 'run:enqueue', 'run:cancel', 'decision:read']),
-  role('developer', 'Author workflows and run them; cannot publish or approve.', ['workflow:read', 'workflow:write', 'run:read', 'run:enqueue', 'run:cancel', 'decision:read', 'decision:propose', 'secret:use']),
-  role('supervisor', 'Human authority for approvals, execution, rollback, redrive, and governed memory/routing changes.', ['workflow:read', 'workflow:publish', 'run:read', 'run:cancel', 'run:redrive', 'decision:read', 'decision:approve', 'decision:execute', 'decision:rollback', 'memory:approve', 'routing:approve', 'audit:read', 'task:submit', 'task:read', 'task:approve']),
-  role('auditor', 'Read-only access including the audit trail.', ['workflow:read', 'run:read', 'decision:read', 'audit:read', 'task:read']),
-  role('tenant-admin', 'Manage roles, principals, and secrets for one tenant.', ['workflow:read', 'run:read', 'decision:read', 'audit:read', 'secret:read', 'secret:write', 'secret:use', 'tenant:admin']),
+  role('developer', 'Author workflows and agent definitions and run them; cannot publish or approve.', ['workflow:read', 'workflow:write', 'agent:read', 'agent:write', 'run:read', 'run:enqueue', 'run:cancel', 'decision:read', 'decision:propose', 'secret:use']),
+  role('supervisor', 'Human authority for approvals, execution, rollback, redrive, and governed workflow/agent publication.', ['workflow:read', 'workflow:publish', 'agent:read', 'agent:review', 'agent:publish', 'run:read', 'run:cancel', 'run:redrive', 'decision:read', 'decision:approve', 'decision:execute', 'decision:rollback', 'memory:approve', 'routing:approve', 'audit:read', 'task:submit', 'task:read', 'task:approve']),
+  role('auditor', 'Read-only access including the audit trail.', ['workflow:read', 'agent:read', 'run:read', 'decision:read', 'audit:read', 'task:read']),
+  role('tenant-admin', 'Manage roles, principals, agent definitions, and secrets for one tenant.', ['workflow:read', 'agent:read', 'agent:write', 'run:read', 'decision:read', 'audit:read', 'secret:read', 'secret:write', 'secret:use', 'tenant:admin']),
   role('trigger', 'Service identity for webhooks and schedules: may only enqueue runs and submit tasks (both still governed).', ['run:enqueue', 'task:submit']),
   role('intent-provider', 'Aura intent provider (the founder): states goals, weights, horizons, autonomy and customer commitments. The only source of intent. Submits, reads and decides tasks.', ['decision:read', 'audit:read', 'intent:provide', 'task:submit', 'task:read', 'task:approve']),
   role('intent-admin', 'Sets how several intent providers decide (the decision rule). No input into intent itself.', ['decision:read', 'audit:read', 'intent:rules']),
   role('task-client', 'An outside tool that hands tasks to Quicksilver (API, MCP, scripts): submit a task and read its own. Grants nothing else.', ['task:submit', 'task:read-own']),
-  role('agent-worker', 'Nuera Quicksilver Agent identity: read context and propose, never authorize.', ['workflow:read', 'run:read', 'decision:read', 'decision:propose', 'secret:use']),
+  role('agent-worker', 'Nuera Quicksilver Agent identity: read context and published agent definitions and propose, never authorize.', ['workflow:read', 'agent:read', 'run:read', 'decision:read', 'decision:propose', 'secret:use']),
 ])
 
 function role(id: string, description: string, permissions: Permission[]): RoleDefinition {

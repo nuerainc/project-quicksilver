@@ -69,6 +69,7 @@ const TOKEN_PATHS: ReadonlySet<string> = new Set([
   '/api/agents/drafts/submit',
   '/api/agents/review',
   '/api/agents/publish',
+  '/api/agents/rollback',
   '/api/workflows/validate',
   '/api/workflows/simulate',
   '/api/workflows/run',
@@ -105,7 +106,7 @@ export type ConsoleDecisionRoute = 'action' | 'execute' | 'observe' | 'resume' |
 /** Every console call that can be refused for auth: the decision routes plus plan, query and the workflow builder. */
 export type ConsoleRoute = ConsoleDecisionRoute | 'plan' | 'query'
   | 'monitoring/workflows'
-  | 'agents/catalog' | 'agents/definitions' | 'agents/drafts' | 'agents/drafts/submit' | 'agents/review' | 'agents/publish'
+  | 'agents/catalog' | 'agents/definitions' | 'agents/drafts' | 'agents/drafts/submit' | 'agents/review' | 'agents/publish' | 'agents/rollback'
   | 'workflows/validate' | 'workflows/simulate' | 'workflows/run'
   | 'workflows/publications' | 'workflows/executions' | 'workflows/diff' | 'workflows/drafts' | 'workflows/drafts/submit'
   | 'workflows/review' | 'workflows/publish' | 'workflows/rollback'
@@ -120,12 +121,13 @@ export const CONSOLE_ROUTE_PERMISSION: Readonly<Record<ConsoleRoute, string>> = 
   plan: 'decision:propose',
   query: 'decision:read',
   'monitoring/workflows': 'workflow:read',
-  'agents/catalog': 'workflow:read',
-  'agents/definitions': 'workflow:read',
-  'agents/drafts': 'workflow:write',
-  'agents/drafts/submit': 'workflow:write',
-  'agents/review': 'workflow:publish',
-  'agents/publish': 'workflow:publish',
+  'agents/catalog': 'agent:read',
+  'agents/definitions': 'agent:read',
+  'agents/drafts': 'agent:write',
+  'agents/drafts/submit': 'agent:write',
+  'agents/review': 'agent:review',
+  'agents/publish': 'agent:publish',
+  'agents/rollback': 'agent:write',
   'workflows/validate': 'workflow:read',
   'workflows/simulate': 'workflow:read',
   'workflows/run': 'run:enqueue',

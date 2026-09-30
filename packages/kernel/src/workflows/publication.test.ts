@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -81,6 +81,22 @@ test('Publication: file-backed store survives restart and writes a private atomi
     assert.equal(restarted.getPublished('brief')?.digest, workflowDigest(graph(1)))
     assert.equal(restarted.snapshot().audit.length, 3)
     assert.match(readFileSync(file, 'utf8'), /"status": "published"/)
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+test('Publication: restart fails closed when a persisted graph no longer matches its digest', () => {
+  const directory = mkdtempSync(join(tmpdir(), 'quicksilver-publication-corrupt-'))
+  const file = join(directory, 'workflows.json')
+  try {
+    const store = new FileWorkflowPublicationStore(file)
+    store.createDraft(graph(1), author, 100)
+    const snapshot = JSON.parse(readFileSync(file, 'utf8')) as { versions: Array<{ graph: WorkflowGraph }> }
+    snapshot.versions[0]!.graph.nodes[1]!.label = 'tampered after persistence'
+    writeFileSync(file, JSON.stringify(snapshot), 'utf8')
+
+    assert.throws(() => new FileWorkflowPublicationStore(file), /digest mismatch/)
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }

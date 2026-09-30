@@ -6,7 +6,7 @@ import { AgentCatalogFault } from './agent-catalog-contract.ts'
 import type { AgentActor, AgentCatalogDependencies } from './agent-catalog-store.ts'
 
 register('./route-test-loader.mjs', import.meta.url)
-const { createAgentDraft, listAgentCatalog, listAgentDefinitions, publishAgentDefinition, reviewAgentDefinition, submitAgentDefinition } = await import('./agent-catalog-store.ts')
+const { createAgentDraft, createAgentRollbackDraft, listAgentCatalog, listAgentDefinitions, publishAgentDefinition, reviewAgentDefinition, submitAgentDefinition } = await import('./agent-catalog-store.ts')
 
 type Doc = Record<string, any> & { _id: string; _type: string; _rev: string; tenantId: string }
 class MemorySanity {
@@ -105,6 +105,21 @@ test('agent catalog persists isolated immutable versions through draft, independ
   assert.deepEqual(versions.versions.map((item) => [item.version, item.lifecycle]), [[2, 'published'], [1, 'archived']])
   assert.ok(versions.audit.some((item) => item.event === 'deprecated' && item.version === 1))
   assert.equal(versions.audit.length, 9)
+
+  const rollback = await createAgentRollbackDraft(first.agentId, 1, actor('rollback-author'), deps)
+  assert.equal(rollback.version, 3)
+  assert.equal(rollback.lifecycle, 'draft', 'rollback never directly activates an archived definition')
+  assert.equal(rollback.manifest.version, 3, 'rollback copies policy but receives a new immutable version')
+  assert.deepEqual(rollback.rollbackFrom, { version: 1, digest: versions.versions[1]!.digest })
+  assert.ok((await listAgentCatalog(deps, 'rollback-author')).drafts.some((item) => item.version === 3))
+  await expectConflict(createAgentRollbackDraft(first.agentId, 3, actor('rollback-author-2'), deps))
+  await submitAgentDefinition(first.agentId, 3, actor('rollback-author'), deps)
+  await reviewAgentDefinition(first.agentId, 3, actor('rollback-reviewer'), 'Rollback restores the previously approved scope.', deps)
+  await publishAgentDefinition(first.agentId, 3, actor('rollback-publisher'), deps)
+  const restored = await listAgentDefinitions(first.agentId, deps)
+  assert.deepEqual(restored.versions.map((item) => [item.version, item.lifecycle]), [[3, 'published'], [2, 'archived'], [1, 'archived']])
+  assert.ok(restored.audit.some((item) => item.event === 'rollback-draft-created' && item.detail?.includes('archived v1')))
+  assert.equal(restored.audit.length, 14)
 
   const otherTenant = setup('tenant-b')
   const isolated = await listAgentCatalog(otherTenant.deps)

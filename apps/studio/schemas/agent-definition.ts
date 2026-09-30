@@ -28,6 +28,8 @@ export default defineType({
     defineField({ name: 'reviewNote', type: 'text', rows: 3, readOnly: true }),
     defineField({ name: 'reviewedAt', type: 'datetime', readOnly: true }),
     defineField({ name: 'publishedAt', type: 'datetime', readOnly: true }),
+    defineField({ name: 'rollbackFromVersion', type: 'number', readOnly: true, validation: (rule) => rule.integer().positive() }),
+    defineField({ name: 'rollbackFromDigest', type: 'string', readOnly: true, validation: (rule) => rule.regex(/^[a-f0-9]{64}$/) }),
   ],
   validation: (rule) => rule.custom((document) => {
     if (!document || typeof document !== 'object') return true

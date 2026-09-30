@@ -214,41 +214,37 @@ readiness claims.
 
 | Specification area | Repository evidence | Gap and dependency | Status |
 |---|---|---|---|
-| Cognitive evaluation | Deterministic signals score supplied grounding, tool failures, uncertainty, and plan length; NQC returns scores and safety outcomes | Semantic correctness, adversarial reasoning evaluation, calibrated baselines, and persisted evaluation records are absent | Partial foundation |
+| Cognitive evaluation | Deterministic signals score supplied grounding, tool failures, uncertainty, and plan length; NQC returns scores and safety outcomes; Quicksilver Engine has a seeded final-answer stress harness | Semantic correctness and calibrated hallucination/brittleness baselines are not established; see the [benchmark plan](NQC-EVALUATION-BENCHMARK.md); do not infer comparative performance from stress-suite scores | Partial foundation |
 | Safety and governance | Existing Sanity decision lifecycle now requires a server-verified configured human supervisor for decision actions, stores policy snapshot and action fingerprints, and records execution outcomes; workflow tool dispatch remains blocked in web live runs | Replace interim single-token identity with authenticated sessions/SSO and RBAC; add durable external-tool approval records and end-to-end authorization | Partial foundation |
-| Agents and orchestration | Versioned manifests gate planner, reviewer, and query calls; workflow DAG contract and in-process runner support branch evaluation | Remaining agent family is not implemented; no bounded concurrent scheduler, durable jobs, cancellation propagation for every provider, queue/backpressure, or dead-letter processing | Partial foundation |
-| Workflow builder and release lifecycle | Browser graph editor, validation, JSON import/export, local autosave, safe preview, retry/timeout fields, tenant-scoped immutable Sanity versions with independent author/reviewer/publisher gates, mandatory reviewer rationale, safety-aware version diffs, rollback, append-only audit, and active-version pinned live reads | No drag-and-drop canvas, scheduled deployment, or hosted execution; live runs remain development-only and tools remain blocked | Partial foundation |
+| Agents and orchestration | Versioned manifests gate planner, reviewer, and query calls; governed agent-definition catalog has tenant-scoped immutable releases, dedicated RBAC, audited rollback drafts, and mandatory independent review; workflow DAG contract and in-process runner support branch evaluation | Catalog definitions remain metadata-only; remaining agent family is not implemented; no bounded concurrent scheduler, durable jobs, cancellation propagation for every provider, queue/backpressure, or dead-letter processing | Partial foundation |
+| Workflow builder and release lifecycle | Browser graph editor, validation, JSON import/export, local autosave, safe preview, retry/timeout fields, immutable published versions, independent author/reviewer/publisher gates, mandatory reviewer rationale, safety-aware diffs, rollback, append-only audit, and digest-pinned run snapshots through the single-tenant host; host restart now rejects persisted graph/digest or lifecycle inconsistencies | Web live execution remains development-only; hosted publishing stores are not shared with the host; no scheduled deployment, isolated job containers, or effectful tools | Partial foundation |
 | Routing optimization | Deterministic route-selection and profile-update helpers exist | No measured/persisted model profiles, route decision history, or connection to actual planner selection | Not operational |
 | Memory and learning | Memory-write governance proposal and retention metadata helpers | No tenant/domain-scoped persistent store, retrieval, provenance lifecycle, deletion, feedback loop, or validated improvement evidence | Not operational |
 | Tool/plugin ecosystem | Versioned in-process tool contracts validate the current Sanity MCP path | No persistent catalog, general plugin install/permission system, hosted tool runtime, marketplace, or externally verifiable approvals | Partial foundation |
 | SDK and developer experience | Internal TypeScript, Python/CLI, and dependency-free Go client foundations cover validate, preview, and gated read-only run | No stable/published API, agent creation API, docs portal, or compatibility guarantees | Partial foundation |
 | Hosted runtime and triggers | Durable run records; in-memory, journaled-file, and PostgreSQL stores; governed priority queue; worker; cron and signed webhooks; single-tenant host process with management API, graceful shutdown, Docker and Compose config | Isolated execution per job, shared replay cache for replicas, multi-tenant hosting | Single-tenant foundation |
-| Identity, tenancy, and secrets | Kernel RBAC with tenant isolation, agent-authority bar and audited decisions; hashed per-person bearer tokens on the queue, web and host; separation of duties in decision approvals with an audited sole-operator override; encrypted secrets vault with RBAC, rotation and audit | SSO/OIDC, sessions, persistent principal/role admin, durable access-audit store | Partial foundation |
+| Identity, tenancy, and secrets | Kernel RBAC with tenant isolation, agent-authority bar and audited decisions; dedicated agent catalog read/write/review/publish permissions; hashed per-person bearer tokens on the queue, web and host; separation of duties in decision approvals and agent publication with an audited sole-operator override for decisions; encrypted secrets vault with RBAC, rotation and audit | SSO/OIDC, sessions, persistent principal/role administration, durable access-audit store, and team collaboration remain unbuilt | Partial foundation |
 | Monitoring and audit | Decision and process history, durable run records and evaluation records; structured JSON logs with secret redaction; Prometheus metrics for runs, queue, webhooks, schedules, evaluations, vault and HTTP; authenticated tenant-scoped workflow dashboard over the latest 100 metadata-only runs | Distributed traces, model/cost dashboards, alerting, complete history and log retention | Partial foundation |
 | Enterprise deployment and extensions | Separate Studio schemas are prepared; canonical docs and roadmap are separated from challenge history | Dedicated Sanity project ID and Context MCP endpoints are pending; compliance packs, identity-provider integration, team collaboration, and governed extension releases are absent | Blocked / not built |
 | Domain kernels | Task labels and shared kernel contracts provide extension points | Repo, hydraulic, compliance, security, and finance domain rules, evidence sources, and domain-specific evaluation are not implemented | Not built |
 
 ### Recommended closure order
 
-1. **Local workflow authoring:** a graph map and handler retry/timeout controls
-   are now present in the editor. Next, add regression coverage for layout,
-   invalid graphs, and execution settings before calling this slice complete.
-2. **Unlock the separate content environment:** configure the new Sanity
-   project ID and Context MCP endpoints, then deploy the already-separated
-   Studio schemas there. This is a hard dependency for shared workflow and
-   durable audit content that uses Sanity.
-3. **Build secure workflow identity and persistence:** authentication, tenant
-   scoping, RBAC, versioned workflow storage, approvals, secrets handling, and
-   durable run records must precede customer-facing execution.
-4. **Operationalize cognitive governance:** persist evaluation, routing, and
-   memory evidence; connect measured routing profiles; validate closed-loop
-   changes against regression scenarios before they can update policy.
-5. **Add runtime infrastructure:** isolated workers, bounded concurrency,
-   durable queues, cancellation, event/cron/webhook triggers, rate-limit
-   controls, retries, and dead-letter handling under the authenticated gates.
-6. **Expand the ecosystem:** stabilize API contracts, publish SDKs, build
-   agent/tool creation and extension review, then add team collaboration,
-   monitoring dashboards, compliance packs, and domain kernels.
+1. **Preserve and regression-lock the existing foundation:** land the local
+   agent catalog RBAC and safe rollback-to-draft work with focused tests; keep
+   challenge data isolated from the new Studio project.
+2. **Close Gate 0 explicitly:** get product-owner approval for the proposed
+   scope in [`V1-SCOPE.md`](V1-SCOPE.md), then classify every parity row.
+3. **Prove one connected workflow path:** publisher → immutable version → host
+   admission → durable run → read-only query → NQC evaluation → metadata audit
+   and monitoring. Runs pin the admitted digest; persisted graph/digest
+   inconsistencies fail closed on restart. Tools remain blocked.
+4. **Measure cognitive behavior:** implement the versioned, labeled,
+   held-out benchmark in [`NQC-EVALUATION-BENCHMARK.md`](NQC-EVALUATION-BENCHMARK.md)
+   before making correctness, calibration, or comparison claims.
+5. **Then expand platform breadth:** stable SDK contracts and hosted isolation
+   precede executable plugins; marketplace breadth follows signed, revocable
+   extension lifecycle and the secured runtime. M9 enterprise scope remains.
 
 ## Platform feature status
 

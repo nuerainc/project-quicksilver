@@ -8,7 +8,7 @@ export default defineType({
   readOnly: true,
   fields: [
     defineField({ name: 'tenantId', type: 'string', validation: (rule) => rule.required() }),
-    defineField({ name: 'event', type: 'string', options: { list: ['draft-created', 'submitted-for-review', 'reviewed', 'published', 'deprecated'] }, validation: (rule) => rule.required() }),
+    defineField({ name: 'event', type: 'string', options: { list: ['draft-created', 'rollback-draft-created', 'submitted-for-review', 'reviewed', 'published', 'deprecated'] }, validation: (rule) => rule.required() }),
     defineField({ name: 'agentId', type: 'string', validation: (rule) => rule.required() }),
     defineField({ name: 'version', type: 'number', validation: (rule) => rule.required().integer().min(1) }),
     defineField({ name: 'actorId', type: 'string', validation: (rule) => rule.required() }),
