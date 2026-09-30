@@ -402,6 +402,28 @@ export async function listWorkflowExecutions(workflowId: string, limit = 25): Pr
   }))
 }
 
+/** Cross-workflow operational view for the authenticated tenant; metadata only. */
+export async function listRecentWorkflowExecutions(limit = 100): Promise<WorkflowExecutionRecord[]> {
+  const client = getSanityClient('read')
+  const tenant = tenantId()
+  const documents = await client.fetch<ExecutionDocument[]>(
+    '*[_type == "workflowExecution" && tenantId == $tenant] | order(completedAt desc)[0...$limit]{runId,workflowId,version,digest,requestedBy,status,startedAt,completedAt,durationMs,evaluationCount}',
+    { tenant, limit: Math.max(1, Math.min(100, Math.floor(limit))) },
+  )
+  return documents.map((document) => ({
+    runId: document.runId,
+    workflowId: document.workflowId,
+    version: document.version,
+    digest: document.digest,
+    requestedBy: document.requestedBy,
+    status: document.status,
+    startedAt: Date.parse(document.startedAt),
+    completedAt: Date.parse(document.completedAt),
+    durationMs: document.durationMs,
+    evaluationCount: document.evaluationCount,
+  }))
+}
+
 export async function createWorkflowDraft(graph: WorkflowGraph, actor: PublicationActor): Promise<PublishedWorkflowVersion> {
   ensureHuman(actor)
   const validation = validateWorkflowGraph(graph)

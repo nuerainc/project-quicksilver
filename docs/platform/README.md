@@ -11,6 +11,7 @@ that every operating mode depends on.
 
 - [Workflow graph contract](workflow-graphs.md)
 - [Workflow publication lifecycle (M8 foundation)](workflow-publication.md)
+- [Workflow monitoring dashboard](observability.md)
 - [Durable workflow runs: queue, worker, dead letters](durable-runs.md)
 - [Identity and RBAC](identity-rbac.md)
 - [Triggers: cron schedules and signed webhooks](triggers.md)
