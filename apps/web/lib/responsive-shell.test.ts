@@ -19,9 +19,9 @@ test('primary destinations are grouped by user task and have unique reachable ro
 
 test('shared shell provides grouped desktop navigation and accessible mobile disclosure', () => {
   assert.match(shell, /<nav aria-label="Primary navigation" className="app-primary-nav app-primary-nav--desktop">/)
-  assert.match(shell, /<NavigationGroups pathname=\{pathname\} \/>/)
+  assert.match(shell, /<NavigationGroups pathname=\{pathname\} collapsed=\{sidebarCollapsed\} \/>/)
   for (const label of ['Operate', 'Build', 'Govern', 'Observe']) assert.ok(shell.includes(`'${label}'`), `missing task group ${label}`)
-  assert.match(shell, /<details className="app-mobile-menu">/)
+  assert.match(shell, /<details ref=\{mobileMenuRef\} className="app-mobile-menu">/)
   assert.match(shell, /aria-label=\{`Open navigation\. Current page: \$\{currentLabel\}`\}/)
   assert.match(shell, /<nav aria-label="Mobile navigation"/)
   assert.match(shell, /aria-current=\{active \? 'page' : undefined\}/)
@@ -66,6 +66,19 @@ test('quick navigation supports keyboard access and only renders current destina
   assert.match(shell, /APP_NAVIGATION_GROUPS\.flatMap/)
   assert.match(shell, /No available workspace matches that search/)
   assert.match(shell, /function keepLauncherFocus/)
+})
+
+test('the shell adds a collapsible desktop dock and a thumb-friendly mobile quick bar', () => {
+  assert.match(shell, /data-collapsed=\{sidebarCollapsed \? 'true' : 'false'\}/)
+  assert.match(shell, /nuera-quicksilver-sidebar-collapsed/)
+  assert.match(shell, /className="app-sidebar-collapse"/)
+  assert.match(shell, /aria-label="Mobile quick navigation"/)
+  assert.match(shell, /quicksilver:open-chat/)
+  assert.match(css, /\.app-topbar\[data-collapsed='true'\]/)
+  assert.match(css, /body:has\(\.app-bottom-nav\) > #main-content/)
+  assert.match(css, /\.app-bottom-nav\s*\{[^}]*grid-template-columns:\s*repeat\(5,\s*minmax\(0,\s*1fr\)\)/s)
+  assert.match(css, /@media\s*\(max-width:\s*48rem\)/)
+  assert.match(css, /env\(safe-area-inset-bottom\)/)
 })
 
 test('dense decision review details stay collapsed until needed, while approval basis is inspectable', () => {

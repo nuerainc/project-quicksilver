@@ -93,6 +93,9 @@ test('OpenAPI contract (P-118): paths and methods match exported API route handl
   assert.equal(simulate?.responses?.['2XX']?.$ref, '#/components/responses/WorkflowSimulationResponse')
   assert.equal(run?.requestBody?.$ref, '#/components/requestBodies/WorkflowRunRequest')
   assert.equal(run?.responses?.['2XX']?.$ref, '#/components/responses/WorkflowRunResponse')
+  const businessAgent = contract.paths['/api/agents/run']?.post as { requestBody?: { $ref?: string }; responses?: Record<string, { $ref?: string }> } | undefined
+  assert.equal(businessAgent?.requestBody?.$ref, '#/components/requestBodies/BusinessAgentRequest')
+  assert.equal(businessAgent?.responses?.['2XX']?.$ref, '#/components/responses/BusinessAgentResponse')
 
   const agentBindings: Array<[string, string, string | undefined, string, string?]> = [
     ['/api/agents/catalog', 'get', undefined, 'AgentCatalogResponse'],
@@ -114,6 +117,14 @@ test('OpenAPI contract (P-118): paths and methods match exported API route handl
 const REVIEWED_ANY_PRINCIPAL: Record<string, string> = {
   'GET /api/whoami': 'reports who the token belongs to; grants nothing',
 }
+
+/** Public OIDC protocol endpoints; the callback is protected by one-use state, PKCE and a same-browser binding cookie. */
+const OIDC_PROTOCOL_ROUTES: Readonly<Record<string, number>> = Object.freeze({
+  'GET /api/auth/oidc/start': 303,
+  'GET /api/auth/oidc/callback': 303,
+  'GET /api/auth/session': 401,
+  'POST /api/auth/logout': 303,
+})
 
 const token = (name: string) => `${name}-${'r'.repeat(40)}`
 const TOKENS = { nobody: token('nobody'), proposer: token('proposer'), supervisor: token('supervisor'), viewer: token('viewer') }
@@ -176,7 +187,7 @@ test('web API routes (A-3, A-9): every handler refuses no credential (401), an u
   setEnv(principalEnv)
   const routes = await loadHandlers()
   assert.ok(routes.length >= 11, `found the route modules (${routes.map((r) => r.key).join(', ')})`)
-  for (const expected of ['POST /api/plan', 'POST /api/query', 'POST /api/workflows/run', 'POST /api/workflows/simulate', 'POST /api/workflows/validate', 'POST /api/decisions/[id]/action', 'GET /api/whoami']) {
+  for (const expected of ['POST /api/plan', 'POST /api/query', 'POST /api/agents/run', 'POST /api/workflows/run', 'POST /api/workflows/simulate', 'POST /api/workflows/validate', 'POST /api/decisions/[id]/action', 'GET /api/whoami']) {
     assert.ok(routes.some((r) => r.key === expected), `${expected} was enumerated`)
   }
   for (const expected of ['GET /api/agents/catalog', 'GET /api/agents/definitions', 'POST /api/agents/drafts', 'POST /api/agents/drafts/submit', 'POST /api/agents/review', 'POST /api/agents/publish', 'POST /api/agents/rollback']) {
@@ -184,10 +195,13 @@ test('web API routes (A-3, A-9): every handler refuses no credential (401), an u
   }
   for (const route of routes) {
     const none = await call(route)
-    assert.equal(none.status, 401, `${route.key} without Authorization: ${none.status} ${await none.clone().text()}`)
-    assert.equal((await call(route, 'Bearer not-a-known-token-000000000000000000')).status, 401, `${route.key} with an unknown token`)
+    const expectedWithoutCredential = OIDC_PROTOCOL_ROUTES[route.key]
+    assert.equal(none.status, expectedWithoutCredential ?? 401, `${route.key} without Authorization: ${none.status} ${await none.clone().text()}`)
+    assert.equal((await call(route, 'Bearer not-a-known-token-000000000000000000')).status, expectedWithoutCredential ?? 401, `${route.key} with an unknown token`)
     const nobody = await call(route, `Bearer ${TOKENS.nobody}`)
-    if (route.key in REVIEWED_ANY_PRINCIPAL) {
+    if (route.key in OIDC_PROTOCOL_ROUTES) {
+      assert.equal(nobody.status, OIDC_PROTOCOL_ROUTES[route.key], `${route.key} uses only its OIDC protocol protections`)
+    } else if (route.key in REVIEWED_ANY_PRINCIPAL) {
       assert.equal(nobody.status, 200, `${route.key} needs only a valid principal`)
     } else {
       assert.equal(nobody.status, 403, `${route.key} with a principal holding no permission: ${nobody.status} ${await nobody.clone().text()}`)
@@ -202,11 +216,11 @@ test('web API routes (A-3): with no principals and no shared token nothing is an
   const routes = await loadHandlers()
   for (const route of routes) {
     const r = await call(route)
-    assert.ok(r.status === 401 || r.status === 503, `${route.key} unconfigured: ${r.status}`)
+    assert.ok(r.status === 401 || r.status === 503 || OIDC_PROTOCOL_ROUTES[route.key] === r.status, `${route.key} unconfigured: ${r.status}`)
   }
   const shared = 'shared-supervisor-token-'.padEnd(48, 'q')
   setEnv({ NQC_SUPERVISOR_TOKEN: shared, NQC_SUPERVISOR_ID: 'entity-sole' })
-  for (const route of routes) assert.equal((await call(route)).status, 401, `${route.key} without the shared token`)
+  for (const route of routes) assert.equal((await call(route)).status, OIDC_PROTOCOL_ROUTES[route.key] ?? 401, `${route.key} without the shared token`)
 })
 
 test('web route permissions (A-3): plan/query/workflows and agent lifecycle use reviewed least-privilege grants', async () => {
@@ -214,6 +228,8 @@ test('web route permissions (A-3): plan/query/workflows and agent lifecycle use 
   const env = { ...principalEnv }
   assert.deepEqual(WEB_ROUTE_ACCESS.plan.permissions, ['decision:propose'])
   assert.deepEqual(WEB_ROUTE_ACCESS.query.permissions, ['decision:read'])
+  assert.deepEqual(WEB_ROUTE_ACCESS['agents/run'].permissions, ['decision:read'])
+  assert.equal(WEB_ROUTE_ACCESS['agents/run'].rateLimit, 'model')
   assert.deepEqual(WEB_ROUTE_ACCESS['dashboard/overview'].permissions, ['decision:read'])
   assert.deepEqual(WEB_ROUTE_ACCESS['dashboard/finance'].permissions, ['finance:read'])
   assert.deepEqual(WEB_ROUTE_ACCESS['monitoring/traces'].permissions, ['audit:read'])
@@ -241,6 +257,7 @@ test('web route permissions (A-3): plan/query/workflows and agent lifecycle use 
   assert.equal(!viewerPlan.ok && viewerPlan.status, 403, 'a viewer cannot plan')
   assert.deepEqual(!viewerPlan.ok && viewerPlan.body.needs, ['decision:propose'])
   assert.deepEqual(checkWebRoute('query', `Bearer ${TOKENS.viewer}`, env), { ok: true, principalId: 'entity-vic' })
+  assert.deepEqual(checkWebRoute('agents/run', `Bearer ${TOKENS.viewer}`, env), { ok: true, principalId: 'entity-vic' })
   assert.deepEqual(checkWebRoute('workflows/validate', `Bearer ${TOKENS.viewer}`, env), { ok: true, principalId: 'entity-vic' })
   assert.equal(checkWebRoute('workflows/run', `Bearer ${TOKENS.viewer}`, env).ok, false, 'a viewer cannot start a live run')
   assert.deepEqual(checkWebRoute('workflows/run', `Bearer ${TOKENS.proposer}`, env), { ok: true, principalId: 'entity-pat' })
@@ -264,6 +281,21 @@ test('agent catalog routes validate bodies before any Sanity access', async () =
   assert.equal(response.status, 400)
   const draft = routes.find((item) => item.key === 'POST /api/agents/drafts')!
   assert.equal((await call(draft, supervisor, JSON.stringify({ displayName: 'Compliance', description: 'A definition that is structurally invalid.', manifest: { id: 'wrong', version: 1, authority: 'admin', tasks: [], maximumImpact: 'critical', requiresEvaluation: false } }))).status, 400)
+})
+
+test('business-agent route validates dispatch before model/provider access and fails closed when unconfigured', async () => {
+  const { resetWebRateLimits } = await import('./route-guard.ts')
+  resetWebRateLimits()
+  setEnv(principalEnv)
+  const routes = await loadHandlers()
+  const route = routes.find((item) => item.key === 'POST /api/agents/run')!
+  for (const body of ['{}', JSON.stringify({ agentKey: 'system', objective: 'Do work.' }), JSON.stringify({ agentKey: 'sales', objective: 'x' })]) {
+    assert.equal((await call(route, `Bearer ${TOKENS.viewer}`, body)).status, 400)
+  }
+  const response = await call(route, `Bearer ${TOKENS.viewer}`, JSON.stringify({ agentKey: 'sales', objective: 'Review this pipeline.' }))
+  assert.equal(response.status, 503, 'valid dispatch fails closed when no model is configured')
+  assert.match((await response.json()).error, /Business-agent request failed/)
+  resetWebRateLimits()
 })
 
 test('decision approval route refuses a missing or malformed review fingerprint before Sanity access', async () => {
@@ -312,13 +344,17 @@ test('web rate limits (A-5): the route handlers apply them (plan: model; decisio
   const { resetWebRateLimits } = await import('./route-guard.ts')
   resetWebRateLimits()
   const routes = await loadHandlers()
+  resetWebRateLimits()
   const plan = routes.find((r) => r.key === 'POST /api/plan')!
+  const specialist = routes.find((r) => r.key === 'POST /api/agents/run')!
   const body = JSON.stringify({ objective: 'Reduce downtime.' })
   const first = await call(plan, `Bearer ${TOKENS.proposer}`, body)
   assert.notEqual(first.status, 429, 'the first plan passes the limit (then stops: no model is configured here)')
   const second = await call(plan, `Bearer ${TOKENS.proposer}`, body)
   assert.equal(second.status, 429)
   assert.ok(Number(second.headers.get('retry-after')) >= 1)
+  assert.notEqual((await call(specialist, `Bearer ${TOKENS.viewer}`, JSON.stringify({ agentKey: 'research', objective: 'Review market context.' }))).status, 429)
+  assert.equal((await call(specialist, `Bearer ${TOKENS.viewer}`, JSON.stringify({ agentKey: 'research', objective: 'Review market context.' }))).status, 429)
   const action = routes.find((r) => r.key === 'POST /api/decisions/[id]/action')!
   const approve = JSON.stringify({ action: 'reject' })
   assert.notEqual((await call(action, `Bearer ${TOKENS.supervisor}`, approve)).status, 429)

@@ -27,6 +27,8 @@ import agentPublicationAudit from './agent-publication-audit'
 import agentPublicationHead from './agent-publication-head'
 import authorizationDecisionAudit from './authorization-decision-audit'
 import telemetryTraceSpan from './telemetry-trace-span'
+import oidcLoginTransaction from './oidc-login-transaction'
+import oidcWebSession from './oidc-web-session'
 
 export const schemaTypes = [
   organization,
@@ -58,4 +60,6 @@ export const schemaTypes = [
   agentPublicationHead,
   authorizationDecisionAudit,
   telemetryTraceSpan,
+  oidcLoginTransaction,
+  oidcWebSession,
 ]

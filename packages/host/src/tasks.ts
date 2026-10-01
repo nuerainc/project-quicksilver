@@ -105,6 +105,8 @@ export interface TaskApproval {
 
 export interface Task {
   id: string
+  /** Tenant partition key; immutable for the task's lifetime. */
+  tenantId: string
   source: TaskSource
   /** Principal id of whoever submitted it. */
   submittedBy: string
@@ -164,8 +166,8 @@ export interface TaskRunBackend {
 }
 
 export interface TaskStore {
-  get(id: string): Promise<Task | undefined>
-  list(): Promise<Task[]>
+  get(id: string, tenantId?: string): Promise<Task | undefined>
+  list(tenantId?: string): Promise<Task[]>
   /** Write a task. `expectedRevision` null = create. Throws TaskConflictError on a lost race or a non-append change. */
   put(task: Task, expectedRevision: number | null): Promise<void>
 }
@@ -201,6 +203,7 @@ export class TaskConflictError extends TaskError {
 
 export const TASK_LIMITS = Object.freeze({ objectiveChars: 2_000, inputsBytes: 8_192, inputsDepth: 6, idempotencyKeyChars: 300 })
 const TASK_ID = /^task-[0-9a-f]{20}$/
+const TASK_TENANT_ID = /^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/
 const CAPABILITY_ID = /^[a-zA-Z][a-zA-Z0-9._:-]{0,127}$/
 const DEPARTMENT = /^[a-z][a-z0-9-]{0,39}$/
 const IDEMPOTENCY_KEY = /^[\x21-\x7e]{1,300}$/
@@ -284,7 +287,7 @@ export const DEFAULT_TASK_RATE_LIMIT: RateLimitConfig = Object.freeze({ burst: 1
 
 // ── Stores ────────────────────────────────────────────────────────────────
 
-const IMMUTABLE: ReadonlyArray<keyof Task> = ['id', 'source', 'submittedBy', 'submittedAt', 'objective', 'capabilityId', 'department', 'inputs', 'idempotencyKey']
+const IMMUTABLE: ReadonlyArray<keyof Task> = ['id', 'tenantId', 'source', 'submittedBy', 'submittedAt', 'objective', 'capabilityId', 'department', 'inputs', 'idempotencyKey']
 
 /** The append-only rule shared by both stores. */
 function checkAppendOnly(before: Task | undefined, next: Task, expectedRevision: number | null): void {
@@ -317,18 +320,20 @@ export class FileTaskStore implements TaskStore {
     if (!TASK_ID.test(id)) throw new TaskError(404, 'not-found', 'No such task.')
     return join(this.dir, `${id}.json`)
   }
-  async get(id: string) {
+  async get(id: string, tenantId?: string) {
     if (!TASK_ID.test(id)) return undefined
-    return readJson<Task | undefined>(this.path(id), undefined)
+    const task = await readJson<Task | undefined>(this.path(id), undefined)
+    return task && (tenantId === undefined || task.tenantId === tenantId) ? task : undefined
   }
-  async list() {
+  async list(tenantId?: string) {
     let names: string[] = []
     try { names = (await readdir(this.dir)).filter((n) => /^task-[0-9a-f]{20}\.json$/.test(n)) } catch (e) { if ((e as NodeJS.ErrnoException).code !== 'ENOENT') throw e }
     const tasks: Task[] = []
-    for (const n of names) { const t = await readJson<Task | undefined>(join(this.dir, n), undefined); if (t) tasks.push(t) }
+    for (const n of names) { const t = await readJson<Task | undefined>(join(this.dir, n), undefined); if (t && (tenantId === undefined || t.tenantId === tenantId)) tasks.push(t) }
     return tasks
   }
   async put(task: Task, expectedRevision: number | null) {
+    if (!TASK_TENANT_ID.test(task.tenantId)) throw new TaskError(400, 'invalid', 'A stable tenantId is required to store a task.')
     await withLock(`${this.dir}\u0000${task.id}`, async () => {
       checkAppendOnly(await this.get(task.id), task, expectedRevision)
       await writeJsonAtomic(this.path(task.id), task)
@@ -338,9 +343,10 @@ export class FileTaskStore implements TaskStore {
 
 export class MemoryTaskStore implements TaskStore {
   private readonly tasks = new Map<string, Task>()
-  async get(id: string) { const t = this.tasks.get(id); return t ? structuredClone(t) : undefined }
-  async list() { return [...this.tasks.values()].map((t) => structuredClone(t)) }
+  async get(id: string, tenantId?: string) { const t = this.tasks.get(id); return t && (tenantId === undefined || t.tenantId === tenantId) ? structuredClone(t) : undefined }
+  async list(tenantId?: string) { return [...this.tasks.values()].filter((t) => tenantId === undefined || t.tenantId === tenantId).map((t) => structuredClone(t)) }
   async put(task: Task, expectedRevision: number | null) {
+    if (!TASK_TENANT_ID.test(task.tenantId)) throw new TaskError(400, 'invalid', 'A stable tenantId is required to store a task.')
     checkAppendOnly(this.tasks.get(task.id), task, expectedRevision)
     this.tasks.set(task.id, structuredClone(task))
   }
@@ -423,7 +429,7 @@ export class TaskService {
 
     const work = async () => {
       if (fields.idempotencyKey) {
-        const existing = (await this.deps.store.list()).find((t) => t.submittedBy === principal.id && t.idempotencyKey === fields.idempotencyKey)
+        const existing = (await this.deps.store.list(this.deps.tenantId)).find((t) => t.tenantId === this.deps.tenantId && t.submittedBy === principal.id && t.idempotencyKey === fields.idempotencyKey)
         if (existing) {
           const same = canonical({ o: existing.objective, c: existing.capabilityId, d: existing.department, i: existing.inputs }) === canonical({ o: fields.objective, c: fields.capabilityId, d: fields.department, i: fields.inputs })
           if (!same) throw new TaskError(409, 'idempotency-conflict', 'This idempotencyKey was already used for a different task.')
@@ -432,13 +438,14 @@ export class TaskService {
       }
       return { task: await this.intake(principal, input.source, fields), deduplicated: false }
     }
-    return fields.idempotencyKey ? withLock(`idem\u0000${principal.id}\u0000${fields.idempotencyKey}`, work) : work()
+    return fields.idempotencyKey ? withLock(`idem\u0000${this.deps.tenantId}\u0000${principal.id}\u0000${fields.idempotencyKey}`, work) : work()
   }
 
   private async intake(principal: Principal, source: TaskSource, fields: ValidTask): Promise<Task> {
     const at = new Date(this.now()).toISOString()
     let task: Task = {
       id: `task-${randomBytes(10).toString('hex')}`,
+      tenantId: this.deps.tenantId,
       source,
       submittedBy: principal.id,
       submittedAt: at,
@@ -591,9 +598,9 @@ export class TaskService {
     const p = this.requirePrincipal(principal)
     const scope = this.readScope(p)
     if (scope === 'none') throw new TaskError(403, 'forbidden', `No role grants "task:read" or "task:read-own" to "${p.id}".`)
-    const task = await this.deps.store.get(id)
+    const task = await this.deps.store.get(id, this.deps.tenantId)
     // Someone else's task looks exactly like a missing one.
-    if (!task || (scope === 'own' && task.submittedBy !== p.id)) throw new TaskError(404, 'not-found', 'No such task.')
+    if (!task || task.tenantId !== this.deps.tenantId || (scope === 'own' && task.submittedBy !== p.id)) throw new TaskError(404, 'not-found', 'No such task.')
     return this.refresh(task)
   }
 
@@ -602,7 +609,7 @@ export class TaskService {
     const scope = this.readScope(p)
     if (scope === 'none') throw new TaskError(403, 'forbidden', `No role grants "task:read" or "task:read-own" to "${p.id}".`)
     if (filter.status !== undefined && !TASK_STATUSES.includes(filter.status as TaskStatus)) throw new TaskError(400, 'invalid', `status must be one of ${TASK_STATUSES.join(', ')}.`)
-    const mine = (await this.deps.store.list()).filter((t) => scope === 'all' || t.submittedBy === p.id)
+    const mine = (await this.deps.store.list(this.deps.tenantId)).filter((t) => t.tenantId === this.deps.tenantId && (scope === 'all' || t.submittedBy === p.id))
     const fresh = await Promise.all(mine.map((t) => this.refresh(t)))
     return fresh.filter((t) => !filter.status || t.status === filter.status).sort((a, b) => b.submittedAt.localeCompare(a.submittedAt))
   }
@@ -618,7 +625,7 @@ export class TaskService {
     try {
       return await this.save(task, { status: next, ...(next === 'done' ? { result: run.result ?? null } : {}), ...(next === 'failed' && run.lastError ? { result: { error: run.lastError } } : {}) }, 'quicksilver', next, `Run ${runId} is ${run.status}.`)
     } catch (error) {
-      if (error instanceof TaskConflictError) return (await this.deps.store.get(task.id)) ?? task
+      if (error instanceof TaskConflictError) return (await this.deps.store.get(task.id, this.deps.tenantId)) ?? task
       throw error
     }
   }
@@ -691,7 +698,7 @@ export class TaskService {
 
   /** Run an approved task, but only if the stored request and decision are exactly what was approved. */
   private async runApproved(approved: Task, capability: TaskCapability): Promise<Task> {
-    const stored = await this.deps.store.get(approved.id)
+    const stored = await this.deps.store.get(approved.id, this.deps.tenantId)
     const approval = approved.approval!
     const problems: string[] = []
     if (!stored || requestHash(stored) !== approval.requestHash) problems.push('the request')
@@ -748,7 +755,7 @@ const sha256 = (value: unknown) => `sha256:${createHash('sha256').update(canonic
 
 /** The hash an approval binds to: the task's stored request. */
 export function requestHash(task: Task): string {
-  return sha256({ id: task.id, source: task.source, submittedBy: task.submittedBy, submittedAt: task.submittedAt, objective: task.objective, capabilityId: task.capabilityId, department: task.department, inputs: task.inputs, idempotencyKey: task.idempotencyKey })
+  return sha256({ id: task.id, tenantId: task.tenantId, source: task.source, submittedBy: task.submittedBy, submittedAt: task.submittedAt, objective: task.objective, capabilityId: task.capabilityId, department: task.department, inputs: task.inputs, idempotencyKey: task.idempotencyKey })
 }
 
 /** The hash an approval binds to: the kernel decision record. */

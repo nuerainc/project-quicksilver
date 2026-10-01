@@ -15,6 +15,8 @@ import {
 
 export interface WorkflowRunQueueOptions {
   store: WorkflowRunStore
+  /** Bind this queue (for example, a tenant host) to one tenant in shared storage. */
+  tenantId?: string
   /** Injectable clock (epoch ms) for deterministic tests. */
   now?: () => number
   newRunId?: () => string
@@ -95,10 +97,13 @@ export class WorkflowRunQueue {
   private readonly retryBaseDelayMs: number
   private readonly retryMaxDelayMs: number
   private readonly maxInputBytes: number
+  private readonly tenantId?: string
 
   constructor(options: WorkflowRunQueueOptions) {
     this.store = options.store
     this.access = options.access
+    if (options.tenantId !== undefined && !TENANT_PATTERN.test(options.tenantId)) throw new Error('tenantId scope must be a stable identifier.')
+    this.tenantId = options.tenantId
     this.now = options.now ?? Date.now
     this.newRunId = options.newRunId ?? (() => `run_${randomUUID()}`)
     this.maxQueued = positiveInt(options.maxQueued, 1_000, 'maxQueued')
@@ -113,6 +118,7 @@ export class WorkflowRunQueue {
 
   async enqueue(request: EnqueueWorkflowRunRequest): Promise<EnqueueResult> {
     const reasons = this.validateRequest(request)
+    if (this.tenantId !== undefined && request.tenantId !== this.tenantId) reasons.push(`This queue is scoped to tenant "${this.tenantId}".`)
     if (reasons.length) return { accepted: false, code: 'invalid-request', reasons }
     if (request.principal !== undefined && !isPrincipal(request.principal)) {
       return { accepted: false, code: 'invalid-request', reasons: ['principal is malformed.'] }
@@ -140,7 +146,7 @@ export class WorkflowRunQueue {
       return { accepted: false, code: 'invalid-request', reasons: ['Publication binding does not match the admitted workflow graph.'] }
     }
 
-    const queued = await this.store.list({ status: 'queued' })
+    const queued = await this.store.list({ status: 'queued', ...(this.tenantId ? { tenantId: this.tenantId } : {}) })
     if (queued.length >= this.maxQueued) {
       return { accepted: false, code: 'backpressure', reasons: [`Queue is full (${this.maxQueued} queued runs). Retry later.`] }
     }
@@ -207,9 +213,10 @@ export class WorkflowRunQueue {
 
   private async claimUnlocked(workerId: string): Promise<WorkflowRunRecord | undefined> {
     const now = this.now()
-    const running = await this.store.list({ status: 'running' })
+    const tenantFilter = this.tenantId ? { tenantId: this.tenantId } : {}
+    const running = await this.store.list({ status: 'running', ...tenantFilter })
     const runningByTenant = countBy(running, (run) => run.tenantId)
-    const candidates = (await this.store.list({ status: 'queued' }))
+    const candidates = (await this.store.list({ status: 'queued', ...tenantFilter }))
       .filter((run) => run.availableAt <= now && !run.cancelRequest)
       .sort((a, b) => b.priority - a.priority || a.availableAt - b.availableAt || a.createdAt - b.createdAt || a.runId.localeCompare(b.runId))
 
@@ -245,7 +252,7 @@ export class WorkflowRunQueue {
   /** Extend a lease. Returns the fresh record, or undefined if the worker no longer owns the run. */
   async heartbeat(runId: string, workerId: string): Promise<WorkflowRunRecord | undefined> {
     const run = await this.store.get(runId)
-    if (!run || run.status !== 'running' || run.lease?.workerId !== workerId) return undefined
+    if (!run || (this.tenantId !== undefined && run.tenantId !== this.tenantId) || run.status !== 'running' || run.lease?.workerId !== workerId) return undefined
     const now = this.now()
     const next = { ...run, revision: run.revision + 1, lease: { ...run.lease, workerId, expiresAt: now + this.leaseMs }, updatedAt: now }
     return (await this.store.compareAndSet(next, run.revision)) ? next : undefined
@@ -254,7 +261,7 @@ export class WorkflowRunQueue {
   /** Record the outcome of an attempt and decide retry / dead-letter. */
   async complete(runId: string, workerId: string, result: WorkflowExecutionResult): Promise<WorkflowRunRecord> {
     const run = await this.store.get(runId)
-    if (!run) throw new Error(`Unknown workflow run "${runId}".`)
+    if (!run || (this.tenantId !== undefined && run.tenantId !== this.tenantId)) throw new Error(`Unknown workflow run "${runId}".`)
     if (run.status !== 'running' || run.lease?.workerId !== workerId) {
       throw new Error(`Worker "${workerId}" does not hold the lease for run "${runId}".`)
     }
@@ -316,7 +323,7 @@ export class WorkflowRunQueue {
     const actor = this.actorId(actorOrPrincipal)
     for (let attempt = 0; attempt < 5; attempt += 1) {
       const run = await this.store.get(runId)
-      if (!run) return run
+      if (!run || (this.tenantId !== undefined && run.tenantId !== this.tenantId)) return undefined
       if (attempt === 0) await this.authorizeRunAction(run, actorOrPrincipal, 'run:cancel')
       if (TERMINAL_RUN_STATUSES.includes(run.status)) return run
       const now = this.now()
@@ -336,7 +343,7 @@ export class WorkflowRunQueue {
   async recoverExpiredLeases(): Promise<WorkflowRunRecord[]> {
     const now = this.now()
     const recovered: WorkflowRunRecord[] = []
-    for (const run of await this.store.list({ status: 'running' })) {
+    for (const run of await this.store.list({ status: 'running', ...(this.tenantId ? { tenantId: this.tenantId } : {}) })) {
       if (!run.lease || run.lease.expiresAt > now) continue
       const base = { ...run, revision: run.revision + 1, updatedAt: now, lastError: `Worker "${run.lease.workerId}" lease expired.` }
       delete base.lease
@@ -362,7 +369,7 @@ export class WorkflowRunQueue {
     const actor = this.actorId(actorOrPrincipal)
     if (typeof reason !== 'string' || !reason.trim()) throw new Error('A redrive reason is required for the audit trail.')
     const run = await this.store.get(runId)
-    if (!run) throw new Error(`Unknown workflow run "${runId}".`)
+    if (!run || (this.tenantId !== undefined && run.tenantId !== this.tenantId)) throw new Error(`Unknown workflow run "${runId}".`)
     await this.authorizeRunAction(run, actorOrPrincipal, 'run:redrive')
     if (run.status !== 'dead-lettered') throw new Error(`Only dead-lettered runs can be redriven (run is ${run.status}).`)
     const now = this.now()
@@ -375,17 +382,19 @@ export class WorkflowRunQueue {
   }
 
   async get(runId: string): Promise<WorkflowRunRecord | undefined> {
-    return this.store.get(runId)
+    const run = await this.store.get(runId)
+    return run && (this.tenantId === undefined || run.tenantId === this.tenantId) ? run : undefined
   }
 
   async deadLetters(tenantId?: string): Promise<WorkflowRunRecord[]> {
-    return this.store.list({ status: 'dead-lettered', ...(tenantId ? { tenantId } : {}) })
+    if (this.tenantId !== undefined && tenantId !== undefined && tenantId !== this.tenantId) return []
+    return this.store.list({ status: 'dead-lettered', ...(this.tenantId ? { tenantId: this.tenantId } : tenantId ? { tenantId } : {}) })
   }
 
   async stats(): Promise<WorkflowQueueStats> {
     const byStatus = Object.fromEntries(['queued', 'running', 'completed', 'blocked', 'cancelled', 'dead-lettered'].map((s) => [s, 0])) as Record<WorkflowRunStatus, number>
     const byTenant: WorkflowQueueStats['byTenant'] = {}
-    for (const run of await this.store.list()) {
+    for (const run of await this.store.list(this.tenantId ? { tenantId: this.tenantId } : undefined)) {
       byStatus[run.status] += 1
       const tenant = (byTenant[run.tenantId] ??= {})
       tenant[run.status] = (tenant[run.status] ?? 0) + 1
@@ -425,6 +434,7 @@ export class WorkflowRunQueue {
 
   /** Record authorization issuance and optional consumption exactly once. */
   async recordAuthorizationLifecycle(runId: string, authorizationId: string, fingerprint: string | undefined, actor: string, consumed = true): Promise<void> {
+    await this.assertTenantScope(runId)
     const detail = `id=${authorizationId}${fingerprint ? ` fingerprint=${fingerprint}` : ''}`
     await this.authorizationEvent(runId, 'authorization-issued', detail, actor)
     if (consumed) await this.authorizationEvent(runId, 'authorization-consumed', detail, actor)
@@ -432,6 +442,7 @@ export class WorkflowRunQueue {
 
   async recordAuthorizationRevoked(runId: string, authorizationId: string, reason: string, actor: string): Promise<void> {
     if (!reason.trim()) throw new Error('Authorization revocation requires a reason.')
+    await this.assertTenantScope(runId)
     await this.authorizationEvent(runId, 'authorization-revoked', `id=${authorizationId} reason=${reason}`, actor)
   }
 
@@ -440,6 +451,12 @@ export class WorkflowRunQueue {
     const existing = await this.store.events(runId)
     if (existing.some((event) => event.type === type && event.detail === detail)) return
     await this.event(runId, type, { actor, detail })
+  }
+
+  private async assertTenantScope(runId: string): Promise<void> {
+    if (this.tenantId === undefined) return
+    const run = await this.store.get(runId)
+    if (!run || run.tenantId !== this.tenantId) throw new Error(`Unknown workflow run "${runId}".`)
   }
 
   private validateRequest(request: EnqueueWorkflowRunRequest): string[] {

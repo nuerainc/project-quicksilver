@@ -142,12 +142,12 @@ test('console token: saved, read and cleared under one sessionStorage key; stora
   assert.equal(readConsoleToken(), null)
 })
 
-test('console token: sent only as a bearer header to this app\'s own API routes (decisions, whoami, plan, query, workflows)', () => {
-  for (const url of ['/api/decisions/decision-plan-abc-1/action', '/api/decisions/d/execute', '/api/decisions/d/observe', '/api/decisions/d/resume', '/api/decisions/d/rollback', '/api/whoami', '/api/plan', '/api/query', '/api/dashboard/overview', '/api/workflows/validate', '/api/workflows/simulate', '/api/workflows/run']) {
+test('console token: sent only as a bearer header to this app\'s own API routes (decisions, whoami, plan, query, agents, workflows)', () => {
+  for (const url of ['/api/decisions/decision-plan-abc-1/action', '/api/decisions/d/execute', '/api/decisions/d/observe', '/api/decisions/d/resume', '/api/decisions/d/rollback', '/api/whoami', '/api/plan', '/api/query', '/api/agents/run', '/api/dashboard/overview', '/api/workflows/validate', '/api/workflows/simulate', '/api/workflows/run']) {
     assert.equal(mayCarryConsoleToken(url), true, url)
     assert.deepEqual(consoleHeaders(url, 't0k', { 'content-type': 'application/json' }), { 'content-type': 'application/json', authorization: 'Bearer t0k' })
   }
-  for (const url of ['https://evil.example/api/plan', '//evil.example/api/plan', '/api/plan?x=1', '/api/plan/', '/api/query#x', '/api/workflows/other', '/api/workflows/run/x', 'https://evil.example/api/decisions/d/action', '//evil.example/api/whoami', '/api/decisions/d/action?x=1', '/api/decisions/a/b/action', '/api/whoami/x', '/api/other']) {
+  for (const url of ['https://evil.example/api/plan', '//evil.example/api/plan', '/api/plan?x=1', '/api/plan/', '/api/query#x', '/api/agents/run?key=finance', '/api/agents/run/', '/api/workflows/other', '/api/workflows/run/x', 'https://evil.example/api/decisions/d/action', '//evil.example/api/whoami', '/api/decisions/d/action?x=1', '/api/decisions/a/b/action', '/api/whoami/x', '/api/other']) {
     assert.equal(mayCarryConsoleToken(url), false, url)
     assert.deepEqual(consoleHeaders(url, 't0k'), {}, url)
   }

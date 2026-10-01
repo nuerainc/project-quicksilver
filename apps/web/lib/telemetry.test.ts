@@ -26,6 +26,12 @@ test('trace span persistence keeps allowlisted metadata and never serializes req
   assert.match(String(document._id), /^telemetry-span-[a-f0-9]{64}$/)
 })
 
+test('business-agent spans use their own source while keeping payload fields excluded', () => {
+  const document = buildTraceSpan(span({ source: 'agent', name: 'business-agent.request', agentId: 'nuera-quicksilver:finance' }))
+  assert.equal(document.source, 'agent')
+  assert.equal(document.agentId, 'nuera-quicksilver:finance')
+})
+
 test('Sanity datetime values normalize to milliseconds and invalid stored timestamps are ignored', () => {
   const document = buildTraceSpan(span())
   assert.equal(normalizeTraceSpanDocuments([document])[0]?.startedAt, at)

@@ -13,3 +13,23 @@ test('Plan mode creates a governed proposal through the existing planning contra
     path: '/api/plan', body: { objective: 'Improve delivery reliability.' },
   })
 })
+
+test('Work mode dispatches to the explicitly selected business specialist', () => {
+  assert.deepEqual(chatRequest('agent', 'Find the cause of delivery delays.', 'fulfillment'), {
+    path: '/api/agents/run', body: { objective: 'Find the cause of delivery delays.', agentKey: 'fulfillment' },
+  })
+})
+
+test('Work mode defaults to transparent server-side specialist routing', () => {
+  assert.deepEqual(chatRequest('agent', 'Please review our market.'), {
+    path: '/api/agents/run', body: { objective: 'Please review our market.', agentKey: 'auto' },
+  })
+})
+
+test('Work mode forwards prior conversation context with the current objective', () => {
+  const context = ['Prior user request (context only): revise launch plan']
+  assert.deepEqual(chatRequest('agent', 'Make the timeline shorter', 'research', context), {
+    path: '/api/agents/run',
+    body: { objective: 'Make the timeline shorter', agentKey: 'research', context },
+  })
+})

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import type { Permission } from '@quicksilver/kernel'
 import { checkRouteCaller } from './nqc-approval.ts'
-import { guardWebRoute, WEB_ROUTE_ACCESS, type GuardRefusal, type WebRoute } from './route-guard.ts'
+import { guardWebRoute, type GuardRefusal, type WebRoute } from './route-guard.ts'
 import { WorkflowPublicationFault, type PublicationActor } from './workflow-publication-store.ts'
 import { AgentCatalogFault } from './agent-catalog-contract.ts'
 
@@ -19,15 +19,10 @@ export async function guardPublicationActor(request: Request, route: Publication
   const guarded = await guardWebRoute(request, route)
   if (!guarded.ok) return { ok: false, refusal: guarded }
 
-  // The shared route guard intentionally exposes only an id. Publication also
-  // requires the authenticated principal kind to enforce human-only lifecycle
-  // actions in the kernel publication contract.
-  const caller = checkRouteCaller(WEB_ROUTE_ACCESS[route].permissions, request.headers.get('authorization'), process.env)
-  if (!caller.ok) {
-    const code = caller.status === 401 ? 'unauthenticated' : caller.status === 403 ? 'forbidden' : 'unavailable'
-    return { ok: false, refusal: { ok: false, status: caller.status, body: { error: caller.reason, code } } }
-  }
-  return { ok: true, actor: { id: caller.principalId, kind: caller.kind } }
+  // The route guard preserves the authenticated kind for bearer and browser
+  // sessions alike, so lifecycle writes keep the human-only boundary.
+  if (!guarded.principalKind) return { ok: false, refusal: { ok: false, status: 503, body: { error: 'Authenticated principal kind is unavailable.', code: 'principal-kind-unavailable' } } }
+  return { ok: true, actor: { id: guarded.principalId, kind: guarded.principalKind } }
 }
 
 export async function readPublicationBody(request: Request): Promise<{ ok: true; body: unknown } | { ok: false; response: Response }> {

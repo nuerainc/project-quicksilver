@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto'
 
-export type TraceSource = 'query' | 'plan' | 'workflow' | 'decision'
+export type TraceSource = 'query' | 'plan' | 'workflow' | 'decision' | 'agent'
 export type TraceKind = 'request' | 'model' | 'tool' | 'evaluation' | 'decision' | 'workflow'
 export type TraceStatus = 'ok' | 'error' | 'blocked'
 
@@ -59,7 +59,7 @@ const token = (value: number | null | undefined): number | null =>
 
 export function buildTraceSpan(input: TraceSpanInput, tenantId = 'default'): TraceSpanDocument {
   if (!input || typeof input !== 'object' || !/^[a-f0-9-]{16,64}$/i.test(input.traceId)) throw new Error('Trace id is invalid.')
-  if (!['query', 'plan', 'workflow', 'decision'].includes(input.source)) throw new Error('Trace source is invalid.')
+  if (!['query', 'plan', 'workflow', 'decision', 'agent'].includes(input.source)) throw new Error('Trace source is invalid.')
   if (!['request', 'model', 'tool', 'evaluation', 'decision', 'workflow'].includes(input.kind)) throw new Error('Trace span kind is invalid.')
   if (!['ok', 'error', 'blocked'].includes(input.status)) throw new Error('Trace status is invalid.')
   if (typeof input.name !== 'string' || !/^[a-z][a-z0-9._:-]{0,95}$/i.test(input.name)) throw new Error('Trace span name is invalid.')

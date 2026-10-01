@@ -81,3 +81,6 @@ The P-001–P-123 baseline is approved. Gate 0 remains open until the remaining
 operational decisions, named owners, and acceptance evidence are completed. No
 claim is made that a required capability is complete merely because the scope
 decision is recorded.
+
+See the [v1 external credential and access checklist](platform/v1-credential-prerequisites.md)
+for the provider access needed to unblock live testing and operational evidence.

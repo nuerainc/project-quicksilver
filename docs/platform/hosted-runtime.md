@@ -11,6 +11,23 @@ together (`WorkflowRunQueue`, `WorkflowRunWorker`, `CronScheduler`,
 `WebhookTrigger`, `AccessController`) and adds authentication, limits and
 observability around them.
 
+### Tenant-scoped queue workers
+
+Each host now binds its `WorkflowRunQueue` to the tenant in its host config.
+That scope is enforced for enqueue, claim, read, cancellation, completion,
+lease recovery, dead-letter listing, redrive, authorization lifecycle, and
+queue statistics. The run-store contract tests two tenant-bound queues over
+the same memory, file, and Postgres adapter; each can only claim and mutate
+its own tenant's runs. A shared Postgres run store can therefore support
+separate tenant host processes without one worker claiming another tenant's
+run.
+
+This is a queue isolation foundation, not a multi-tenant Quicksilver service:
+each host still serves one tenant, and other company, publication, schedule,
+task, audit, and domain stores are not yet provisioned as one integrated
+multi-tenant control plane. Do not route multiple tenants through one host
+until those stores and their cross-tenant tests are complete.
+
 ## Run it
 
 ```bash
@@ -280,6 +297,13 @@ limit.
 ## Not yet built
 
 - SSO/OIDC sessions and multi-tenant hosting (before 0.9.0).
+- The task intake store and Task MCP client registry now label records with a
+  tenant ID and filter reads, lists, idempotency, authentication, and revocation
+  by the host's configured tenant. Cross-tenant behavior is covered for shared
+  memory/file stores and concurrent client-registry updates. Hosts still serve
+  exactly one tenant each; these boundaries do not make the full hosted control
+  plane multi-tenant. Existing task/client files without tenant IDs require an
+  explicit, reviewed migration before those files are reused.
 - A shared webhook replay cache for several host replicas. One host per
   tenant is the supported shape at this version. The Postgres store already
   keeps runs safe across processes.

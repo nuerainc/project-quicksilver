@@ -17,8 +17,9 @@
  *   when, and its token stops working at once (the host re-reads the file
  *   when it changes).
  */
-import { timingSafeEqual } from 'node:crypto'
-import { stat } from 'node:fs/promises'
+import { createHash, randomBytes, timingSafeEqual } from 'node:crypto'
+import { mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
+import { dirname, join } from 'node:path'
 
 import type { Principal } from '@quicksilver/kernel/identity'
 import { digestToken, generateToken, MIN_TOKEN_LENGTH } from '@quicksilver/kernel/identity/tokens'
@@ -29,6 +30,7 @@ export const TASK_CLIENT_ROLE = 'task-client'
 const NAME = /^[a-z0-9][a-z0-9-]{1,39}$/
 
 export interface TaskClientRecord {
+  tenantId: string
   name: string
   principalId: string
   /** `sha256:<hex>` of the token. The token itself is never stored. */
@@ -45,6 +47,8 @@ export type TaskClientSummary = Omit<TaskClientRecord, 'tokenDigest'> & { active
 export interface TaskClientPersistence {
   load(): Promise<TaskClientRecord[]>
   save(records: TaskClientRecord[]): Promise<void>
+  /** Atomic read/modify/write; required when several tenant hosts share a persistence file. */
+  mutate<T>(update: (records: TaskClientRecord[]) => { records: TaskClientRecord[]; result: T }): Promise<T>
   /** Changes when the stored records change (used to reload). */
   version(): Promise<string>
 }
@@ -53,17 +57,38 @@ export class FileTaskClientPersistence implements TaskClientPersistence {
   readonly path: string
   constructor(path: string) { this.path = path }
   load() { return readJson<TaskClientRecord[]>(this.path, []) }
-  save(records: TaskClientRecord[]) { return writeJsonAtomic(this.path, records) }
+  async save(records: TaskClientRecord[]) {
+    await withClientFileLock(this.path, () => this.saveUnlocked(records))
+  }
+  async mutate<T>(update: (records: TaskClientRecord[]) => { records: TaskClientRecord[]; result: T }): Promise<T> {
+    return withClientFileLock(this.path, async () => {
+      const { records, result } = update(await this.load())
+      await this.saveUnlocked(records)
+      return result
+    })
+  }
+  private saveUnlocked(records: TaskClientRecord[]) { return writeJsonAtomic(this.path, records) }
   async version() {
-    try { const s = await stat(this.path); return `${s.mtimeMs}:${s.size}` } catch { return 'none' }
+    try { return createHash('sha256').update(await readFile(this.path)).digest('hex') } catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return 'none'; throw error }
   }
 }
 
 export class MemoryTaskClientPersistence implements TaskClientPersistence {
   private records: TaskClientRecord[] = []
   private rev = 0
+  private writes: Promise<void> = Promise.resolve()
   async load() { return structuredClone(this.records) }
   async save(records: TaskClientRecord[]) { this.records = structuredClone(records); this.rev++ }
+  async mutate<T>(update: (records: TaskClientRecord[]) => { records: TaskClientRecord[]; result: T }): Promise<T> {
+    const operation = async () => {
+      const { records, result } = update(structuredClone(this.records))
+      await this.save(records)
+      return result
+    }
+    const pending = this.writes.then(operation, operation)
+    this.writes = pending.then(() => undefined, () => undefined)
+    return pending
+  }
   async version() { return String(this.rev) }
 }
 
@@ -81,35 +106,37 @@ export class TaskClientRegistry {
 
   private async records(): Promise<TaskClientRecord[]> {
     const version = await this.persistence.version()
-    if (!this.cache || this.cache.version !== version) this.cache = { version, records: await this.persistence.load() }
+    if (!this.cache || this.cache.version !== version) this.cache = { version, records: (await this.persistence.load()).filter((r) => r.tenantId === this.tenantId) }
     return this.cache.records
   }
 
   /** Add a client. Returns the token ONCE; only its digest is stored. */
   async add(name: string, createdBy: string): Promise<{ client: TaskClientSummary; token: string }> {
     if (!NAME.test(name)) throw new Error('A client name is 2 to 40 lowercase letters, digits or "-".')
-    const records = await this.persistence.load()
-    if (records.some((r) => r.name === name)) throw new Error(`A client named "${name}" already exists (revoked clients keep their name). Choose another name.`)
     const { token, tokenDigest } = generateToken()
-    const record: TaskClientRecord = { name, principalId: `client:${name}`, tokenDigest, createdAt: new Date(this.now()).toISOString(), createdBy }
-    await this.persistence.save([...records, record])
+    const record: TaskClientRecord = { tenantId: this.tenantId, name, principalId: `client:${name}`, tokenDigest, createdAt: new Date(this.now()).toISOString(), createdBy }
+    await this.persistence.mutate((records) => {
+      if (records.some((r) => r.tenantId === this.tenantId && r.name === name)) throw new Error(`A client named "${name}" already exists (revoked clients keep their name). Choose another name.`)
+      return { records: [...records, record], result: undefined }
+    })
     this.cache = undefined
     return { client: summarize(record), token }
   }
 
   async list(): Promise<TaskClientSummary[]> {
-    return (await this.persistence.load()).map(summarize)
+    return (await this.persistence.load()).filter((r) => r.tenantId === this.tenantId).map(summarize)
   }
 
   async revoke(name: string, revokedBy: string): Promise<TaskClientSummary> {
-    const records = await this.persistence.load()
-    const record = records.find((r) => r.name === name)
-    if (!record) throw new Error(`No client named "${name}".`)
-    if (record.revokedAt) return summarize(record)
-    const next = records.map((r) => (r.name === name ? { ...r, revokedAt: new Date(this.now()).toISOString(), revokedBy } : r))
-    await this.persistence.save(next)
+    const summary = await this.persistence.mutate((records) => {
+      const record = records.find((r) => r.tenantId === this.tenantId && r.name === name)
+      if (!record) throw new Error(`No client named "${name}".`)
+      if (record.revokedAt) return { records, result: summarize(record) }
+      const next = records.map((r) => (r.tenantId === this.tenantId && r.name === name ? { ...r, revokedAt: new Date(this.now()).toISOString(), revokedBy } : r))
+      return { records: next, result: summarize(next.find((r) => r.tenantId === this.tenantId && r.name === name)!) }
+    })
     this.cache = undefined
-    return summarize(next.find((r) => r.name === name)!)
+    return summary
   }
 
   /** Authenticate a bearer token. Compares against every active entry in constant time. */
@@ -134,4 +161,40 @@ export class TaskClientRegistry {
 function summarize(r: TaskClientRecord): TaskClientSummary {
   const { tokenDigest: _omit, ...rest } = r
   return { ...rest, active: !r.revokedAt }
+}
+
+const CLIENT_LOCK_STALE_MS = 10 * 60_000
+const CLIENT_LOCK_WAIT_MS = 30_000
+
+async function withClientFileLock<T>(path: string, operation: () => Promise<T>): Promise<T> {
+  await mkdir(dirname(path), { recursive: true, mode: 0o700 })
+  const lockDir = `${path}.lock`
+  const started = Date.now()
+  while (true) {
+    try {
+      await mkdir(lockDir, { mode: 0o700 })
+      try {
+        await writeFile(join(lockDir, 'owner.json'), JSON.stringify({ pid: process.pid, token: randomBytes(16).toString('hex'), createdAt: new Date().toISOString() }), { mode: 0o600, flag: 'wx' })
+      } catch (error) {
+        await rm(lockDir, { recursive: true, force: true })
+        throw error
+      }
+      break
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code
+      if (code !== 'EEXIST' && code !== 'EISDIR') throw error
+      try {
+        if (Date.now() - (await stat(lockDir)).mtimeMs > CLIENT_LOCK_STALE_MS) {
+          await rm(lockDir, { recursive: true, force: true })
+          continue
+        }
+      } catch (lockError) {
+        if ((lockError as NodeJS.ErrnoException).code === 'ENOENT') continue
+        throw lockError
+      }
+      if (Date.now() - started >= CLIENT_LOCK_WAIT_MS) throw new Error('Timed out waiting for the task-client registry write lock.')
+      await new Promise((resolve) => setTimeout(resolve, 15 + Math.floor(Math.random() * 35)))
+    }
+  }
+  try { return await operation() } finally { await rm(lockDir, { recursive: true, force: true }) }
 }

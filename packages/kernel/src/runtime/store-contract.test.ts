@@ -84,6 +84,28 @@ for (const backend of backends) {
     assert.equal(await store.get('ghost'), undefined)
   })
 
+  test(`[${backend.name}] tenant-scoped host queues cannot enqueue, claim, read, or mutate another tenant's runs`, async () => {
+    const store = await backend.open()
+    const acme = queueOn(store, { tenantId: 'acme', newRunId: () => `${backend.name}-acme-run` })
+    const globex = queueOn(store, { tenantId: 'globex', newRunId: () => `${backend.name}-globex-run` })
+    const a = await acme.enqueue({ graph, input: 'acme', tenantId: 'acme', priority: 1 })
+    const b = await globex.enqueue({ graph, input: 'globex', tenantId: 'globex', priority: 9 })
+    assert.equal(a.accepted, true)
+    assert.equal(b.accepted, true)
+    assert.equal((await acme.enqueue({ graph, input: 'foreign', tenantId: 'globex' })).accepted, false)
+    if (!a.accepted || !b.accepted) throw new Error('Fixture enqueue failed.')
+
+    assert.equal((await acme.claim('worker-acme'))?.runId, a.run.runId, 'a tenant host only claims its own runs, regardless of another tenant priority')
+    assert.equal((await globex.claim('worker-globex'))?.runId, b.run.runId)
+    assert.equal(await acme.get(b.run.runId), undefined)
+    assert.equal(await acme.heartbeat(b.run.runId, 'worker-globex'), undefined)
+    assert.equal(await acme.cancel(b.run.runId, 'operator-acme'), undefined)
+    await assert.rejects(acme.complete(b.run.runId, 'worker-globex', { status: 'completed', outputs: {}, steps: [] }), /Unknown workflow run/)
+    await assert.rejects(acme.recordAuthorizationLifecycle(b.run.runId, 'auth-foreign', undefined, 'worker-acme'), /Unknown workflow run/)
+    await assert.rejects(acme.redrive(b.run.runId, 'operator-acme', 'investigate'), /Unknown workflow run/)
+    assert.deepEqual((await acme.stats()).byTenant, { acme: { running: 1 } })
+  })
+
   test(`[${backend.name}] duplicates are refused and compare-and-set is revision-guarded`, async () => {
     const store = await backend.open()
     const queue = queueOn(store)
