@@ -16,13 +16,15 @@
     "./intent": "./src/intent-parser.ts",
     "./shadow": "./src/shadow-agent.ts",
     "./decision-predictor": "./src/decision-predictor.ts",
-    "./waes": "./src/waes.ts"
+    "./waes": "./src/waes.ts",
+    "./waes-calibration": "./src/waes-calibration.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
     "verify:mcp": "tsx src/verify-mcp.ts",
     "verify:llm": "tsx src/verify-llm.ts",
     "benchmark:stress": "tsx src/benchmark-stress.ts",
+    "benchmark:waes": "tsx src/benchmark-waes.ts",
     "test": "node --experimental-strip-types --no-warnings --test src/models.test.ts src/waes.test.ts",
     "intent:eval": "tsx src/intent-eval.ts",
     "choices:eval": "tsx src/choice-eval.ts"
