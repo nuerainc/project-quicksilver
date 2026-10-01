@@ -68,7 +68,7 @@ export default function TraceMonitoringPage() {
     <header className="qs-page-heading">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="max-w-3xl"><p className="qs-eyebrow">Operations · Observability</p><h1 className="mt-2">Traces &amp; alerts</h1>
-          <p className="qs-page-heading__summary mt-3">Inspect recent query, plan, and workflow activity using bounded metadata. Prompts, agent responses, tool arguments, and secrets are excluded.</p></div>
+          <p className="qs-page-heading__summary mt-3">Inspect recent query, plan, specialist-agent, and workflow activity using bounded metadata. Prompts, agent responses, tool arguments, and secrets are excluded.</p></div>
         <button onClick={() => void refresh()} disabled={loading} className="qs-action-secondary">{loading ? 'Refreshing…' : 'Refresh traces'}</button>
       </div>
     </header>

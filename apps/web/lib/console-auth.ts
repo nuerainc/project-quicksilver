@@ -62,6 +62,7 @@ const TOKEN_PATHS: ReadonlySet<string> = new Set([
   '/api/whoami',
   '/api/plan',
   '/api/query',
+  '/api/agents/run',
   '/api/monitoring/workflows',
   '/api/monitoring/traces',
   '/api/dashboard/overview',
@@ -108,7 +109,7 @@ export interface ConsoleWhoami {
 
 export type ConsoleDecisionRoute = 'action' | 'execute' | 'observe' | 'resume' | 'rollback'
 /** Every console call that can be refused for auth: the decision routes plus plan, query and the workflow builder. */
-export type ConsoleRoute = ConsoleDecisionRoute | 'plan' | 'query'
+export type ConsoleRoute = ConsoleDecisionRoute | 'plan' | 'query' | 'agents/run'
   | 'dashboard/overview' | 'dashboard/finance'
   | 'entities'
   | 'monitoring/workflows' | 'monitoring/traces'
@@ -126,6 +127,7 @@ export const CONSOLE_ROUTE_PERMISSION: Readonly<Record<ConsoleRoute, string>> = 
   rollback: 'decision:rollback',
   plan: 'decision:propose',
   query: 'decision:read',
+  'agents/run': 'decision:read',
   'monitoring/workflows': 'workflow:read',
   'monitoring/traces': 'audit:read',
   'dashboard/overview': 'decision:read',

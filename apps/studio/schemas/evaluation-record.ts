@@ -10,7 +10,7 @@ export default defineType({
   type: 'document',
   readOnly: true,
   fields: [
-    defineField({ name: 'source', type: 'string', options: { list: ['query', 'workflow-run'] } }),
+    defineField({ name: 'source', type: 'string', options: { list: ['query', 'workflow-run', 'business-agent'] } }),
     defineField({ name: 'agentId', type: 'string' }),
     defineField({ name: 'taskType', type: 'string' }),
     defineField({ name: 'modelId', type: 'string' }),

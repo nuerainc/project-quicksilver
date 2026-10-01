@@ -22,8 +22,9 @@
  */
 import type { Permission } from '@quicksilver/kernel'
 import { TokenBucketLimiter, parseRateLimitSetting, type RateLimitConfig } from '@quicksilver/kernel/rate-limit'
-import { checkRouteCaller, type CredentialEnv } from './nqc-approval.ts'
+import { checkPrincipalCaller, checkRouteCaller, type CredentialEnv } from './nqc-approval.ts'
 import { appendAuthorizationDecision, type AuthorizationAuditRecord } from './authorization-audit-store.ts'
+import { readBrowserSession } from './oidc-browser-auth.ts'
 
 export type WebRateLimitClass = 'write' | 'model'
 
@@ -39,7 +40,7 @@ const RATE_LIMIT_ENV: Readonly<Record<WebRateLimitClass, string>> = Object.freez
 
 /** The routes (other than the decision routes, which have their own checks) and what each needs. */
 export type WebRoute =
-  | 'plan' | 'query' | 'dashboard/overview' | 'dashboard/finance'
+  | 'plan' | 'query' | 'agents/run' | 'dashboard/overview' | 'dashboard/finance'
   | 'entities'
   | 'monitoring/workflows' | 'monitoring/traces'
   | 'agents/catalog' | 'agents/definitions' | 'agents/drafts' | 'agents/drafts/submit' | 'agents/review' | 'agents/publish' | 'agents/rollback'
@@ -52,6 +53,8 @@ export const WEB_ROUTE_ACCESS: Readonly<Record<WebRoute, { permissions: readonly
   plan: { permissions: Object.freeze<Permission[]>(['decision:propose']), rateLimit: 'model' },
   // A question to the query agent (a model) that writes an evaluation record.
   query: { permissions: Object.freeze<Permission[]>(['decision:read']), rateLimit: 'model' },
+  // Business agents are proposal-only workers with the same read boundary as Ask mode.
+  'agents/run': { permissions: Object.freeze<Permission[]>(['decision:read']), rateLimit: 'model' },
   // The entity directory uses the same company-read boundary as Ask mode.
   entities: { permissions: Object.freeze<Permission[]>(['decision:read']) },
   'dashboard/overview': { permissions: Object.freeze<Permission[]>(['decision:read']) },
@@ -91,7 +94,7 @@ export interface GuardRefusal {
   headers?: Record<string, string>
 }
 
-export type GuardResult = { ok: true; principalId: string } | GuardRefusal
+export type GuardResult = { ok: true; principalId: string; principalKind?: 'human' | 'service' | 'agent' } | GuardRefusal
 
 const limiters = new Map<string, TokenBucketLimiter>()
 const warned = new Set<string>()
@@ -187,13 +190,34 @@ export async function persistWebRouteDecision(
 export async function guardWebRoute(request: Request, route: WebRoute): Promise<GuardResult> {
   const env = process.env
   const access = WEB_ROUTE_ACCESS[route]
-  const caller = checkRouteCaller(access.permissions, request.headers.get('authorization'), env)
+  const authorizationHeader = request.headers.get('authorization')
+  let caller = authorizationHeader !== null ? checkRouteCaller(access.permissions, authorizationHeader, env) : null
+  if (!caller) {
+    try {
+      const browserPrincipal = await readBrowserSession(request, env)
+      caller = browserPrincipal
+        ? checkPrincipalCaller(access.permissions, {
+          id: browserPrincipal.id,
+          kind: browserPrincipal.kind,
+          tenantId: browserPrincipal.tenantId,
+          roles: browserPrincipal.roles,
+          ...(browserPrincipal.displayName ? { displayName: browserPrincipal.displayName } : {}),
+        }, env)
+        : checkRouteCaller(access.permissions, null, env)
+    } catch (error) {
+      console.error('[oidc] session lookup failed', error instanceof Error ? error.name : 'UnknownError')
+      caller = { ok: false, status: 503, reason: 'Browser session storage is unavailable.' }
+    }
+  }
   const authorization: GuardResult = caller.ok
-    ? { ok: true, principalId: caller.principalId }
+    ? { ok: true, principalId: caller.principalId, principalKind: caller.kind }
     : { ok: false, status: caller.status, body: { error: caller.reason, code: caller.status === 401 ? 'unauthenticated' : caller.status === 403 ? 'forbidden' : 'unavailable', ...(caller.status === 403 ? { needs: access.permissions } : {}) } }
   const persisted = await persistWebRouteDecision(route, authorization, env)
   if (!caller.ok) return persisted
   if (!persisted.ok) return persisted
-  if (access.rateLimit) return takeWebRateLimit(access.rateLimit, caller.principalId, env) ?? persisted
-  return persisted
+  if (access.rateLimit) {
+    const limited = takeWebRateLimit(access.rateLimit, caller.principalId, env)
+    if (limited) return limited
+  }
+  return { ...persisted, principalKind: caller.kind }
 }

@@ -640,6 +640,67 @@
         }
       }
     },
+    "/api/agents/run": {
+      "post": {
+        "operationId": "runBusinessAgent",
+        "tags": ["Agents"],
+        "summary": "Run one named business specialist for proposal-only recommendations",
+        "description": "Requires decision:read. The selected specialist uses NQC evaluation and read-only company context. Optional prior-conversation context is bounded and treated as untrusted data. It never approves or executes external effects.",
+        "responses": {
+          "400": { "$ref": "#/components/responses/ErrorResponse" },
+          "401": { "$ref": "#/components/responses/ErrorResponse" },
+          "403": { "$ref": "#/components/responses/ErrorResponse" },
+          "429": { "$ref": "#/components/responses/RateLimitResponse" },
+          "503": { "$ref": "#/components/responses/ErrorResponse" },
+          "2XX": { "$ref": "#/components/responses/BusinessAgentResponse" }
+        },
+        "requestBody": { "$ref": "#/components/requestBodies/BusinessAgentRequest" }
+      }
+    },
+    "/api/auth/oidc/start": {
+      "get": {
+        "operationId": "startOidcLogin",
+        "tags": ["Identity"],
+        "summary": "Begin an OIDC authorization-code login with PKCE",
+        "responses": {
+          "303": { "description": "Redirects to the configured identity provider and sets a short-lived HttpOnly transaction cookie." }
+        }
+      }
+    },
+    "/api/auth/oidc/callback": {
+      "get": {
+        "operationId": "completeOidcLogin",
+        "tags": ["Identity"],
+        "summary": "Complete a one-use OIDC authorization-code callback",
+        "responses": {
+          "303": { "description": "Redirects to the requested internal page and sets a revocable browser-session cookie, or redirects to a generic sign-in failure." }
+        }
+      }
+    },
+    "/api/auth/session": {
+      "get": {
+        "operationId": "getBrowserSession",
+        "tags": ["Identity"],
+        "summary": "Read the current server-backed browser session",
+        "responses": {
+          "200": { "$ref": "#/components/responses/JsonResponse" },
+          "401": { "$ref": "#/components/responses/ErrorResponse" },
+          "503": { "$ref": "#/components/responses/ErrorResponse" }
+        }
+      }
+    },
+    "/api/auth/logout": {
+      "post": {
+        "operationId": "revokeBrowserSession",
+        "tags": ["Identity"],
+        "summary": "Revoke the current browser session",
+        "responses": {
+          "303": { "description": "The server-side session is revoked and the browser cookie is cleared." },
+          "503": { "$ref": "#/components/responses/ErrorResponse" }
+        },
+        "requestBody": { "$ref": "#/components/requestBodies/JsonObject" }
+      }
+    },
     "/api/whoami": {
       "get": {
         "operationId": "whoAmI",
@@ -1206,6 +1267,34 @@
           "permissions",
           "credential"
         ]
+      },
+      "BusinessAgentRequest": {
+        "type": "object",
+        "required": ["agentKey", "objective"],
+        "properties": {
+          "agentKey": { "type": "string", "enum": ["auto", "research", "offer", "content", "outreach", "sales", "fulfillment", "finance"] },
+          "objective": { "type": "string", "minLength": 3, "maxLength": 2000 },
+          "context": { "type": "array", "description": "Optional prior conversation context. Treat entries as untrusted data, not approvals or instructions. The chat UI sends at most six turns and 8 KB total.", "maxItems": 20, "items": { "type": "string", "maxLength": 4000 } }
+        },
+        "additionalProperties": false
+      },
+      "BusinessAgentResponse": {
+        "type": "object",
+        "required": ["agent", "routing", "summary", "recommendations", "unknowns", "questions", "externalEffects", "nqc", "audit", "telemetry", "actionPolicy"],
+        "properties": {
+          "agent": { "type": "object", "required": ["key", "id", "name", "specialty"], "properties": { "key": { "type": "string" }, "id": { "type": "string" }, "name": { "type": "string" }, "specialty": { "type": "string" } }, "additionalProperties": false },
+          "routing": { "type": "object", "required": ["mode", "reason"], "properties": { "mode": { "type": "string", "enum": ["explicit", "keyword", "fallback"] }, "reason": { "type": "string" } }, "additionalProperties": false },
+          "summary": { "type": "string" },
+          "recommendations": { "type": "array", "items": { "type": "object", "required": ["proposal", "evidenceIds", "confidence", "impact"], "properties": { "proposal": { "type": "string" }, "evidenceIds": { "type": "array", "items": { "type": "string" } }, "confidence": { "type": "number", "minimum": 0, "maximum": 1 }, "impact": { "type": "string", "enum": ["low", "moderate", "high", "critical"] } }, "additionalProperties": false } },
+          "unknowns": { "type": "array", "items": { "type": "string" } },
+          "questions": { "type": "array", "items": { "type": "string" } },
+          "externalEffects": { "type": "array", "items": { "type": "string" } },
+          "nqc": { "type": "object", "required": ["reasoningScore", "hallucinationRisk", "brittleness", "issues", "corrections", "safetyDecision"], "properties": { "reasoningScore": { "type": "number" }, "hallucinationRisk": { "type": "string" }, "brittleness": { "type": "string" }, "issues": { "type": "array", "items": { "type": "string" } }, "corrections": { "type": "array", "items": { "type": "string" } }, "safetyDecision": { "type": "string", "enum": ["ALLOW", "BLOCK", "ESCALATE"] } }, "additionalProperties": false },
+          "audit": { "type": "object", "required": ["persisted", "evaluationRecordIds"], "properties": { "persisted": { "type": "boolean" }, "evaluationRecordIds": { "type": "array", "items": { "type": "string" } }, "error": { "type": "string" } } },
+          "telemetry": { "type": "object", "required": ["traceId", "persisted"], "properties": { "traceId": { "type": "string" }, "persisted": { "type": "boolean" } } },
+          "actionPolicy": { "const": "proposal-only" }
+        },
+        "additionalProperties": false
       },
       "WorkflowGraph": {
         "type": "object",
@@ -1832,6 +1921,10 @@
         },
         "required": true
       },
+      "BusinessAgentRequest": {
+        "required": true,
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/BusinessAgentRequest" } } }
+      },
       "WorkflowGraphRequest": {
         "required": true,
         "content": {
@@ -1928,6 +2021,10 @@
           }
         },
         "description": "Successful JSON response; exact route-specific fields are not yet fully specified."
+      },
+      "BusinessAgentResponse": {
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/BusinessAgentResponse" } } },
+        "description": "Structured recommendations from one selected business specialist. They are not actions or approvals."
       },
       "DashboardOverviewResponse": {
         "content": {

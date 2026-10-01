@@ -18,8 +18,17 @@ const SHELL_ROUTE_GROUP: Record<string, (typeof SHELL_GROUP_ORDER)[number]> = {
   '/monitoring/traces': 'Observe',
 }
 const APP_DESTINATIONS = APP_NAVIGATION_GROUPS.flatMap(({ links }) => links)
+const NAV_ICONS: Record<string, string> = {
+  '/decisions': '✓',
+  '/planning': '✳',
+  '/workflows': '◇',
+  '/monitoring': '◷',
+  '/monitoring/traces': '≋',
+  '/entities': '▦',
+  '/agents': '✦',
+}
 
-function NavigationGroups({ pathname, mobile = false }: { pathname: string; mobile?: boolean }) {
+function NavigationGroups({ pathname, mobile = false, collapsed = false, onNavigate }: { pathname: string; mobile?: boolean; collapsed?: boolean; onNavigate?: () => void }) {
   const links = APP_NAVIGATION_GROUPS.flatMap(({ links: groupLinks }) => groupLinks)
   const groups = SHELL_GROUP_ORDER.map((label) => ({
     label,
@@ -36,9 +45,10 @@ function NavigationGroups({ pathname, mobile = false }: { pathname: string; mobi
               const active = activeNavigationRoute(pathname, href)
               return (
                 <li key={href}>
-                  <Link href={href} aria-current={active ? 'page' : undefined} className="app-nav-link">
+                  <Link href={href} aria-current={active ? 'page' : undefined} className="app-nav-link" aria-label={collapsed ? label : undefined} title={label} onClick={onNavigate}>
                     <span className="app-nav-link__indicator" aria-hidden="true" />
-                    <span>{label}</span>
+                    <span className="app-nav-link__icon" aria-hidden="true">{NAV_ICONS[href]}</span>
+                    <span className="app-nav-link__label">{label}</span>
                   </Link>
                 </li>
               )
@@ -53,8 +63,10 @@ function NavigationGroups({ pathname, mobile = false }: { pathname: string; mobi
 export function AppNavigation() {
   const pathname = usePathname() ?? '/'
   const [launcherOpen, setLauncherOpen] = useState(false)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [query, setQuery] = useState('')
   const searchInputRef = useRef<HTMLInputElement>(null)
+  const mobileMenuRef = useRef<HTMLDetailsElement>(null)
   const currentLabel = APP_NAVIGATION_GROUPS.flatMap(({ links }) => links).find(({ href }) => activeNavigationRoute(pathname, href))?.label ?? 'Overview'
   const filteredDestinations = APP_DESTINATIONS.filter(({ label, href }) => `${label} ${href}`.toLowerCase().includes(query.trim().toLowerCase()))
 
@@ -75,6 +87,31 @@ export function AppNavigation() {
     else setQuery('')
   }, [launcherOpen])
 
+  useEffect(() => {
+    try { setSidebarCollapsed(window.localStorage.getItem('nuera-quicksilver-sidebar-collapsed') === 'true') } catch { /* Keep the full navigation visible when storage is unavailable. */ }
+  }, [])
+
+  function toggleSidebar() {
+    setSidebarCollapsed((current) => {
+      const next = !current
+      try { window.localStorage.setItem('nuera-quicksilver-sidebar-collapsed', String(next)) } catch { /* The control still works for this page view. */ }
+      return next
+    })
+  }
+
+  function openAllWorkspaces() {
+    if (mobileMenuRef.current) mobileMenuRef.current.open = true
+    mobileMenuRef.current?.querySelector('summary')?.focus()
+  }
+
+  function closeMobileMenu() {
+    if (mobileMenuRef.current) mobileMenuRef.current.open = false
+  }
+
+  function openChat() {
+    window.dispatchEvent(new Event('quicksilver:open-chat'))
+  }
+
   function keepLauncherFocus(event: ReactKeyboardEvent<HTMLDivElement>) {
     if (event.key !== 'Tab') return
     const focusable = event.currentTarget.querySelectorAll<HTMLElement>('button, input:not(:disabled), a[href]')
@@ -91,22 +128,28 @@ export function AppNavigation() {
   }
 
   return (
-    <header className="app-topbar">
+    <>
+    <header className="app-topbar" data-collapsed={sidebarCollapsed ? 'true' : 'false'}>
       <div className="app-topbar__inner">
-        <Link href="/" className="app-brand" aria-label="Nuera Quicksilver console home">
-          <span className="app-brand__mark" aria-hidden="true">NQ</span>
-          <span className="app-brand__copy">
-            <span className="app-brand__name">Nuera Quicksilver</span>
-            <span className="app-brand__tagline">Cognitive operations platform</span>
-          </span>
-        </Link>
+        <div className="app-brand-row">
+          <Link href="/" className="app-brand" aria-label="Nuera Quicksilver console home">
+            <span className="app-brand__mark" aria-hidden="true">NQ</span>
+            <span className="app-brand__copy">
+              <span className="app-brand__name">Nuera Quicksilver</span>
+              <span className="app-brand__tagline">Business operations</span>
+            </span>
+          </Link>
+          <button type="button" className="app-sidebar-collapse" onClick={toggleSidebar} aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'} aria-expanded={!sidebarCollapsed} title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}>
+            <span aria-hidden="true">{sidebarCollapsed ? '»' : '«'}</span>
+          </button>
+        </div>
         <nav aria-label="Primary navigation" className="app-primary-nav app-primary-nav--desktop">
-          <NavigationGroups pathname={pathname} />
+          <NavigationGroups pathname={pathname} collapsed={sidebarCollapsed} />
         </nav>
-        <button type="button" className="app-command-trigger" onClick={() => setLauncherOpen(true)} aria-haspopup="dialog">
-          <span>Quick navigate</span><kbd>Ctrl / ⌘ K</kbd>
+        <button type="button" className="app-command-trigger" onClick={() => setLauncherOpen(true)} aria-haspopup="dialog" aria-label="Quick navigate">
+          <span className="app-command-icon" aria-hidden="true">⌕</span><span>Quick navigate</span><kbd>Ctrl / ⌘ K</kbd>
         </button>
-        <details className="app-mobile-menu">
+        <details ref={mobileMenuRef} className="app-mobile-menu">
           <summary className="app-mobile-menu__summary" aria-label={`Open navigation. Current page: ${currentLabel}`}>
             <span className="app-mobile-menu__icon" aria-hidden="true"><span /><span /></span>
             <span className="app-mobile-menu__label">Navigate</span>
@@ -114,13 +157,21 @@ export function AppNavigation() {
             <span className="app-mobile-menu__chevron" aria-hidden="true" />
           </summary>
           <nav aria-label="Mobile navigation" className="app-mobile-menu__panel">
-            <NavigationGroups pathname={pathname} mobile />
+            <NavigationGroups pathname={pathname} mobile onNavigate={closeMobileMenu} />
             <button type="button" className="app-command-trigger app-command-trigger--mobile" onClick={() => setLauncherOpen(true)} aria-haspopup="dialog">
-              <span>Quick navigate</span><kbd>Ctrl / ⌘ K</kbd>
+              <span className="app-command-icon" aria-hidden="true">⌕</span><span>Quick navigate</span><kbd>Ctrl / ⌘ K</kbd>
             </button>
           </nav>
         </details>
       </div>
+      </header>
+      <nav aria-label="Mobile quick navigation" className="app-bottom-nav">
+        <Link href="/" aria-current={pathname === '/' ? 'page' : undefined}><span aria-hidden="true">⌂</span><span>Home</span></Link>
+        <Link href="/decisions" aria-current={activeNavigationRoute(pathname, '/decisions') ? 'page' : undefined}><span aria-hidden="true">✓</span><span>Decisions</span></Link>
+        <Link href="/workflows" aria-current={activeNavigationRoute(pathname, '/workflows') ? 'page' : undefined}><span aria-hidden="true">◇</span><span>Workflows</span></Link>
+        <button type="button" onClick={openChat}><span aria-hidden="true">✦</span><span>Chat</span></button>
+        <button type="button" onClick={openAllWorkspaces} aria-label="Open all workspaces"><span aria-hidden="true">☰</span><span>More</span></button>
+      </nav>
       {launcherOpen && (
         <div className="app-command-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setLauncherOpen(false) }}>
           <div className="app-command-dialog" role="dialog" aria-modal="true" aria-labelledby="app-command-title" onKeyDown={keepLauncherFocus}>
@@ -149,6 +200,6 @@ export function AppNavigation() {
           </div>
         </div>
       )}
-    </header>
+    </>
   )
 }

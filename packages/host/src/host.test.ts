@@ -366,10 +366,18 @@ test('supervisors cancel and redrive; operators cannot redrive', async () => {
   }
 })
 
-test('the host serves exactly one tenant', () => {
+test('the host serves exactly one tenant and binds its run queue to that tenant', async () => {
   const config = parseHostConfig({ tenantId: TENANT })
   const other = person('entity-x', ['viewer'])
   assert.throws(() => new QuicksilverHost(config, { principals: [{ ...other.config, tenantId: 'acme' }] }), /another tenant/)
+  const h = await startHost()
+  try {
+    const denied = await h.host.queue.enqueue({ graph: h.host.config.workflows['daily-brief']!, input: null, tenantId: 'acme' })
+    assert.equal(denied.accepted, false)
+    if (!denied.accepted) assert.equal(denied.code, 'invalid-request')
+  } finally {
+    await h.close()
+  }
 })
 
 test('schedules and webhooks are listed without secrets', async () => {

@@ -14,7 +14,7 @@ import type { NqcEvaluationResponse } from './index.ts'
  * decision.
  */
 
-export type EvaluationSource = 'query' | 'workflow-run'
+export type EvaluationSource = 'query' | 'workflow-run' | 'business-agent'
 
 export interface EvaluationRecordInput {
   id: string

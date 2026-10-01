@@ -78,12 +78,13 @@ const TEST_BOUNDARIES = mergeBoundaries(DEFAULT_TASK_BOUNDARIES, {
   frozenProjects: [{ id: 'harbor', names: ['harbor'], capabilityPrefixes: ['harbor.'], readOnlyCapabilities: ['harbor.read'], reason: 'Harbor is frozen and read-only.' }],
 })
 
-function who(id: string, kind: 'human' | 'agent' | 'service', roles: string[]): { config: TokenPrincipalConfig; token: string } {
+function who(id: string, kind: 'human' | 'agent' | 'service', roles: string[], tenantId = TENANT): { config: TokenPrincipalConfig; token: string } {
   const { token, tokenDigest } = generateToken()
-  return { token, config: { id, kind, tenantId: TENANT, roles, tokenDigest } }
+  return { token, config: { id, kind, tenantId, roles, tokenDigest } }
 }
 
 interface StartOptions {
+  tenantId?: string
   autonomy?: Record<string, AutonomyDepth>
   rateLimit?: { burst: number; perMinute: number }
   soleOperatorId?: string
@@ -92,10 +93,11 @@ interface StartOptions {
 }
 
 async function start(options: StartOptions = {}) {
-  const founder = who('entity-founder', 'human', ['intent-provider'])
-  const viewer = who('entity-viewer', 'human', ['viewer'])
-  const agent = who('agent-rogue', 'agent', ['agent-worker', 'intent-provider', 'supervisor'])
-  const clients = new TaskClientRegistry({ persistence: new MemoryTaskClientPersistence(), tenantId: TENANT })
+  const tenantId = options.tenantId ?? TENANT
+  const founder = who('entity-founder', 'human', ['intent-provider'], tenantId)
+  const viewer = who('entity-viewer', 'human', ['viewer'], tenantId)
+  const agent = who('agent-rogue', 'agent', ['agent-worker', 'intent-provider', 'supervisor'], tenantId)
+  const clients = new TaskClientRegistry({ persistence: new MemoryTaskClientPersistence(), tenantId })
   const a = await clients.add('client-a', 'entity-founder')
   const b = await clients.add('client-b', 'entity-founder')
   const shadow = new MemoryShadowStore()
@@ -103,7 +105,7 @@ async function start(options: StartOptions = {}) {
   const auditDir = await mkdtemp(join(tmpdir(), 'qs-task-audit-'))
   const webhookSecret = generateWebhookSecret()
   const host = new QuicksilverHost(parseHostConfig({
-    tenantId: TENANT,
+    tenantId,
     http: { host: '127.0.0.1', port: 0 },
     worker: { id: 'tasks-test', concurrency: 1, pollIntervalMs: 50 },
     queue: { defaultMaxAttempts: 1 },
@@ -354,6 +356,41 @@ test('idempotency: the same client and key return the existing task', async () =
   } finally { await h.close() }
 })
 
+test('shared task storage partitions records and idempotency by tenant, even for the same principal id', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'qs-shared-tenant-tasks-'))
+  try {
+    const stores: TaskStore[] = [new MemoryTaskStore(), new FileTaskStore(join(dir, 'shared'))]
+    for (const store of stores) {
+      const nuera = await start({ store })
+      const globex = await start({ store, tenantId: 'globex' })
+      try {
+        const request = { objective: 'Review the monthly business summary.', idempotencyKey: 'same-key' }
+        const a = await nuera.call('/api/tasks', nuera.tokens.founder, request)
+        const b = await globex.call('/api/tasks', globex.tokens.founder, request)
+        assert.equal(a.status, 201)
+        assert.equal(b.status, 201, 'another tenant may reuse the same idempotency key')
+        const aId = a.body.task.id as string
+        const bId = b.body.task.id as string
+        assert.equal((await store.get(aId))?.tenantId, TENANT)
+        assert.equal((await store.get(bId))?.tenantId, 'globex')
+
+        assert.equal((await nuera.call(`/api/tasks/${bId}`, nuera.tokens.founder)).status, 404)
+        assert.equal((await globex.call(`/api/tasks/${aId}`, globex.tokens.founder)).status, 404)
+        assert.deepEqual((await nuera.call('/api/tasks', nuera.tokens.founder)).body.tasks.map((t: Task) => t.id), [aId])
+        assert.deepEqual((await globex.call('/api/tasks', globex.tokens.founder)).body.tasks.map((t: Task) => t.id), [bId])
+
+        assert.equal((await nuera.call('/api/tasks', nuera.tokens.founder, request)).body.deduplicated, true)
+        assert.equal((await globex.call('/api/tasks', globex.tokens.founder, request)).body.deduplicated, true)
+        assert.equal((await store.list()).length, 2)
+      } finally {
+        await Promise.all([nuera.close(), globex.close()])
+      }
+    }
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
 test('rate limit: a per-client token bucket, with consistent JSON errors', async () => {
   const h = await start({ rateLimit: { burst: 2, perMinute: 1 } })
   try {
@@ -433,6 +470,7 @@ test('the file store is append-only, atomic and private', async () => {
     assert.equal(task.audit.length >= 2, true)
     const store = new FileTaskStore(dir)
     await assert.rejects(store.put({ ...task, objective: 'Rewritten.', revision: task.revision + 1 }, task.revision), /never changes/)
+    await assert.rejects(store.put({ ...task, tenantId: 'globex', revision: task.revision + 1 }, task.revision), /tenantId never changes/)
     await assert.rejects(store.put({ ...task, audit: task.audit.slice(1), revision: task.revision + 1 }, task.revision), /appended/)
     await assert.rejects(store.put({ ...task, revision: task.revision + 1 }, task.revision - 1), /changed since/)
   } finally { await rm(dir, { recursive: true, force: true }) }
@@ -441,7 +479,8 @@ test('the file store is append-only, atomic and private', async () => {
 test('client tokens are stored hashed and shown once (registry and CLI)', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'qs-clients-'))
   try {
-    const registry = new TaskClientRegistry({ persistence: new FileTaskClientPersistence(join(dir, 'clients.json')), tenantId: TENANT })
+    const persistence = new FileTaskClientPersistence(join(dir, 'clients.json'))
+    const registry = new TaskClientRegistry({ persistence, tenantId: TENANT })
     const { token, client } = await registry.add('desk-app', 'entity-founder')
     const raw = await readFile(join(dir, 'clients.json'), 'utf8')
     assert.equal(raw.includes(token), false, 'the token is never written')
@@ -452,6 +491,20 @@ test('client tokens are stored hashed and shown once (registry and CLI)', async 
     const p = await registry.authenticate(token) as Principal
     assert.deepEqual(p.roles, ['task-client'])
     assert.equal(p.kind, 'service')
+    const otherTenant = new TaskClientRegistry({ persistence, tenantId: 'globex' })
+    const other = await otherTenant.add('desk-app', 'entity-founder')
+    assert.equal(await otherTenant.authenticate(token), undefined, 'a tenant client token cannot authenticate in another tenant')
+    assert.equal(await registry.authenticate(other.token), undefined, 'the other tenant client token cannot authenticate here')
+    assert.equal((await registry.list()).length, 1)
+    assert.equal((await otherTenant.list()).length, 1)
+    await Promise.all([
+      registry.add('billing-sync', 'entity-founder'),
+      otherTenant.add('records-sync', 'entity-founder'),
+    ])
+    assert.equal((await registry.list()).length, 2)
+    assert.equal((await otherTenant.list()).length, 2)
+    await otherTenant.revoke('desk-app', 'entity-founder')
+    assert.ok(await registry.authenticate(token), 'revoking the other tenant client does not revoke this tenant client')
     await assert.rejects(registry.add('desk-app', 'entity-founder'), /already exists/)
     await registry.revoke('desk-app', 'entity-founder')
     assert.equal(await registry.authenticate(token), undefined)

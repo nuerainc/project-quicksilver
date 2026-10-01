@@ -153,7 +153,7 @@ export class QuicksilverHost {
     const authorizationKey: AuthorizationSigningKey | undefined = authorizationSecret
       ? { keyId: `${config.tenantId}:${config.worker.id}`, secret: authorizationSecret }
       : undefined
-    this.queue = new WorkflowRunQueue({ store, access: this.access, ...config.queue, ...(deps.now ? { now: deps.now } : {}) })
+    this.queue = new WorkflowRunQueue({ store, tenantId: config.tenantId, access: this.access, ...config.queue, ...(deps.now ? { now: deps.now } : {}) })
     this.worker = new WorkflowRunWorker({
       queue: this.queue,
       workerId: config.worker.id,

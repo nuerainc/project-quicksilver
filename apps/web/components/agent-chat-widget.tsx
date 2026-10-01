@@ -5,6 +5,9 @@ import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 
 
 import { authFailureMessage, consoleHeaders, readConsoleToken } from '@/lib/console-auth'
 import { chatRequest, type ChatMode } from '@/lib/chat-request'
+import { businessAgentContext } from '@/lib/business-agent-context'
+import type { BusinessAgentKey } from '@quicksilver/agent'
+import type { BusinessAgentChoice } from '@/lib/business-agent-request'
 import styles from './agent-chat-widget.module.css'
 
 type QueryResponse = {
@@ -24,7 +27,28 @@ type ChatMessage = {
   mode: ChatMode
   response?: QueryResponse
   plan?: PlanChatResponse
+  agent?: BusinessAgentResponse
 }
+
+type BusinessAgentResponse = {
+  agent: { key: BusinessAgentKey; name: string; specialty: string }
+  routing: { mode: 'explicit' | 'keyword' | 'fallback'; reason: string }
+  summary: string
+  recommendations: Array<{ proposal: string; evidenceIds: string[]; confidence: number; impact: string }>
+  unknowns: string[]
+  questions: string[]
+  externalEffects: string[]
+  actionPolicy: 'proposal-only'
+  nqc?: { safetyDecision: string; reasoningScore: number; issues: string[] }
+}
+
+const BUSINESS_AGENTS: Array<{ key: BusinessAgentChoice; label: string }> = [
+  { key: 'auto', label: 'Auto select' },
+  { key: 'research', label: 'Research' }, { key: 'offer', label: 'Offer design' },
+  { key: 'content', label: 'Content' }, { key: 'outreach', label: 'Outreach' },
+  { key: 'sales', label: 'Sales' }, { key: 'fulfillment', label: 'Fulfillment' },
+  { key: 'finance', label: 'Finance' },
+]
 
 type PlanChatResponse = {
   decomposition: { objective: string; constraints: string[]; successMetrics: string[]; candidateWorkstreams: string[] }
@@ -41,9 +65,11 @@ type PlanChatResponse = {
 
 export function AgentChatWidget() {
   const [open, setOpen] = useState(false)
+  const [expanded, setExpanded] = useState(false)
   const [tokenPresent, setTokenPresent] = useState(false)
   const [question, setQuestion] = useState('')
   const [mode, setMode] = useState<ChatMode>('ask')
+  const [agentKey, setAgentKey] = useState<BusinessAgentChoice>('auto')
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -59,18 +85,35 @@ export function AgentChatWidget() {
   }, [open])
 
   useEffect(() => {
+    const openChat = () => { setOpen(true); setExpanded(true) }
+    window.addEventListener('quicksilver:open-chat', openChat)
+    return () => window.removeEventListener('quicksilver:open-chat', openChat)
+  }, [])
+
+  useEffect(() => {
     threadRef.current?.scrollTo({ top: threadRef.current.scrollHeight, behavior: 'auto' })
   }, [messages, busy, error])
 
   function close() {
     setOpen(false)
+    setExpanded(false)
     triggerRef.current?.focus()
   }
 
   function handleKeyDown(event: KeyboardEvent<HTMLElement>) {
     if (event.key === 'Escape') {
       event.stopPropagation()
-      close()
+      if (expanded) setExpanded(false)
+      else close()
+      return
+    }
+    if (expanded && event.key === 'Tab') {
+      const focusable = event.currentTarget.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), a[href]')
+      if (!focusable.length) return
+      const first = focusable[0]
+      const last = focusable[focusable.length - 1]
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus() }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus() }
     }
   }
 
@@ -83,7 +126,7 @@ export function AgentChatWidget() {
       setTokenPresent(false)
       setError(mode === 'plan'
         ? 'Sign in with a principal allowed to propose decisions before asking Quicksilver to plan work.'
-        : 'Sign in with a principal that has decision:read to ask company questions.')
+        : 'Sign in with a principal that has decision:read to use the business chat.')
       return
     }
 
@@ -94,7 +137,15 @@ export function AgentChatWidget() {
     setError(null)
     setBusy(true)
     try {
-      const chat = chatRequest(submittedMode, text)
+      const context = submittedMode === 'agent'
+        ? businessAgentContext(messages.map((message) => ({
+            question: message.question,
+            ...(message.agent ? { summary: message.agent.summary, safetyDecision: message.agent.nqc?.safetyDecision } : {}),
+            ...(message.plan ? { summary: message.plan.reasoning } : {}),
+            ...(message.response ? { summary: message.response.supportingContext.join(' ') } : {}),
+          })))
+        : []
+      const chat = chatRequest(submittedMode, text, agentKey, context)
       const path = chat.path
       const response = await fetch(path, {
         method: 'POST',
@@ -105,7 +156,8 @@ export function AgentChatWidget() {
       const payload = await response.json().catch(() => ({}))
       if (!response.ok) {
         if (response.status === 401) setTokenPresent(false)
-        const message = authFailureMessage(response.status, submittedMode === 'plan' ? 'plan' : 'query', payload.error, payload.retryAfterSeconds)
+        const route = submittedMode === 'plan' ? 'plan' : submittedMode === 'agent' ? 'agents/run' : 'query'
+        const message = authFailureMessage(response.status, route, payload.error, payload.retryAfterSeconds)
           ?? payload.error
           ?? payload.detail
           ?? 'Quicksilver could not answer that question.'
@@ -113,7 +165,9 @@ export function AgentChatWidget() {
       }
       setMessages((current) => current.map((item) => item.id !== id ? item : submittedMode === 'plan'
         ? { ...item, plan: payload as PlanChatResponse }
-        : { ...item, response: payload as QueryResponse }))
+        : submittedMode === 'agent'
+          ? { ...item, agent: payload as BusinessAgentResponse }
+          : { ...item, response: payload as QueryResponse }))
     } catch (cause) {
       setError((cause as Error).message || 'Quicksilver could not answer that question.')
     } finally {
@@ -123,37 +177,46 @@ export function AgentChatWidget() {
 
   return (
     <>
+      {open && expanded && <div className={styles.expandedBackdrop} onMouseDown={(event) => { if (event.target === event.currentTarget) setExpanded(false) }} />}
       {open && (
-        <section id="qs-chat-panel" className={styles.panel} role="dialog" aria-labelledby="qs-chat-title" onKeyDown={handleKeyDown}>
+        <section id="qs-chat-panel" className={`${styles.panel}${expanded ? ` ${styles.panelExpanded}` : ''}`} role="dialog" aria-modal={expanded || undefined} aria-labelledby="qs-chat-title" onKeyDown={handleKeyDown}>
           <header className={styles.header}>
             <div className={styles.identity}>
               <span className={styles.avatar} aria-hidden="true">NQ</span>
               <div>
-                <h2 id="qs-chat-title">Ask Quicksilver</h2>
-                <p>Ask about your business or plan governed work</p>
+                <h2 id="qs-chat-title">Chat with Quicksilver</h2>
+                <p>Ask a question, explore a workspace, or describe work to plan</p>
               </div>
             </div>
+            <button type="button" className={styles.expand} onClick={() => setExpanded((current) => !current)} aria-label={expanded ? 'Restore chat widget' : 'Expand chat to workspace'} title={expanded ? 'Restore chat widget' : 'Expand chat to workspace'}>{expanded ? '↙' : '↗'}</button>
             <button type="button" className={styles.close} onClick={close} aria-label="Close Quicksilver chat">×</button>
           </header>
 
           <div className={styles.safetyNote}>
             {mode === 'ask'
               ? 'Answers use company context and NQC evaluation. Ask mode is read-only.'
-              : 'Plan mode creates evaluated proposals for review. It never approves or executes actions.'}
+              : mode === 'plan'
+                ? 'Plan mode creates evaluated proposals for review. It never approves or executes actions.'
+                : 'A business specialist researches and proposes work. It never approves or performs outside actions.'}
           </div>
 
+          <div className={styles.chatWorkspace}>
           <div className={styles.thread} ref={threadRef} aria-label="Conversation" aria-live="polite">
             {messages.length === 0 ? (
               <div className={styles.welcome}>
                 <span aria-hidden="true">✦</span>
-                <h3>{mode === 'ask' ? 'What would you like to know?' : 'What outcome should the business pursue?'}</h3>
+                <h3>{mode === 'ask' ? 'What would you like to know?' : mode === 'plan' ? 'What outcome should the business pursue?' : agentKey === 'auto' ? 'Put Quicksilver to work' : `Work with the ${BUSINESS_AGENTS.find((agent) => agent.key === agentKey)?.label ?? 'business'} agent`}</h3>
                 <p>{mode === 'ask'
                   ? 'Ask about company entities, capabilities, policies, or the evidence behind them.'
-                  : 'Describe a goal in plain language. Quicksilver will propose actions, evaluate them, and save decisions for review.'}</p>
+                  : mode === 'plan'
+                    ? 'Describe a goal in plain language. Quicksilver will propose actions, evaluate them, and save decisions for review.'
+                    : 'Give a specialist a task in your own words. You’ll get recommendations, evidence gaps, and questions to resolve.'}</p>
                 <div className={styles.suggestions} aria-label={mode === 'ask' ? 'Example questions' : 'Example objectives'}>
                   {(mode === 'ask'
                     ? ['Which policies apply to an action?', 'What evidence supports this capability?']
-                    : ['Reduce operating costs without lowering service quality.', 'Improve on-time delivery over the next quarter.']).map((example) => (
+                    : mode === 'plan'
+                      ? ['Reduce operating costs without lowering service quality.', 'Improve on-time delivery over the next quarter.']
+                      : ['Find evidence behind our current sales slowdown.', 'Draft a plan to reduce fulfillment delays.']).map((example) => (
                     <button key={example} type="button" onClick={() => setQuestion(example)}>{example}</button>
                   ))}
                 </div>
@@ -164,11 +227,35 @@ export function AgentChatWidget() {
                   <p className={styles.userMessage}>{message.question}</p>
                   {message.response && <QueryAnswer result={message.response} />}
                   {message.plan && <PlanAnswer result={message.plan} />}
+                  {message.agent && <BusinessAgentAnswer result={message.agent} />}
                 </article>
               ))
             )}
             {busy && <p className={styles.thinking} role="status">Searching company knowledge…</p>}
             {error && <p className={styles.error} role="alert">{error}</p>}
+          </div>
+          {expanded && (
+            <aside className={styles.contextRail} aria-label="Business workspaces">
+              <p className={styles.contextEyebrow}>Your workspace</p>
+              <h3>Go deeper when you need to</h3>
+              <p className={styles.contextIntro}>Chat stays available while you open the detailed tools.</p>
+              <nav aria-label="Business areas">
+                {[
+                  ['/','Overview','Company health and priorities'],
+                  ['/decisions','Decisions','Review proposals and approvals'],
+                  ['/planning','Planning','Set outcomes and business context'],
+                  ['/workflows','Workflows','Build and operate automations'],
+                  ['/entities','Company data','Manage business records'],
+                  ['/agents','Agents','Explore agent capabilities'],
+                  ['/monitoring','Monitoring','Runs, activity, and alerts'],
+                ].map(([href, label, description]) => (
+                  <Link key={href} href={href} className={styles.contextLink} onClick={() => setExpanded(false)}>
+                    <span>{label}</span><small>{description}</small>
+                  </Link>
+                ))}
+              </nav>
+            </aside>
+          )}
           </div>
 
           <footer className={styles.footer}>
@@ -177,15 +264,17 @@ export function AgentChatWidget() {
                 <div className={styles.modeSwitch} role="group" aria-label="Chat mode">
                   <button type="button" aria-pressed={mode === 'ask'} disabled={busy} onClick={() => setMode('ask')}>Ask</button>
                   <button type="button" aria-pressed={mode === 'plan'} disabled={busy} onClick={() => setMode('plan')}>Plan</button>
+                  <button type="button" aria-pressed={mode === 'agent'} disabled={busy} onClick={() => setMode('agent')}>Work</button>
                 </div>
-                <label className={styles.srOnly} htmlFor="qs-chat-question">{mode === 'plan' ? 'Describe a business objective' : 'Ask a company question'}</label>
+                {mode === 'agent' && <label className={styles.agentSelectLabel}>Specialist<select className={styles.agentSelect} aria-label="Choose business specialist" value={agentKey} disabled={busy} onChange={(event) => setAgentKey(event.currentTarget.value as BusinessAgentChoice)}>{BUSINESS_AGENTS.map((agent) => <option key={agent.key} value={agent.key}>{agent.label}</option>)}</select></label>}
+                <label className={styles.srOnly} htmlFor="qs-chat-question">{mode === 'plan' || mode === 'agent' ? 'Describe work for Quicksilver' : 'Ask a company question'}</label>
                 <input
                   id="qs-chat-question"
                   ref={inputRef}
                   value={question}
                   onChange={(event) => setQuestion(event.currentTarget.value)}
                   maxLength={2000}
-                  placeholder={mode === 'plan' ? 'Describe an outcome to work toward…' : 'Ask Quicksilver…'}
+                  placeholder={mode === 'plan' ? 'Describe an outcome to work toward…' : mode === 'agent' ? 'Describe what the specialist should work on…' : 'Ask Quicksilver…'}
                   autoComplete="off"
                   disabled={busy}
                 />
@@ -193,11 +282,11 @@ export function AgentChatWidget() {
               </form>
             ) : (
               <div className={styles.signInPrompt}>
-                <p>Sign in to ask questions about company information.</p>
+            <p>Sign in to chat with Quicksilver about your business.</p>
                 <Link href="/planning#console-token" onClick={() => setOpen(false)}>Go to sign in</Link>
               </div>
             )}
-            <p className={styles.footerHint}>{mode === 'ask' ? 'Ask · read-only · NQC-evaluated' : 'Plan · proposals require review and approval'}</p>
+            <p className={styles.footerHint}>{mode === 'ask' ? 'Ask · read-only · NQC-evaluated' : mode === 'plan' ? 'Plan · proposals require review and approval' : 'Work · specialist proposals only · external actions stay gated'}</p>
           </footer>
         </section>
       )}
@@ -213,11 +302,22 @@ export function AgentChatWidget() {
         onClick={() => setOpen((current) => !current)}
       >
         <span className={styles.launcherMark} aria-hidden="true">NQ</span>
-        <span>{open ? 'Close' : 'Ask Quicksilver'}</span>
+        <span>{open ? 'Close' : 'Chat'}</span>
         {!open && <span className={styles.launcherSpark} aria-hidden="true">✦</span>}
       </button>
     </>
   )
+}
+
+function BusinessAgentAnswer({ result }: { result: BusinessAgentResponse }) {
+  return <div className={styles.answer}>
+    <p><strong>{result.agent.name}</strong><span className={styles.agentSpecialty}> · {result.agent.specialty}</span></p>
+    <p className={styles.agentRouting}>{result.routing.mode === 'explicit' ? 'Selected specialist' : result.routing.mode === 'keyword' ? 'Auto-selected from your request' : 'General request routed to Research'} · {result.routing.reason}</p>
+    <p className={styles.agentSummary}>{result.summary}</p>
+    {result.recommendations.length > 0 && <ol className={styles.planActions}>{result.recommendations.map((item, index) => <li key={`${index}-${item.proposal}`}><strong>{item.proposal}</strong><span>{item.impact} impact · {Math.round(item.confidence * 100)}% confidence</span>{item.evidenceIds.length > 0 && <small>Evidence: {item.evidenceIds.join(', ')}</small>}</li>)}</ol>}
+    {(result.unknowns.length > 0 || result.questions.length > 0 || result.externalEffects.length > 0) && <details className={styles.references}><summary>Open questions and effects to review</summary>{result.unknowns.map((item, i) => <p key={`u-${i}`}><strong>Unknown:</strong> {item}</p>)}{result.questions.map((item, i) => <p key={`q-${i}`}><strong>Question:</strong> {item}</p>)}{result.externalEffects.map((item, i) => <p key={`e-${i}`}><strong>Would require approval:</strong> {item}</p>)}</details>}
+    <div className={styles.evaluation}><span>Proposal only</span>{result.nqc && <span>NQC · {result.nqc.safetyDecision}</span>}</div>
+  </div>
 }
 
 function PlanAnswer({ result }: { result: PlanChatResponse }) {

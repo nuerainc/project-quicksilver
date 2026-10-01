@@ -1,9 +1,11 @@
 import { createHash, timingSafeEqual } from 'node:crypto'
 import type { SanityClient } from '@sanity/client'
 import { AccessController, PERMISSIONS, type Permission, type PrincipalKind } from '@quicksilver/kernel'
+import { validatePrincipal, type Principal } from '@quicksilver/kernel/identity'
 import { StaticTokenIdentityProvider, digestToken, principalsFromJson } from '@quicksilver/kernel/identity/tokens'
 import { DEMO_PRINCIPALS, demoModeOn, demoModeProblems } from './demo-mode.ts'
 import { appendAuthorizationDecision } from './authorization-audit-store.ts'
+import { readBrowserSession } from './oidc-browser-auth.ts'
 
 export interface PolicyRevision {
   id: string
@@ -143,7 +145,25 @@ export function soleOperatorId(): string | null {
  * `NQC_SUPERVISOR_TOKEN` credential is used.
  */
 export async function verifySupervisorCredential(request: Request, permission: Permission = 'decision:approve'): Promise<SupervisorCredentialResult> {
-  const result = checkSupervisorCredential(request.headers.get('authorization'), permission, process.env)
+  let result: SupervisorCredentialResult
+  const authorization = request.headers.get('authorization')
+  if (authorization !== null) {
+    result = checkSupervisorCredential(authorization, permission, process.env)
+  } else {
+    try {
+      const session = await readBrowserSession(request, process.env)
+      if (!session) result = checkSupervisorCredential(null, permission, process.env)
+      else {
+        const caller = checkPrincipalCaller([permission], { id: session.id, kind: session.kind, tenantId: session.tenantId, roles: session.roles, ...(session.displayName ? { displayName: session.displayName } : {}) }, process.env)
+        if (!caller.ok) result = { ok: false, status: caller.status, reason: caller.reason }
+        else if (caller.kind !== 'human') result = { ok: false, status: 403, reason: 'A human principal is required for supervisor actions.' }
+        else result = { ok: true, supervisorId: caller.principalId }
+      }
+    } catch (error) {
+      console.error('[oidc] session lookup failed', error instanceof Error ? error.name : 'UnknownError')
+      result = { ok: false, status: 503, reason: 'Browser session storage is unavailable.' }
+    }
+  }
   try {
     await appendAuthorizationDecision({ tenantId: tenantOf(process.env), route: 'decision/supervisor', permissions: [permission], ...(result.ok ? { actorId: result.supervisorId } : {}), outcome: result.ok ? 'allow' : 'deny', httpStatus: result.ok ? 200 : result.status, at: new Date().toISOString(), decisionCode: result.ok ? 'authorized' : `http-${result.status}` })
   } catch (error) {
@@ -215,7 +235,25 @@ export type DecisionRouteAuthResult =
  * `checkDecisionRouteCaller` with `process.env`.
  */
 export async function authorizeDecisionRoute(request: Request, route: DecisionRoute): Promise<DecisionRouteAuthResult> {
-  const result = checkDecisionRouteCaller(route, request.headers.get('authorization'), process.env)
+  let result: DecisionRouteAuthResult
+  const authorization = request.headers.get('authorization')
+  if (authorization !== null) {
+    result = checkDecisionRouteCaller(route, authorization, process.env)
+  } else {
+    try {
+      const session = await readBrowserSession(request, process.env)
+      if (!session) result = checkDecisionRouteCaller(route, null, process.env)
+      else {
+        const caller = checkPrincipalCaller(DECISION_ROUTE_PERMISSIONS[route], { id: session.id, kind: session.kind, tenantId: session.tenantId, roles: session.roles, ...(session.displayName ? { displayName: session.displayName } : {}) }, process.env)
+        if (!caller.ok) result = { ok: false, status: caller.status, reason: caller.reason }
+        else if (route === 'execute' && caller.kind !== 'human') result = { ok: false, status: 403, reason: 'A human principal is required to execute decisions.' }
+        else result = { ok: true, principalId: caller.principalId }
+      }
+    } catch (error) {
+      console.error('[oidc] session lookup failed', error instanceof Error ? error.name : 'UnknownError')
+      result = { ok: false, status: 503, reason: 'Browser session storage is unavailable.' }
+    }
+  }
   const permissions = DECISION_ROUTE_PERMISSIONS[route]
   try {
     await appendAuthorizationDecision({ tenantId: tenantOf(process.env), route: `decision/${route}`, permissions, ...(result.ok ? { actorId: result.principalId } : {}), outcome: result.ok ? 'allow' : 'deny', httpStatus: result.ok ? 200 : result.status, at: new Date().toISOString(), decisionCode: result.ok ? 'authorized' : `http-${result.status}` })
@@ -378,6 +416,18 @@ export function checkRouteCaller(permissions: readonly Permission[], authorizati
     return { ok: false, status: 403, reason: 'This credential is not permitted to perform this action.' }
   }
   return { ok: true, principalId: principal.id, kind: principal.kind }
+}
+
+/** Apply the same tenant and permission checks to a server-verified human principal. */
+export function checkPrincipalCaller(permissions: readonly Permission[], principal: Principal, env: CredentialEnv): RouteCallerResult {
+  if (!permissions.length) return { ok: false, status: 403, reason: 'This route names no permission.' }
+  if (validatePrincipal(principal).length) return { ok: false, status: 503, reason: 'Authenticated principal data is invalid.' }
+  if (principal.tenantId !== tenantOf(env)) return { ok: false, status: 403, reason: 'This principal belongs to another tenant.' }
+  if (permissions.some((permission) => quietAccessController.authorize(principal, permission, { tenantId: tenantOf(env), kind: 'decision' }).allowed)) {
+    return { ok: true, principalId: principal.id, kind: principal.kind }
+  }
+  accessController.authorize(principal, permissions[0]!, { tenantId: tenantOf(env), kind: 'decision' })
+  return { ok: false, status: 403, reason: 'This credential is not permitted to perform this action.' }
 }
 
 /**
