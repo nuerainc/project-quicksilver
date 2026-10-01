@@ -9,7 +9,8 @@
  *   4. `external` calls (messages, money, publishing) go to the kernel's
  *      `authorize()` when it is wired in, and always need a human's approval
  *      before they run. No approval mode removes that.
- *   5. The approval mode decides the rest (see ApprovalMode).
+ *   5. In `trusted` mode, calls that run a program are refused outright.
+ *   6. The approval mode decides the rest (see ApprovalMode).
  *
  * An approval is bound to the exact call: the hash of the tool name and its
  * canonical input. A call that changed after approval does not run.
@@ -19,7 +20,7 @@ import { createHash, randomBytes } from 'node:crypto'
 import { canonicalJson } from '@quicksilver/kernel/runtime'
 
 import type { AuditSink } from './audit.ts'
-import { checkWritePath, classifyCommand, type CommandRule } from './policy.ts'
+import { checkWritePath, classifyCommand, isInlineCodeExecution, type CommandRule } from './policy.ts'
 import type { ApprovalMode, OperatorTool } from './types.ts'
 
 export type GateDecision =
@@ -103,6 +104,21 @@ export class Gate {
     }
 
     const mode = this.o.mode
+    // A call that runs a program is not consentable by reading it. In `manual`
+    // and `guarded` a person still decides; in `trusted` there is nobody to
+    // decide, and the mode cannot express consent over code it never shows, so
+    // these are refused rather than auto-run.
+    const runsCode = tool.runsArbitraryCode === true || (tool.commands?.(input) ?? []).some(isInlineCodeExecution)
+    if (runsCode && mode === 'trusted') {
+      return {
+        verdict: 'refuse',
+        callHash: hash,
+        summary,
+        reasons: ['This call runs a program, so what it does is not what an approver would be shown. Trusted mode cannot consent to it; use guarded or manual.'],
+        rules: ['arbitrary-code'],
+        input,
+      }
+    }
     if (mode === 'manual' && tool.tier !== 'read') {
       return { verdict: 'ask', callHash: hash, summary, reasons: ['Manual mode: every change waits for a person.', ...ask], rules: ['manual', ...askRules], input }
     }
