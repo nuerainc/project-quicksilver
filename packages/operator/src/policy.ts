@@ -65,6 +65,31 @@ export function normalizeCommand(command: string): string {
   return command.toLowerCase().replace(/["'`\\]/g, '').replace(/\s+/g, ' ').trim()
 }
 
+/**
+ * Does this command hand text to a program for execution?
+ *
+ * `run_command` is normally consentable — the approver sees the command and
+ * that is the thing that runs. That stops being true the moment the command is
+ * `python3 -c '…'` or `bash -c '…'`: the program doing the work is a string
+ * inside the command, not the command. Such a call is arbitrary code and is
+ * refused in `trusted` mode even though no tool was flagged.
+ */
+const INLINE_CODE_PATTERNS: readonly RegExp[] = Object.freeze([
+  // python -c / node -e / perl -e / php -r and friends
+  /\b(python[0-9.]*|pypy[0-9.]*|node|nodejs|deno|bun|perl|ruby|php|lua|tclsh)\s+(-{1,2}[a-z-]+\s+)*-{1,2}(c|e|r|eval)\b/,
+  // bash -c / sh -c / zsh -c
+  /\b(bash|sh|zsh|dash|ksh)\s+(-{1,2}[a-z-]+\s+)*-{1,2}c\b/,
+  // eval as the command itself
+  /(^|[\s;&|(])eval\s/,
+  // piping into an interpreter: `echo x | sh`
+  /\|\s*(sudo\s+)?(python[0-9.]*|node|perl|ruby|php|sh|bash|zsh)\b/,
+])
+
+export function isInlineCodeExecution(command: string): boolean {
+  const c = normalizeCommand(command)
+  return INLINE_CODE_PATTERNS.some((p) => p.test(c))
+}
+
 export interface CommandVerdict {
   /** `refuse`: hardline. `ask`: dangerous. `ok`: neither. */
   level: 'refuse' | 'ask' | 'ok'

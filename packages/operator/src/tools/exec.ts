@@ -16,6 +16,18 @@
  * still catches naive and accidental destructive scripts with a useful reason
  * to show a person — but it must never be read as the thing standing between a
  * script and the machine.
+ *
+ * Because of that, `run_code` is marked `runsArbitraryCode`: `trusted` mode
+ * refuses it, since no approver is shown the program and the mode has nobody to
+ * ask. `run_command` is refused there too when it hides a program inside an
+ * interpreter flag (`python3 -c '…'`, `node -e '…'`).
+ *
+ * **Residual risk in `guarded` mode.** A named script is still runnable there —
+ * `python3 cleanup.py` executes whatever that file contains, including
+ * something the agent wrote a moment earlier through the file tools, whose
+ * *content* the write-path check never inspected. Refusing every script
+ * execution would gut `guarded`, so this is accepted rather than solved. The
+ * sandbox remains the boundary.
  */
 import { z } from 'zod'
 
@@ -52,8 +64,12 @@ export const runCodeTool: OperatorTool<{ language: 'python' | 'node'; code: stri
   tier: 'execute',
   input: z.object({ language: z.enum(['python', 'node']), code: z.string().min(1).max(200_000), timeoutSeconds: z.number().int().min(1).max(1800).optional() }),
   summarize: (i) => `${i.language} script (${i.code.split('\n').length} lines)`,
+  // The script is the program. Nothing an approver is shown reveals what it
+  // will do, so `trusted` mode refuses it rather than auto-running it.
+  runsArbitraryCode: true,
   // Classify the script text as commands too: a script that shells out to
-  // something destructive is refused like the command itself.
+  // something destructive is refused like the command itself. This is a
+  // tripwire, not the control — see the note above.
   commands: (i) => [i.code],
   async run(i, ctx) {
     const bin = i.language === 'python' ? 'python3 -' : 'node -'

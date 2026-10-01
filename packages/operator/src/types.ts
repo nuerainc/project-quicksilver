@@ -24,7 +24,9 @@ export type ToolTier =
  * - `manual`: every call above `read` waits for a human.
  * - `guarded` (default): `read` and `write` run; `execute` runs unless the
  *   command matches a dangerous pattern; `external` always waits for a human.
- * - `trusted`: everything runs except `external` calls, which still wait.
+ * - `trusted`: everything runs except `external` calls, which still wait, and
+ *   calls that run arbitrary code, which are refused: the mode cannot express
+ *   informed consent over a program nobody is shown.
  * The hardline blocklist and the write-safe root apply in every mode, and no
  * mode lets an `external` call run without a human.
  */
@@ -61,6 +63,16 @@ export interface OperatorTool<I = unknown> {
   commands?(input: I): string[]
   /** Paths this call will write, for the write-safe root check (write-tier tools). */
   writes?(input: I): string[]
+  /**
+   * This call hands text to a program for execution, so the thing that will run
+   * is not the thing an approver is shown. A human can read `rm -rf build` and
+   * consent to it; they cannot meaningfully consent to 200 kB of source.
+   *
+   * Such calls are refused in `trusted` mode. See `gate.ts` and the note in
+   * `tools/exec.ts` — the command policy is a tripwire over text, not a way to
+   * prove what a program will do.
+   */
+  runsArbitraryCode?: boolean
   run(input: I, ctx: ToolContext): Promise<ToolResult>
 }
 
