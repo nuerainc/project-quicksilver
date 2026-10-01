@@ -1,6 +1,7 @@
 import { validateWorkflowGraph, type WorkflowGraph, type WorkflowNode } from './graph.ts'
 import { evaluateWorkflowConditionExpression } from './condition.ts'
-import type { SupervisorControlResult } from '../supervisor.ts'
+import type { SupervisorControlReport } from '../control-log.ts'
+import type { SupervisorControlResult, SupervisorControlStatus } from '../supervisor.ts'
 
 export type WorkflowSafetyDecision = 'ALLOW' | 'BLOCK' | 'ESCALATE' | 'SKIPPED'
 
@@ -34,6 +35,15 @@ export interface WorkflowRuntimeHandlers {
   authorizeExecution?(node: WorkflowNode, output: unknown, context: WorkflowRuntimeContext): Promise<SupervisorControlResult>
   /** The executor must verify the signed record and consume it exactly once before dispatch. */
   consumeExecutionAuthorization?(node: WorkflowNode, authorization: NonNullable<SupervisorControlResult['authorization']>, context: WorkflowRuntimeContext): Promise<{ consumed: boolean; reason?: string }>
+  /**
+   * Control-plane sink. When supplied, the runtime reports what it observed at
+   * each protected step so the decision is recorded and not merely enforced.
+   *
+   * A sink that throws stops the protected step: the kernel's rule is that
+   * missing audit storage fails closed, so an action whose record cannot be
+   * written is one the system refuses rather than silently executes.
+   */
+  recordControlEvent?(report: SupervisorControlReport): Promise<void> | void
   evaluateCondition?(node: WorkflowNode, expression: string, context: WorkflowRuntimeContext): Promise<boolean>
 }
 
@@ -367,10 +377,27 @@ async function executeNode(
         terminalStatus: 'cancelled',
       }
     }
+    // The step was authorized and dispatched, and then it failed in the
+    // executor. Record that explicitly: the authorization was consumed, so
+    // leaving it only as a step failure would lose the fact that authority was
+    // granted and spent. A recording failure cannot change the outcome here —
+    // the step is already failing — so it is not allowed to mask the cause.
+    if (executionAuthorization) {
+      await reportControlEvent(handlers, {
+        kind: 'executor-failed',
+        status: 'blocked',
+        reasons: [(cause as Error)?.message || 'Workflow step failed.'],
+        nodeId: node.id,
+        runId: context.runId ?? '',
+        tenantId: context.tenantId ?? '',
+        authorizationId: executionAuthorization.authorizationId,
+        actionFingerprint: executionAuthorization.actionFingerprint,
+        at: Date.now(),
+      }).catch(() => undefined)
+    }
     return failed((cause as Error)?.message || 'Workflow step failed.', retryHint(cause))
   }
 }
-
 type BoundedLoopResult =
   | { status: 'completed'; output: { iterations: number; value: unknown }; iterations: number; trace: WorkflowLoopIterationTrace[] }
   | { status: 'blocked' | 'failed' | 'cancelled'; error: string; iterations: number; trace: WorkflowLoopIterationTrace[] }
@@ -439,6 +466,26 @@ async function executeBoundedLoop(
   }
 }
 
+/**
+ * Write a control-plane record, if a sink is configured.
+ *
+ * Returns the reason the step must stop when the sink fails. The kernel fails
+ * closed on missing audit storage, so an action whose record cannot be written
+ * is one the system refuses rather than silently executes.
+ */
+async function reportControlEvent(
+  handlers: WorkflowRuntimeHandlers,
+  report: SupervisorControlReport,
+): Promise<string | undefined> {
+  if (!handlers.recordControlEvent) return undefined
+  try {
+    await handlers.recordControlEvent(report)
+    return undefined
+  } catch (cause) {
+    return `The control-plane record could not be written (${(cause as Error)?.message || 'unknown error'}); the protected step was stopped safely.`
+  }
+}
+
 async function validateExecutionAuthorization(
   node: WorkflowNode,
   output: unknown,
@@ -449,7 +496,34 @@ async function validateExecutionAuthorization(
   if (!handlers.authorizeExecution) {
     return { allowed: false, reason: 'Kernel execution authorization is not configured; the protected step was stopped safely.' }
   }
+  const record = (
+    kind: SupervisorControlReport['kind'],
+    status: SupervisorControlStatus,
+    reasons: string[],
+    authorization?: NonNullable<SupervisorControlResult['authorization']>,
+  ) => reportControlEvent(handlers, {
+    kind,
+    status,
+    reasons,
+    nodeId: node.id,
+    runId: context.runId ?? '',
+    tenantId: context.tenantId ?? '',
+    ...(authorization?.authorizationId ? { authorizationId: authorization.authorizationId } : {}),
+    ...(authorization?.actionFingerprint ? { actionFingerprint: authorization.actionFingerprint } : {}),
+    at: Date.now(),
+  })
+
+  // The Supervisor asked the kernel for authority. Record the request before
+  // the answer, so a log can never begin with an outcome nobody requested.
+  const requestFailure = await record('authorization-requested', 'blocked', [])
+  if (requestFailure) return { allowed: false, reason: requestFailure }
+
   const result = await withTimeout(node.config?.timeoutMs, (signal) => handlers.authorizeExecution!(node, output, { ...context, signal }))
+  const gateReasons = result?.status === 'ready-to-execute' && result.authorization
+    ? []
+    : (result?.reasons ?? ['Kernel execution authorization was not valid; the protected step was stopped safely.'])
+  const decisionFailure = await record('gate-decision', result?.status ?? 'blocked', gateReasons, result?.authorization)
+  if (decisionFailure) return { allowed: false, reason: decisionFailure }
   if (result?.status !== 'ready-to-execute' || !result.authorization) {
     return { allowed: false, reason: result?.reasons?.join(' ') || 'Kernel execution authorization was not valid; the protected step was stopped safely.' }
   }
@@ -461,7 +535,11 @@ async function validateExecutionAuthorization(
   }
   const consumed = await withTimeout(node.config?.timeoutMs, (signal) => handlers.consumeExecutionAuthorization!(node, result.authorization!, { ...context, signal }))
   if (consumed?.consumed !== true) {
-    return { allowed: false, reason: consumed?.reason || 'Executor rejected the signed kernel authorization; the protected step was stopped safely.' }
+    // The executor refused the grant. This is the executor-failure case, and
+    // it is recorded as such rather than left as a bare step failure.
+    const reason = consumed?.reason || 'Executor rejected the signed kernel authorization; the protected step was stopped safely.'
+    const failure = await record('executor-failed', 'blocked', [reason], result.authorization)
+    return { allowed: false, reason: failure ?? reason }
   }
   return { allowed: true, authorization: result.authorization }
 }

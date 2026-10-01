@@ -269,6 +269,36 @@ The signed payload shape is unchanged, so the record stays at contract version
 3. What changed is the meaning of the value: no longer a free string that could
 be anything, but a digest the gate can actually check.
 
+### Recording control-plane decisions
+
+An enforced decision that is never written down cannot be reviewed afterwards, so
+the runtime reports what it observes to an optional
+`recordControlEvent` sink at every protected step:
+
+- `authorization-requested`, recorded *before* the gate is called, so a log can
+  never begin with an outcome nobody asked for;
+- `gate-decision`, carrying the verdict and the gate's own reasons;
+- `executor-failed`, both when the executor refuses a grant and when an
+  authorized step dies after dispatch. In the second case the authorization has
+  already been consumed, so leaving it as a bare step failure would lose the
+  fact that authority was granted and spent.
+
+The runtime is deliberately ignorant of policy, evidence, and workflow content —
+it reports what happened, not what it was bound to. The sink knows the bindings
+and turns each report into a logged event, so the runtime cannot record a
+decision the gate did not reach.
+
+**A sink that throws stops the protected step.** The kernel's rule is that
+missing audit storage fails closed, so an action whose record cannot be written
+is one the system refuses rather than silently executes. The one exception is a
+step that is already failing: there, a recording failure cannot change the
+outcome and is not allowed to mask the cause.
+
+This closes the M8-B clause that the Supervisor stops on executor failure.
+Timeout, cancellation, and rollback proposals are modelled by the log but are
+not yet emitted by any runtime path, so the "records wait, timeout, refusal,
+execution, cancellation, and rollback proposals" item stays open.
+
 ### Supervisor control-plane event log
 
 `@quicksilver/kernel/control-log` records what the Supervisor Agent actually
