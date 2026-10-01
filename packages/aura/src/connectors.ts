@@ -203,6 +203,408 @@ export function readCsvLedger(text: string, options: CsvLedgerOptions): Connecto
 }
 
 // ---------------------------------------------------------------------------
+// Payments connector (P-088)
+
+export interface PaymentsConnectorOptions {
+  source: string
+  columns?: { date?: string; amount?: string; type?: string; status?: string; customer?: string; description?: string }
+  blockedPatterns?: readonly RegExp[]
+}
+
+export interface PaymentRecord {
+  date: string
+  amount: number
+  type: 'charge' | 'refund' | 'dispute' | 'subscription'
+  status?: 'succeeded' | 'failed' | 'pending'
+  customer?: string
+  description?: string
+}
+
+export function readPaymentsConnector(data: string | PaymentRecord[], options: PaymentsConnectorOptions): ConnectorReading {
+  assertSourceAllowed(options.source, options.blockedPatterns)
+  const warnings: string[] = []
+  const records: PaymentRecord[] = []
+
+  if (typeof data === 'string') {
+    const rows = parseCsv(data)
+    if (rows.length < 2) {
+      return { connectorId: 'payments-connector', kind: 'payments', source: options.source, observations: [], transactions: [], warnings: ['The payments file has no data rows.'] }
+    }
+    const header = rows[0]!.map((h) => h.trim().toLowerCase())
+    const find = (explicit: string | undefined, candidates: string[]) => {
+      const names = explicit ? [explicit.toLowerCase()] : candidates
+      return header.findIndex((h) => names.includes(h))
+    }
+    const c = options.columns ?? {}
+    const iDate = find(c.date, ['date', 'created', 'paid date', 'timestamp'])
+    const iAmount = find(c.amount, ['amount', 'net', 'total', 'volume'])
+    const iType = find(c.type, ['type', 'kind', 'event', 'category'])
+    const iStatus = find(c.status, ['status', 'state'])
+    const iCustomer = find(c.customer, ['customer', 'customer_id', 'email', 'payer'])
+    const iDesc = find(c.description, ['description', 'memo', 'details'])
+
+    if (iDate < 0 || iAmount < 0) {
+      return { connectorId: 'payments-connector', kind: 'payments', source: options.source, observations: [], transactions: [], warnings: [`Could not find date and amount columns in: ${header.join(', ')}.`] }
+    }
+
+    let skipped = 0
+    for (const r of rows.slice(1)) {
+      const date = parseDate(r[iDate])
+      const amount = parseAmount(r[iAmount])
+      if (!date || amount === null) { skipped++; continue }
+      const rawType = (iType >= 0 ? r[iType] : '')?.toLowerCase() ?? ''
+      let type: PaymentRecord['type'] = 'charge'
+      if (rawType.includes('refund')) type = 'refund'
+      else if (rawType.includes('dispute')) type = 'dispute'
+      else if (rawType.includes('sub')) type = 'subscription'
+      const status = (iStatus >= 0 ? r[iStatus]?.toLowerCase() : undefined) as PaymentRecord['status']
+      records.push({
+        date,
+        amount: Math.abs(amount),
+        type,
+        status,
+        customer: (iCustomer >= 0 ? r[iCustomer] : '')?.trim() || undefined,
+        description: (iDesc >= 0 ? r[iDesc] : '')?.trim() || undefined,
+      })
+    }
+    if (skipped) warnings.push(`${skipped} payment row(s) had no readable date or amount and were skipped.`)
+  } else if (Array.isArray(data)) {
+    records.push(...data)
+  }
+
+  const transactions: Transaction[] = []
+  let totalCharges = 0
+  let totalRefunds = 0
+  let disputeCount = 0
+  let chargeCount = 0
+  const customers = new Set<string>()
+  const monthlySubs = new Map<string, number>()
+
+  for (const p of records) {
+    if (p.status === 'failed') continue
+    const signedAmount = (p.type === 'refund' || p.type === 'dispute') ? -Math.abs(p.amount) : Math.abs(p.amount)
+    transactions.push({
+      date: p.date,
+      amount: signedAmount,
+      category: p.type,
+      description: p.description ?? `${p.type} transaction${p.customer ? ` for ${p.customer}` : ''}`,
+    })
+    if (p.customer) customers.add(p.customer)
+
+    if (p.type === 'charge' || p.type === 'subscription') {
+      totalCharges += p.amount
+      chargeCount++
+      if (p.type === 'subscription') {
+        const mo = p.date.slice(0, 7)
+        monthlySubs.set(mo, (monthlySubs.get(mo) ?? 0) + p.amount)
+      }
+    } else if (p.type === 'refund') {
+      totalRefunds += p.amount
+    } else if (p.type === 'dispute') {
+      disputeCount++
+    }
+  }
+
+  transactions.sort((a, b) => a.date.localeCompare(b.date))
+  const ref = `${options.source} (${records.length} records)`
+  const observations: Observation[] = [
+    { variableId: 'data_sources', label: 'Data sources', value: `Payments connector: ${options.source}`, importance: 0.7, sourceRef: ref },
+    { variableId: 'observed.charge_volume', label: 'Total payment volume', value: round2(totalCharges), unit: 'USD', importance: 0.85, sourceRef: ref },
+  ]
+
+  if (chargeCount > 0) {
+    const refundRate = totalCharges > 0 ? round2(totalRefunds / totalCharges) : 0
+    const disputeRate = chargeCount > 0 ? round2(disputeCount / chargeCount) : 0
+    observations.push(
+      { variableId: 'observed.refund_rate', label: 'Refund rate', value: refundRate, unit: 'fraction', importance: 0.75, sourceRef: ref },
+      { variableId: 'observed.dispute_rate', label: 'Dispute rate', value: disputeRate, unit: 'fraction', importance: 0.7, sourceRef: ref },
+    )
+  }
+
+  if (customers.size > 0) {
+    observations.push({ variableId: 'observed.active_customers', label: 'Active customer count', value: customers.size, unit: 'customers', importance: 0.8, sourceRef: ref })
+  }
+
+  if (monthlySubs.size > 0) {
+    const subValues = [...monthlySubs.values()]
+    const avgMrr = round2(subValues.reduce((s, v) => s + v, 0) / subValues.length)
+    observations.push({ variableId: 'observed.monthly_recurring_revenue', label: 'Monthly recurring revenue (MRR)', value: avgMrr, unit: 'USD', importance: 0.9, sourceRef: ref })
+  }
+
+  return { connectorId: 'payments-connector', kind: 'payments', source: options.source, observations, transactions, warnings }
+}
+
+// ---------------------------------------------------------------------------
+// CRM connector (P-088)
+
+export interface CrmConnectorOptions {
+  source: string
+  columns?: { name?: string; stage?: string; amount?: string; status?: string; createdDate?: string; closeDate?: string }
+  blockedPatterns?: readonly RegExp[]
+}
+
+export interface CrmDealRecord {
+  name: string
+  stage: string
+  amount: number
+  status: 'won' | 'lost' | 'open'
+  createdDate: string
+  closeDate?: string
+}
+
+export function readCrmConnector(data: string | CrmDealRecord[], options: CrmConnectorOptions): ConnectorReading {
+  assertSourceAllowed(options.source, options.blockedPatterns)
+  const warnings: string[] = []
+  const deals: CrmDealRecord[] = []
+
+  if (typeof data === 'string') {
+    const rows = parseCsv(data)
+    if (rows.length < 2) {
+      return { connectorId: 'crm-connector', kind: 'crm', source: options.source, observations: [], transactions: [], warnings: ['The CRM file has no data rows.'] }
+    }
+    const header = rows[0]!.map((h) => h.trim().toLowerCase())
+    const find = (explicit: string | undefined, candidates: string[]) => {
+      const names = explicit ? [explicit.toLowerCase()] : candidates
+      return header.findIndex((h) => names.includes(h))
+    }
+    const c = options.columns ?? {}
+    const iName = find(c.name, ['name', 'deal', 'opportunity', 'title'])
+    const iStage = find(c.stage, ['stage', 'pipeline_stage', 'phase'])
+    const iAmount = find(c.amount, ['amount', 'value', 'deal_size', 'revenue'])
+    const iStatus = find(c.status, ['status', 'state', 'outcome'])
+    const iCreated = find(c.createdDate, ['created', 'created_date', 'start_date', 'date'])
+    const iClose = find(c.closeDate, ['close_date', 'closed', 'end_date', 'won_date'])
+
+    if (iAmount < 0) {
+      return { connectorId: 'crm-connector', kind: 'crm', source: options.source, observations: [], transactions: [], warnings: [`Could not find amount column in CRM header: ${header.join(', ')}.`] }
+    }
+
+    let skipped = 0
+    for (const r of rows.slice(1)) {
+      const amount = parseAmount(r[iAmount])
+      if (amount === null) { skipped++; continue }
+      const name = (iName >= 0 ? r[iName] : '')?.trim() || 'Untitled Deal'
+      const stage = (iStage >= 0 ? r[iStage] : '')?.trim() || 'Pipeline'
+      const rawStatus = (iStatus >= 0 ? r[iStatus] : '')?.toLowerCase() ?? ''
+      let status: CrmDealRecord['status'] = 'open'
+      if (rawStatus.includes('won') || rawStatus.includes('closed won')) status = 'won'
+      else if (rawStatus.includes('lost') || rawStatus.includes('closed lost')) status = 'lost'
+
+      const createdDate = (iCreated >= 0 ? parseDate(r[iCreated]) : null) ?? '2026-01-01'
+      const closeDate = iClose >= 0 ? parseDate(r[iClose]) ?? undefined : undefined
+
+      deals.push({ name, stage, amount: Math.abs(amount), status, createdDate, closeDate })
+    }
+    if (skipped) warnings.push(`${skipped} CRM deal row(s) had no readable amount and were skipped.`)
+  } else if (Array.isArray(data)) {
+    deals.push(...data)
+  }
+
+  let openPipelineValue = 0
+  let openCount = 0
+  let wonCount = 0
+  let lostCount = 0
+  let wonTotalAmount = 0
+  const cycleDaysList: number[] = []
+
+  for (const d of deals) {
+    if (d.status === 'open') {
+      openPipelineValue += d.amount
+      openCount++
+    } else if (d.status === 'won') {
+      wonCount++
+      wonTotalAmount += d.amount
+      if (d.closeDate && d.createdDate) {
+        const cTime = new Date(d.createdDate).getTime()
+        const kTime = new Date(d.closeDate).getTime()
+        if (kTime >= cTime) {
+          cycleDaysList.push(Math.round((kTime - cTime) / (24 * 3600 * 1000)))
+        }
+      }
+    } else if (d.status === 'lost') {
+      lostCount++
+    }
+  }
+
+  const ref = `${options.source} (${deals.length} deals)`
+  const observations: Observation[] = [
+    { variableId: 'data_sources', label: 'Data sources', value: `CRM connector: ${options.source}`, importance: 0.7, sourceRef: ref },
+    { variableId: 'observed.pipeline_value', label: 'Open CRM pipeline value', value: round2(openPipelineValue), unit: 'USD', importance: 0.85, sourceRef: ref },
+    { variableId: 'observed.open_deals_count', label: 'Open deals in pipeline', value: openCount, unit: 'deals', importance: 0.7, sourceRef: ref },
+  ]
+
+  const decidedCount = wonCount + lostCount
+  if (decidedCount > 0) {
+    const winRate = round2(wonCount / decidedCount)
+    observations.push({ variableId: 'observed.win_rate', label: 'Sales win rate', value: winRate, unit: 'fraction', importance: 0.8, sourceRef: ref })
+  }
+
+  if (wonCount > 0) {
+    const avgDealSize = round2(wonTotalAmount / wonCount)
+    observations.push({ variableId: 'observed.average_deal_size', label: 'Average closed-won deal size', value: avgDealSize, unit: 'USD', importance: 0.75, sourceRef: ref })
+  }
+
+  if (cycleDaysList.length > 0) {
+    const avgCycle = Math.round(cycleDaysList.reduce((s, d) => s + d, 0) / cycleDaysList.length)
+    observations.push({ variableId: 'observed.sales_cycle_days', label: 'Average sales cycle length', value: avgCycle, unit: 'days', importance: 0.65, sourceRef: ref })
+  }
+
+  return { connectorId: 'crm-connector', kind: 'crm', source: options.source, observations, transactions: [], warnings }
+}
+
+// ---------------------------------------------------------------------------
+// Email / Support connector (P-088)
+
+export interface EmailConnectorOptions {
+  source: string
+  columns?: { id?: string; date?: string; status?: string; sentiment?: string; resolutionHours?: string; category?: string }
+  blockedPatterns?: readonly RegExp[]
+}
+
+export interface SupportTicketRecord {
+  id: string
+  date: string
+  status: 'open' | 'resolved'
+  sentiment?: 'positive' | 'neutral' | 'negative' | number
+  resolutionHours?: number
+  category?: string
+}
+
+export function readEmailConnector(data: string | SupportTicketRecord[], options: EmailConnectorOptions): ConnectorReading {
+  assertSourceAllowed(options.source, options.blockedPatterns)
+  const warnings: string[] = []
+  const tickets: SupportTicketRecord[] = []
+
+  if (typeof data === 'string') {
+    const rows = parseCsv(data)
+    if (rows.length < 2) {
+      return { connectorId: 'email-connector', kind: 'email', source: options.source, observations: [], transactions: [], warnings: ['The email/support file has no data rows.'] }
+    }
+    const header = rows[0]!.map((h) => h.trim().toLowerCase())
+    const find = (explicit: string | undefined, candidates: string[]) => {
+      const names = explicit ? [explicit.toLowerCase()] : candidates
+      return header.findIndex((h) => names.includes(h))
+    }
+    const c = options.columns ?? {}
+    const iId = find(c.id, ['id', 'ticket_id', 'thread_id', 'number'])
+    const iDate = find(c.date, ['date', 'created', 'received', 'timestamp'])
+    const iStatus = find(c.status, ['status', 'state'])
+    const iSentiment = find(c.sentiment, ['sentiment', 'csat', 'rating', 'score'])
+    const iRes = find(c.resolutionHours, ['resolution_hours', 'time_to_resolve', 'resolution_time', 'hours'])
+    const iCat = find(c.category, ['category', 'topic', 'tag', 'issue_type'])
+
+    let idCounter = 1
+    for (const r of rows.slice(1)) {
+      const id = (iId >= 0 ? r[iId] : '')?.trim() || `T-${idCounter++}`
+      const date = (iDate >= 0 ? parseDate(r[iDate]) : null) ?? '2026-01-01'
+      const rawStatus = (iStatus >= 0 ? r[iStatus] : '')?.toLowerCase() ?? 'open'
+      const status: SupportTicketRecord['status'] = rawStatus.includes('resolved') || rawStatus.includes('closed') ? 'resolved' : 'open'
+      const rawSentiment = (iSentiment >= 0 ? r[iSentiment] : '')?.trim().toLowerCase()
+      let sentiment: SupportTicketRecord['sentiment'] = undefined
+      if (rawSentiment) {
+        const num = parseFloat(rawSentiment)
+        if (!isNaN(num)) sentiment = num
+        else if (rawSentiment.includes('pos')) sentiment = 'positive'
+        else if (rawSentiment.includes('neg')) sentiment = 'negative'
+        else sentiment = 'neutral'
+      }
+      const resolutionHours = iRes >= 0 ? parseFloat(r[iRes]?.trim() ?? '') : undefined
+      const category = (iCat >= 0 ? r[iCat] : '')?.trim() || undefined
+
+      tickets.push({ id, date, status, sentiment, resolutionHours: isNaN(resolutionHours as number) ? undefined : resolutionHours, category })
+    }
+  } else if (Array.isArray(data)) {
+    tickets.push(...data)
+  }
+
+  let openCount = 0
+  let resolvedCount = 0
+  const resolutionTimes: number[] = []
+  const sentimentScores: number[] = []
+  const categories = new Map<string, number>()
+
+  for (const t of tickets) {
+    if (t.status === 'open') openCount++
+    else resolvedCount++
+
+    if (t.resolutionHours !== undefined && t.resolutionHours >= 0) {
+      resolutionTimes.push(t.resolutionHours)
+    }
+
+    if (t.sentiment !== undefined) {
+      if (typeof t.sentiment === 'number') {
+        sentimentScores.push(Math.max(0, Math.min(1, t.sentiment > 1 ? t.sentiment / 5 : t.sentiment)))
+      } else if (t.sentiment === 'positive') sentimentScores.push(1.0)
+      else if (t.sentiment === 'neutral') sentimentScores.push(0.5)
+      else if (t.sentiment === 'negative') sentimentScores.push(0.0)
+    }
+
+    if (t.category) {
+      categories.set(t.category, (categories.get(t.category) ?? 0) + 1)
+    }
+  }
+
+  const ref = `${options.source} (${tickets.length} inquiries)`
+  const observations: Observation[] = [
+    { variableId: 'data_sources', label: 'Data sources', value: `Support & email connector: ${options.source}`, importance: 0.7, sourceRef: ref },
+    { variableId: 'observed.support_inquiry_volume', label: 'Total support inquiry volume', value: tickets.length, unit: 'tickets', importance: 0.7, sourceRef: ref },
+    { variableId: 'observed.unresolved_inquiries', label: 'Unresolved support inquiries', value: openCount, unit: 'tickets', importance: 0.8, sourceRef: ref },
+  ]
+
+  if (resolutionTimes.length > 0) {
+    const avgRes = round2(resolutionTimes.reduce((s, h) => s + h, 0) / resolutionTimes.length)
+    observations.push({ variableId: 'observed.average_resolution_hours', label: 'Average resolution time', value: avgRes, unit: 'hours', importance: 0.65, sourceRef: ref })
+  }
+
+  if (sentimentScores.length > 0) {
+    const avgSentiment = round2(sentimentScores.reduce((s, sc) => s + sc, 0) / sentimentScores.length)
+    observations.push({ variableId: 'observed.customer_sentiment_score', label: 'Customer sentiment / satisfaction score', value: avgSentiment, unit: 'fraction', importance: 0.75, sourceRef: ref })
+  }
+
+  if (categories.size > 0) {
+    const topCats = [...categories.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3)
+    observations.push({ variableId: 'observed.top_issue_categories', label: 'Top support issue categories', value: topCats.map(([cat, cnt]) => `${cat} (${cnt})`).join('; '), importance: 0.6, sourceRef: ref })
+  }
+
+  return { connectorId: 'email-connector', kind: 'email', source: options.source, observations, transactions: [], warnings }
+}
+
+// ---------------------------------------------------------------------------
+// Unified live connector pipeline (P-088)
+
+export interface IngestLiveConnectorsResult extends ObserveResult {
+  readings: ConnectorReading[]
+  warnings: string[]
+}
+
+/**
+ * Execute multiple live connector readings (ledger, payments, CRM, email)
+ * and update the intent graph with OBSERVED variables in a single governed pipeline.
+ */
+export function ingestLiveConnectors(graph: IntentGraph, readings: ConnectorReading[], now = new Date()): IngestLiveConnectorsResult {
+  let currentGraph = structuredClone(graph)
+  const applied: string[] = []
+  const refused: ObserveResult['refused'] = []
+  const warnings: string[] = []
+
+  for (const reading of readings) {
+    if (reading.warnings?.length) warnings.push(...reading.warnings)
+    const result = observeInto(currentGraph, reading, now)
+    currentGraph = result.graph
+    applied.push(...result.applied)
+    refused.push(...result.refused)
+  }
+
+  return {
+    graph: currentGraph,
+    applied,
+    refused,
+    readings,
+    warnings,
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Into the graph
 
 export interface ObserveResult {

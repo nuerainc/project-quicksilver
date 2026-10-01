@@ -2,7 +2,20 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
-import { backtestRevenue, BlockedSourceError, createIntent, monthlyTotals, observeInto, parseCsv, readCsvLedger, validateIntentGraph } from './index.ts'
+import {
+  backtestRevenue,
+  BlockedSourceError,
+  createIntent,
+  ingestLiveConnectors,
+  monthlyTotals,
+  observeInto,
+  parseCsv,
+  readCrmConnector,
+  readCsvLedger,
+  readEmailConnector,
+  readPaymentsConnector,
+  validateIntentGraph,
+} from './index.ts'
 
 const NOW = new Date('2026-09-26T12:00:00Z')
 
@@ -92,4 +105,100 @@ test('back-test: erratic revenue fails with reasons; too little history is not a
   const short = backtestRevenue(erratic.slice(0, 9))
   assert.equal(short.passed, false)
   assert.match(short.reasons.join(' '), /at least 6/)
+})
+
+test('payments connector: reads charges, refunds, subscriptions and disputes into observations', () => {
+  const csv = [
+    'Date,Type,Amount,Customer,Description',
+    '2026-08-01,charge,$150.00,cust-1,Annual plan',
+    '2026-08-05,subscription,50.00,cust-2,Monthly sub',
+    '2026-08-10,refund,25.00,cust-1,Partial refund',
+    '2026-08-15,dispute,50.00,cust-3,Chargeback',
+    '2026-09-01,subscription,50.00,cust-2,Monthly sub renewal',
+  ].join('\n')
+
+  const r = readPaymentsConnector(csv, { source: 'stripe-test.csv' })
+  assert.equal(r.kind, 'payments')
+  assert.equal(r.transactions.length, 5)
+  const obs = Object.fromEntries(r.observations.map((o) => [o.variableId, o.value]))
+  assert.equal(obs['observed.charge_volume'], 250)
+  assert.equal(obs['observed.active_customers'], 3)
+  assert.ok((obs['observed.refund_rate'] as number) > 0)
+  assert.ok((obs['observed.dispute_rate'] as number) > 0)
+  assert.ok((obs['observed.monthly_recurring_revenue'] as number) > 0)
+  assert.deepEqual(r.warnings, [])
+
+  // Refuses patent source
+  assert.throws(() => readPaymentsConnector(csv, { source: 'patent-payments.csv' }), BlockedSourceError)
+})
+
+test('CRM connector: parses pipeline, win rate, deal size and sales cycle', () => {
+  const deals = [
+    { name: 'Acme Renewal', stage: 'Closed Won', amount: 12000, status: 'won' as const, createdDate: '2026-01-01', closeDate: '2026-02-01' },
+    { name: 'Beta Trial', stage: 'Closed Won', amount: 8000, status: 'won' as const, createdDate: '2026-02-01', closeDate: '2026-03-03' },
+    { name: 'Gamma Demo', stage: 'Closed Lost', amount: 5000, status: 'lost' as const, createdDate: '2026-02-15', closeDate: '2026-03-01' },
+    { name: 'Delta Expansion', stage: 'Negotiation', amount: 25000, status: 'open' as const, createdDate: '2026-03-10' },
+  ]
+
+  const r = readCrmConnector(deals, { source: 'hubspot-deals' })
+  assert.equal(r.kind, 'crm')
+  const obs = Object.fromEntries(r.observations.map((o) => [o.variableId, o.value]))
+  assert.equal(obs['observed.pipeline_value'], 25000)
+  assert.equal(obs['observed.open_deals_count'], 1)
+  assert.equal(obs['observed.win_rate'], 0.67) // 2 won / 3 decided = 0.666 -> 0.67
+  assert.equal(obs['observed.average_deal_size'], 10000) // (12000 + 8000) / 2
+  assert.ok((obs['observed.sales_cycle_days'] as number) >= 30)
+  assert.deepEqual(r.warnings, [])
+
+  // Refuses patent source
+  assert.throws(() => readCrmConnector(deals, { source: 'provisional-crm.csv' }), BlockedSourceError)
+})
+
+test('email connector: parses support volume, resolution time, sentiment and categories', () => {
+  const tickets = [
+    { id: 'T-1', date: '2026-09-01', status: 'resolved' as const, sentiment: 'positive' as const, resolutionHours: 2.5, category: 'Billing' },
+    { id: 'T-2', date: '2026-09-02', status: 'resolved' as const, sentiment: 'neutral' as const, resolutionHours: 5.0, category: 'Technical' },
+    { id: 'T-3', date: '2026-09-03', status: 'open' as const, sentiment: 'negative' as const, category: 'Billing' },
+  ]
+
+  const r = readEmailConnector(tickets, { source: 'zendesk-tickets' })
+  assert.equal(r.kind, 'email')
+  const obs = Object.fromEntries(r.observations.map((o) => [o.variableId, o.value]))
+  assert.equal(obs['observed.support_inquiry_volume'], 3)
+  assert.equal(obs['observed.unresolved_inquiries'], 1)
+  assert.equal(obs['observed.average_resolution_hours'], 3.75)
+  assert.equal(obs['observed.customer_sentiment_score'], 0.5) // (1.0 + 0.5 + 0.0) / 3 = 0.5
+  assert.match(String(obs['observed.top_issue_categories']), /Billing/)
+
+  // Refuses patent source
+  assert.throws(() => readEmailConnector(tickets, { source: 'patent-support.csv' }), BlockedSourceError)
+})
+
+test('unified live connector pipeline: ingests multiple connector sources into intent graph', async () => {
+  const { graph } = await createIntent('Validate our B2B SaaS operations.', { requestedBy: 'entity-founder', now: NOW, id: 'intent-saas' })
+  const ledgerReading = readCsvLedger(ledgerCsv(0.05), { source: 'financials.csv' })
+  const paymentsReading = readPaymentsConnector([
+    { date: '2026-08-01', amount: 2000, type: 'subscription', customer: 'c-1' },
+    { date: '2026-09-01', amount: 2000, type: 'subscription', customer: 'c-1' },
+  ], { source: 'stripe-live' })
+  const crmReading = readCrmConnector([
+    { name: 'Enterprise Contract', stage: 'Negotiation', amount: 50000, status: 'open', createdDate: '2026-08-01' },
+  ], { source: 'crm-live' })
+  const emailReading = readEmailConnector([
+    { id: 'T-1', date: '2026-09-01', status: 'resolved', sentiment: 'positive', resolutionHours: 1.0, category: 'Onboarding' },
+  ], { source: 'email-live' })
+
+  const result = ingestLiveConnectors(graph, [ledgerReading, paymentsReading, crmReading, emailReading], NOW)
+  assert.ok(result.applied.includes('observed.monthly_revenue'))
+  assert.ok(result.applied.includes('observed.monthly_recurring_revenue'))
+  assert.ok(result.applied.includes('observed.pipeline_value'))
+  assert.ok(result.applied.includes('observed.support_inquiry_volume'))
+  assert.equal(result.readings.length, 4)
+  assert.deepEqual(result.refused, [])
+  assert.deepEqual(validateIntentGraph(result.graph), [])
+
+  // All variables have OBSERVED provenance
+  const mrr = result.graph.variables.find((v) => v.id === 'observed.monthly_recurring_revenue')!
+  assert.equal(mrr.provenance, 'OBSERVED')
+  assert.equal(mrr.sources[0]!.type, 'observation')
 })

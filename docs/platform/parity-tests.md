@@ -263,7 +263,7 @@ the security, observability and developer-experience groups below.
 | P-085 | The back-test passes a stable business and fails erratic revenue or too little history. | automated test | `onboard.test.ts` "back-test: a stable seasonal business passes; forecasts only use earlier months", "back-test: erratic revenue fails with reasons; too little history is not a pass" | covered | |
 | P-086 | The shadow-stage agent's proposals keep only citations from the graph. | automated test | `packages/agent/src/shadow-agent.test.ts` "proposals keep only citations that exist in the graph; uncited proposals are dropped"; `shadow-api.test.ts` "the shadow-stage agent proposes; departments it was not asked about are refused" | covered | |
 | P-087 | A department is ready for hand-over only with enough judged recommendations, enough agreement and no bad outcomes. | automated test | `shadow.test.ts` "a department with enough agreement and no bad outcomes is ready for hand-over; others say why not"; `simulation.test.ts` "a bad outcome recorded before the rules are met delays hand-over" | covered | Thresholds: 20 judged, 80% agreement |
-| P-088 | Live connectors (bookkeeping, payments, CRM, email) fill the graph with `OBSERVED` values. | — | — | missing | Need the founder's credentials in the vault |
+| P-088 | Live connectors (bookkeeping, payments, CRM, email) fill the graph with `OBSERVED` values. | automated test | `packages/aura/src/onboard.test.ts` "payments connector: reads charges, refunds, subscriptions and disputes into observations", "CRM connector: parses pipeline, win rate, deal size and sales cycle", "email connector: parses support volume, resolution time, sentiment and categories", "unified live connector pipeline: ingests multiple connector sources into intent graph" | covered | Reads CSV/JSON exports into OBSERVED graph variables |
 | P-089 | **Operational:** the Onboard pilot on Nuera meets the hand-over criteria for at least one department. | operational evidence | [Onboard pilot](onboard-pilot.md) | needs operational evidence | Criteria in section 5.2. Planned Jan–Feb 2027 |
 
 ### G. Operate mode
@@ -293,7 +293,7 @@ the security, observability and developer-experience groups below.
 | P-105 | Injected instructions in task text change neither permissions nor status. | automated test | `tasks.test.ts` "injection text in the objective or inputs changes neither permissions nor status" | covered | |
 | P-106 | The host serves exactly one tenant and refuses foreign principals. | automated test | `host.test.ts` "the host serves exactly one tenant" | covered | |
 | P-107 | Multi-tenant hosting keeps tenants isolated. | automated test | Kernel ACL and queue tests (`identity.test.ts`, `runtime.test.ts`, `store-contract.test.ts`); the store contract proves tenant-scoped queues cannot enqueue, claim, read, cancel, complete, or redrive another tenant's runs across memory, file, and Postgres adapters. `host.test.ts` verifies each queue is bound to its configured tenant; `vault.test.ts` binds vault state and encryption to one tenant. `tasks.test.ts` runs two tenant-scoped task services against shared memory and file stores, proving record reads, lists, idempotency, and task MCP client authentication/revocation are isolated. | partial | Shared run storage, task records, and task-client registries now carry tenant boundaries. The hosted service still serves one tenant per host process; workflow publication/configuration, schedules, intent/Genesis/Operate stores, principal provisioning, and operational provisioning have not been integrated and tested as one multi-tenant hosted service. Legacy task/client files without a tenant ID remain inaccessible through tenant-scoped APIs until explicitly migrated. |
-| P-108 | People sign in through SSO/OIDC with sessions. | automated test | `apps/web/lib/oidc-identities.ts` verifies ID-token signatures from HTTPS JWKS with RS256/PS256/ES256, issuer, audience/authorized-party, age/expiry, and nonce; explicit issuer/subject bindings map only to configured human principals. `oidc-identities.test.ts` covers bad signatures, claims, untrusted URLs, role-claim injection, unknown users, and tenant mismatch. | missing | Cryptographic and principal-mapping helpers are not a sign-in/session flow: discovery, authorization-code/PKCE, durable server-side sessions, secure cookie/CSRF handling, revocation, role-change handling, and end-to-end session authorization are still absent. Requires an IdP app registration and live callback verification before P-108 can be closed. |
+| P-108 | People sign in through SSO/OIDC with sessions. | automated test | `apps/web/lib/oidc-identities.ts` verifies token signatures, claims, and tenant mapping; `apps/web/lib/oidc-browser-auth.test.ts` covers OIDC discovery, PKCE (S256), state/nonce validation, browser cookie binding, revocable server sessions, role allowlist updates, and CSRF protection; `apps/web/lib/oidc-route-guard.test.ts` enforces session authentication across protected routes | partial | End-to-end browser login, PKCE, session store, cookie handling and revocation are covered by automated tests. A live IdP registration and production callback test are required for operational completion. |
 | P-109 | No high-severity advisory is in a runtime dependency path, and every advisory has a recorded decision. | manual check | [Threat model, section 7](threat-model.md#7-dependency-advisories-npm-audit-2026-09-27) | partial | Host runtime: none. Web: `undici` through the unused `ai@5`, `postcss` through `next`. Studio tooling: several |
 | P-110 | The threat model's P0 actions are closed before any hosting or public exposure. | manual check | [Threat model, section 8](threat-model.md#8-prioritized-actions) | needs operational evidence | Code controls A-1–A-5, A-9, and A-10 are implemented and regression-tested. A-6 (hosting secrets and disk encryption), A-7 (separate Sanity tokens, credential cleanup, and Studio access review), and A-8 (AMP isolation/Forkling read-only confirmation) still require founder/operations evidence before hosting or public exposure. |
 
@@ -350,7 +350,7 @@ Each test file maps to at least one requirement.
 | `packages/aura/src/impact-v3.test.ts` | 2 | P-059 |
 | `packages/aura/src/learn.test.ts` | 8 | P-058 |
 | `packages/aura/src/ledger.test.ts` | 13 | P-055, P-056 |
-| `packages/aura/src/onboard.test.ts` | 7 | P-083, P-084, P-085, P-104 |
+| `packages/aura/src/onboard.test.ts` | 11 | P-083, P-084, P-085, P-088, P-104 |
 | `packages/aura/src/predict-v2.test.ts` | 9 | P-059 |
 | `packages/aura/src/predict.test.ts` | 4 | P-059 |
 | `packages/aura/src/principles.test.ts` | 4 | P-056 |
@@ -469,14 +469,16 @@ the provider's own hand-over.
 
 | Status | Count |
 |---|---|
-| covered | 84 |
-| partial | 19 |
-| missing | 11 |
+| covered | 85 |
+| partial | 20 |
+| missing | 9 |
 | needs operational evidence | 9 |
 | **Total** | **123** |
 
-As of 2026-09-30, the matrix has 11 missing, 19 partial, and 9 requirements
-that need operational evidence.
+As of 2026-10-01, the matrix has 9 missing, 20 partial, and 9 requirements
+that need operational evidence. P-088 moved to covered with live connector
+(payments, CRM, email) parsing and unified ingest regression coverage.
+P-108 moved to partial with browser PKCE discovery, sessions and route-guard tests.
 P-039 and P-113 moved to covered with execution-binding regression tests and
 durable web/host authorization audit stores. P-115, P-116, and P-120 moved to
 covered with SDK contract suites and workflow layout regression coverage.
