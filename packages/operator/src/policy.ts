@@ -12,7 +12,16 @@
  *   locations are refused even inside it.
  *
  * Patterns are matched on the command with quotes and backslashes removed
- * and whitespace collapsed, so simple obfuscation does not slip past.
+ * and whitespace collapsed, so simple obfuscation does not slip past. The
+ * shell-syntax rules tolerate internal whitespace, so a spaced-out fork bomb
+ * is still a fork bomb.
+ *
+ * **What this is and is not.** This is a best-effort tripwire over command
+ * *text*. It is sound for `run_command`, where the text is what runs. It is
+ * **not** sound for a program: script source can construct its command at
+ * runtime, and a pattern match cannot follow that. See `tools/exec.ts` for
+ * verified examples that classify as `ok`. Do not describe this as the control
+ * that keeps a sandboxed agent from destroying anything — the sandbox is.
  */
 import { isAbsolute, relative, resolve, sep } from 'node:path'
 
@@ -23,11 +32,11 @@ export interface CommandRule {
 }
 
 export const HARDLINE_RULES: readonly CommandRule[] = Object.freeze([
-  { id: 'rm-root', pattern: /\brm\s+(-[a-z]*\s+)*-[a-z]*[rf][a-z]*\s+(-[a-z]*\s+)*(\/|\/\*|~|~\/|\$home|\/(bin|boot|dev|etc|lib|lib64|opt|proc|root|sbin|sys|usr|var))(?=[\s;&|)]|$)/, reason: 'Deletes the system or the home directory.' },
+  { id: 'rm-root', pattern: /\brm\b(?=[^;&|]*\s-{1,2}[a-z-]*[rf])[^;&|]*\s(\/|~|\$home|\/\*|\/(bin|boot|dev|etc|lib|lib64|opt|proc|root|sbin|sys|usr|var)\b)(?=[\s;&|)]|$)/, reason: 'Deletes the system or the home directory.' },
   { id: 'disk-format', pattern: /\b(mkfs(\.[a-z0-9]+)?|wipefs|fdisk|parted|sfdisk)\b/, reason: 'Formats or repartitions a disk.' },
   { id: 'raw-disk-write', pattern: /\bdd\b[^|;&]*\bof=\/dev\//, reason: 'Writes directly to a device.' },
   { id: 'redirect-device', pattern: />\s*\/dev\/(sd|nvme|hd|disk|mmcblk)/, reason: 'Writes directly to a device.' },
-  { id: 'fork-bomb', pattern: /:\(\)\s*\{\s*:\|:&\s*\};\s*:/, reason: 'Fork bomb.' },
+  { id: 'fork-bomb', pattern: /:\s*\(\s*\)\s*\{\s*:\s*\|\s*:\s*&\s*\}\s*;\s*:/, reason: 'Fork bomb.' },
   { id: 'pipe-to-shell', pattern: /\b(curl|wget|fetch)\b[^|]*\|\s*(sudo\s+)?(ba|z|da|k)?sh\b/, reason: 'Runs a script straight from the network.' },
   { id: 'shutdown', pattern: /\b(shutdown|reboot|halt|poweroff|init\s+0|init\s+6)\b/, reason: 'Shuts down or restarts the machine.' },
   { id: 'credential-read', pattern: /(~|\$home|\/root|\/home\/[^/\s]+)\/\.(ssh|aws|gnupg|kube|docker\/config\.json|netrc|git-credentials)\b/, reason: 'Reaches a credential store.' },

