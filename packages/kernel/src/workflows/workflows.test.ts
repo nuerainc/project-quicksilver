@@ -16,6 +16,7 @@ import {
   type WorkflowNode,
   type WorkflowRuntimeHandlers,
 } from '../index.ts'
+import type { SupervisorControlReport } from '../control-log.ts'
 
 // â”€â”€ fixtures â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
@@ -555,8 +556,78 @@ test('Runtime: a denied or missing approval means the side-effect tool never run
   assert.ok(!sim.calls.includes('tool:tool-1'))
 })
 
-test('Runtime: a Supervisor Agent result without a ready kernel authorization never dispatches', async () => {
-  const h = handlers({ authorizeExecution: async () => ({ status: 'blocked' as const, reasons: ['authorization fingerprint mismatch'] }) })
+test('Runtime: a protected step records the control-plane request and the gate decision', async () => {
+  const reports: SupervisorControlReport[] = []
+  const h = handlers({ recordControlEvent: (report) => { reports.push(report) } })
+  const result = await executeWorkflowGraph(toolGraph({ sideEffect: true, evaluationRequired: true, supervisorApprovalRequired: true }), 'x', h)
+  assert.equal(result.status, 'completed')
+  // The request is recorded before the answer, so a log can never begin with
+  // an outcome nobody asked for.
+  assert.deepEqual(reports.map((r) => r.kind), ['authorization-requested', 'gate-decision'])
+  assert.equal(reports[0]!.status, 'blocked')
+  assert.equal(reports[1]!.status, 'ready-to-execute')
+  assert.equal(reports[1]!.nodeId, 'tool-1')
+  assert.equal(reports[1]!.authorizationId, 'auth:tool-1')
+})
+
+test('Runtime: a refused gate is recorded as a refusal with its reasons', async () => {
+  const reports: SupervisorControlReport[] = []
+  const h = handlers({
+    authorizeExecution: async () => ({ status: 'blocked' as const, reasons: ['authorization fingerprint mismatch'] }),
+    recordControlEvent: (report) => { reports.push(report) },
+  })
+  const result = await executeWorkflowGraph(toolGraph({ sideEffect: true, evaluationRequired: true, supervisorApprovalRequired: true }), 'x', h)
+  assert.equal(result.status, 'blocked')
+  const decision = reports.find((r) => r.kind === 'gate-decision')!
+  assert.equal(decision.status, 'blocked')
+  assert.deepEqual(decision.reasons, ['authorization fingerprint mismatch'])
+})
+
+test('Runtime: the executor refusing a grant is recorded as an executor failure', async () => {
+  const reports: SupervisorControlReport[] = []
+  const h = handlers({
+    consumeExecutionAuthorization: async () => ({ consumed: false, reason: 'Authorization signature is invalid.' }),
+    recordControlEvent: (report) => { reports.push(report) },
+  })
+  const result = await executeWorkflowGraph(toolGraph({ sideEffect: true, evaluationRequired: true, supervisorApprovalRequired: true }), 'x', h)
+  assert.equal(result.status, 'blocked')
+  assert.match(result.error ?? '', /signature is invalid/)
+  const failure = reports.find((r) => r.kind === 'executor-failed')!
+  assert.deepEqual(failure.reasons, ['Authorization signature is invalid.'])
+  assert.equal(failure.authorizationId, 'auth:tool-1')
+  assert.ok(!h.calls.includes('tool:tool-1'))
+})
+
+test('Runtime: a step that fails after authorization is recorded as an executor failure', async () => {
+  const reports: SupervisorControlReport[] = []
+  const h = handlers({
+    runTool: async () => { throw new Error('executor exploded') },
+    recordControlEvent: (report) => { reports.push(report) },
+  })
+  const result = await executeWorkflowGraph(toolGraph({ sideEffect: true, evaluationRequired: true, supervisorApprovalRequired: true }), 'x', h)
+  assert.equal(result.status, 'failed')
+  // Authority was granted and spent, and then the step died in the executor.
+  // That must not survive only as a bare step failure.
+  const failure = reports.find((r) => r.kind === 'executor-failed')!
+  assert.deepEqual(failure.reasons, ['executor exploded'])
+  assert.equal(failure.authorizationId, 'auth:tool-1')
+})
+
+test('Runtime: a control-plane sink that cannot write stops the protected step', async () => {
+  const h = handlers({
+    recordControlEvent: () => { throw new Error('audit storage unavailable') },
+  })
+  const result = await executeWorkflowGraph(toolGraph({ sideEffect: true, evaluationRequired: true, supervisorApprovalRequired: true }), 'x', h)
+  // Missing audit storage fails closed: the step is refused rather than run
+  // with its decision unrecorded.
+  assert.equal(result.status, 'blocked')
+  assert.match(result.error ?? '', /control-plane record could not be written/)
+  assert.match(result.error ?? '', /audit storage unavailable/)
+  assert.ok(!h.calls.includes('consume:tool-1'))
+  assert.ok(!h.calls.includes('tool:tool-1'))
+})
+
+test('Runtime: a Supervisor Agent result without a ready kernel authorization never dispatches', async () => {  const h = handlers({ authorizeExecution: async () => ({ status: 'blocked' as const, reasons: ['authorization fingerprint mismatch'] }) })
   const result = await executeWorkflowGraph(toolGraph({ sideEffect: true, evaluationRequired: true, supervisorApprovalRequired: true }), 'x', h)
   assert.equal(result.status, 'blocked')
   assert.equal(result.error, 'authorization fingerprint mismatch')

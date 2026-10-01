@@ -92,7 +92,7 @@ ad-hoc payloads.
 - [ ] Submits execution only with an unexpired kernel authorization.
 - [ ] Records wait, timeout, refusal, execution, cancellation, and rollback
       proposals.
-- [ ] Stops on stale policy, changed content, invalid signature, missing
+- [x] Stops on stale policy, changed content, invalid signature, missing
       evidence, tenant mismatch, expired approval, or executor failure.
 
 ### M8-C — workflow and hosted runtime

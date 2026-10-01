@@ -74,6 +74,36 @@ export interface SupervisorControlLog {
   events: SupervisorControlEvent[]
 }
 
+/**
+ * What the runtime observed, reported to a control-plane sink.
+ *
+ * The runtime is deliberately kept ignorant of policy, evidence, and workflow
+ * content — it does not know the bindings, only what happened. The sink knows
+ * those and turns a report into a logged event, so the runtime cannot record a
+ * decision the gate did not reach, and the host does not have to reconstruct
+ * outcomes from step results after the fact.
+ */
+export type SupervisorControlReportKind =
+  /** Authorization was requested from the kernel for this step. */
+  | 'authorization-requested'
+  /** The control-plane gate returned a verdict. */
+  | 'gate-decision'
+  /** An authorized step failed in the executor. */
+  | 'executor-failed'
+
+export interface SupervisorControlReport {
+  kind: SupervisorControlReportKind
+  nodeId: string
+  runId: string
+  tenantId: string
+  /** The gate's verdict. `blocked` covers both refusals and executor failure. */
+  status: SupervisorControlStatus
+  reasons: string[]
+  authorizationId?: string
+  actionFingerprint?: string
+  at: number
+}
+
 export type AppendSupervisorEventResult =
   | { ok: true; log: SupervisorControlLog; event: SupervisorControlEvent }
   | { ok: false; reasons: string[] }
