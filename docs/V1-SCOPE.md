@@ -73,14 +73,18 @@ independent human approval or reviewer-separation rules for runtime actions.
 - [x] P-122 and P-123 are included in the completion and v1.0.0 acceptance scope by the product owner's explicit direction (2026-09-30).
 - [x] Product, security, operations, data, and finance decision owner is Brodi.
 - [x] Runtime, provider, data-class, WAES, and replica decisions are recorded (2026-10-02).
-- [ ] `V1-ACCEPTANCE.md` maps every in-scope item to automated evidence and,
-      where required, operational evidence; P-014/P-081/P-089/P-096/P-121
-      remain explicit operational blockers.
+- [x] [`V1-ACCEPTANCE.md`](platform/V1-ACCEPTANCE.md) maps every in-scope item
+      to automated evidence and, where required, operational evidence;
+      P-014/P-081/P-089/P-096/P-121 remain explicit operational blockers
+      (2026-10-02).
 
-The P-001–P-123 baseline is approved. All Gate 0 owner decisions are now
-recorded; Gate 0 remains open only on `V1-ACCEPTANCE.md`, which still needs to
-be written. No claim is made that a required capability is complete merely
-because a scope or policy decision is recorded.
+Gate 0 is complete: every checklist item above is recorded. The P-001–P-123
+baseline is approved, every owner decision is recorded, and
+[`V1-ACCEPTANCE.md`](platform/V1-ACCEPTANCE.md) maps every row to its
+evidence. No claim is made that a required capability is complete merely
+because a scope, policy, or acceptance-mapping decision is recorded — 85 rows
+are covered, 25 partial, 4 missing, and 9 (including the five operational
+blockers) need operational evidence that has not yet been recorded.
 
 See the [v1 external credential and access checklist](platform/v1-credential-prerequisites.md)
 for the provider access needed to unblock live testing and operational evidence.
