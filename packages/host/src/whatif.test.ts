@@ -134,8 +134,9 @@ test('genesis: reads data/genesis/<runId>/ledger.json with weekly periods and sa
       assert.ok(r.ok)
       if (r.ok) l = r.ledger
     }
-    await mkdir(join(dir, 'genesis', config.runId), { recursive: true })
-    await writeFile(join(dir, 'genesis', config.runId, 'ledger.json'), JSON.stringify(l))
+    // whatif-cli.ts resolves tenantId from QUICKSILVER_TENANT_ID, defaulting to "default" when unset (as here).
+    await mkdir(join(dir, 'genesis', 'default', config.runId), { recursive: true })
+    await writeFile(join(dir, 'genesis', 'default', config.runId, 'ledger.json'), JSON.stringify(l))
     const r = await whatif(dir, ['cash', '--run', 'genesis', '--runs', '200'])
     assert.equal(r.code, 0, r.out)
     assert.match(r.out, /genesis run genesis-500-30d/)

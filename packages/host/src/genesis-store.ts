@@ -55,6 +55,17 @@ export interface ContentReviewStore {
   append(runId: string, review: ContentReviewRecord): Promise<void>
 }
 
+/**
+ * A single-tenant caller (a CLI, a test) that does not bind a tenantId gets
+ * this partition, matching today's one-tenant-per-process deployment. A
+ * multi-tenant host binds each store to its own tenant at construction, the
+ * same way `tasks.ts`'s TaskService binds one. Money entries and experiments
+ * keep their existing hash-chained shape untouched: the tenant is a storage
+ * partition key (like `runId`'s directory), never a hashed field, so moving
+ * this fix in or out never changes a ledger's digest.
+ */
+export const DEFAULT_GENESIS_TENANT = 'default'
+
 export class MoneyLedgerIntegrityError extends Error {
   readonly runId: string
   constructor(runId: string, errors: string[]) {
@@ -162,18 +173,20 @@ async function writeJsonAtomic(path: string, value: unknown): Promise<void> {
   await rename(tmp, path)
 }
 
-/** <dir>/<runId>/ledger.json holding the whole MoneyLedger, as genesis-cli has always written it. */
+/** <dir>/<tenantId>/<runId>/ledger.json holding the whole MoneyLedger, as genesis-cli has always written it (nested one level deeper, under the bound tenant). */
 export class FileMoneyLedgerStore implements MoneyLedgerStore {
   private readonly dir: string
   private readonly budgetUsd: number
-  /** `budgetUsd` is written into a new ledger file (existing files keep theirs). */
-  constructor(dir: string, options: { budgetUsd?: number } = {}) {
+  private readonly tenantId: string
+  /** `budgetUsd` is written into a new ledger file (existing files keep theirs). `tenantId` defaults to DEFAULT_GENESIS_TENANT. */
+  constructor(dir: string, options: { budgetUsd?: number; tenantId?: string } = {}) {
     this.dir = dir
     this.budgetUsd = options.budgetUsd ?? 0
+    this.tenantId = options.tenantId ?? DEFAULT_GENESIS_TENANT
   }
   private path(runId: string) {
     checkRunId(runId)
-    return join(this.dir, runId, 'ledger.json')
+    return join(this.dir, this.tenantId, runId, 'ledger.json')
   }
   private async read(runId: string): Promise<MoneyLedger> {
     return readJson<MoneyLedger>(this.path(runId), { runId, budgetUsd: this.budgetUsd, entries: [] })
@@ -189,15 +202,17 @@ export class FileMoneyLedgerStore implements MoneyLedgerStore {
   }
 }
 
-/** <dir>/<runId>/experiments.json holding every experiment of the run, replaced atomically. */
+/** <dir>/<tenantId>/<runId>/experiments.json holding every experiment of the run, replaced atomically. */
 export class FileExperimentStore implements ExperimentStore {
   private readonly dir: string
-  constructor(dir: string) {
+  private readonly tenantId: string
+  constructor(dir: string, tenantId: string = DEFAULT_GENESIS_TENANT) {
     this.dir = dir
+    this.tenantId = tenantId
   }
   private path(runId: string) {
     checkRunId(runId)
-    return join(this.dir, runId, 'experiments.json')
+    return join(this.dir, this.tenantId, runId, 'experiments.json')
   }
   async list(runId: string): Promise<Experiment[]> {
     return readJson<Experiment[]>(this.path(runId), [])
@@ -212,15 +227,17 @@ export class FileExperimentStore implements ExperimentStore {
   }
 }
 
-/** <dir>/<runId>/reviews.json holding every content review of the run, append-only. */
+/** <dir>/<tenantId>/<runId>/reviews.json holding every content review of the run, append-only. */
 export class FileContentReviewStore implements ContentReviewStore {
   private readonly dir: string
-  constructor(dir: string) {
+  private readonly tenantId: string
+  constructor(dir: string, tenantId: string = DEFAULT_GENESIS_TENANT) {
     this.dir = dir
+    this.tenantId = tenantId
   }
   private path(runId: string) {
     checkRunId(runId)
-    return join(this.dir, runId, 'reviews.json')
+    return join(this.dir, this.tenantId, runId, 'reviews.json')
   }
   async list(runId: string): Promise<ContentReviewRecord[]> {
     return sortReviews(await readJson<ContentReviewRecord[]>(this.path(runId), []))
@@ -237,6 +254,7 @@ export class FileContentReviewStore implements ContentReviewStore {
 export interface SanityMoneyEntryDocument {
   _id: string
   _type: 'moneyEntry'
+  tenantId: string
   runId: string
   seq: number
   kind: MoneyEntry['kind']
@@ -259,16 +277,18 @@ export interface SanityMoneyEntryDocument {
   hash: string
 }
 
-export function moneyEntryDocumentId(runId: string, seq: number): string {
+/** Namespaced by tenant so two tenants' entries can never collide on id. */
+export function moneyEntryDocumentId(tenantId: string, runId: string, seq: number): string {
   checkRunId(runId)
   if (!Number.isInteger(seq) || seq < 1) throw new Error(`Invalid sequence number ${seq}.`)
-  return `money-entry.${idSegment(runId)}.${String(seq).padStart(8, '0')}`
+  return `money-entry.${idSegment(tenantId)}.${idSegment(runId)}.${String(seq).padStart(8, '0')}`
 }
 
-export function toMoneyEntryDocument(runId: string, e: MoneyEntry): SanityMoneyEntryDocument {
+export function toMoneyEntryDocument(tenantId: string, runId: string, e: MoneyEntry): SanityMoneyEntryDocument {
   return {
-    _id: moneyEntryDocumentId(runId, e.seq),
+    _id: moneyEntryDocumentId(tenantId, runId, e.seq),
     _type: 'moneyEntry',
+    tenantId,
     runId,
     seq: e.seq,
     kind: e.kind,
@@ -323,22 +343,24 @@ export function fromMoneyEntryDocument(d: SanityMoneyEntryDocument): MoneyEntry 
 
 export class SanityMoneyLedgerStore implements MoneyLedgerStore {
   private readonly client: SanityStoreClient
-  constructor(client: SanityStoreClient) {
+  private readonly tenantId: string
+  constructor(client: SanityStoreClient, tenantId: string = DEFAULT_GENESIS_TENANT) {
     assertAllowedSanityProject(client.projectId)
     this.client = client
+    this.tenantId = tenantId
   }
   async load(runId: string): Promise<MoneyEntry[]> {
     checkRunId(runId)
     const docs = await this.client.fetch<SanityMoneyEntryDocument[]>(
-      '*[_type == $type && runId == $runId && !(_id in path("drafts.**"))] | order(seq asc)',
-      { type: 'moneyEntry', runId },
+      '*[_type == $type && tenantId == $tenantId && runId == $runId && !(_id in path("drafts.**"))] | order(seq asc)',
+      { type: 'moneyEntry', tenantId: this.tenantId, runId },
     )
     return verified(runId, docs.map(fromMoneyEntryDocument))
   }
   async append(runId: string, entry: MoneyEntry): Promise<void> {
-    const doc = toMoneyEntryDocument(runId, entry)
+    const doc = toMoneyEntryDocument(this.tenantId, runId, entry)
     if (entry.seq > 1) {
-      const prev = await this.client.getDocument<SanityMoneyEntryDocument>(moneyEntryDocumentId(runId, entry.seq - 1))
+      const prev = await this.client.getDocument<SanityMoneyEntryDocument>(moneyEntryDocumentId(this.tenantId, runId, entry.seq - 1))
       if (!prev) throw new MoneyLedgerConflictError(runId, entry.seq, `entry ${entry.seq - 1} is not stored.`)
       if (prev.hash !== entry.prevHash) throw new MoneyLedgerConflictError(runId, entry.seq, 'it does not follow the last entry.')
     }
@@ -352,6 +374,7 @@ export interface SanityExperimentRecordDocument {
   _id: string
   _type: 'experimentRecord'
   _rev?: string
+  tenantId: string
   runId: string
   experimentId: string
   /** Drafting order within the run. */
@@ -373,16 +396,18 @@ export interface SanityExperimentRecordDocument {
   decisionsJson: string
 }
 
-export function experimentRecordId(runId: string, experimentId: string): string {
+/** Namespaced by tenant so two tenants' experiments can never collide on id. */
+export function experimentRecordId(tenantId: string, runId: string, experimentId: string): string {
   checkRunId(runId)
-  return `experiment-record.${idSegment(runId)}.${idSegment(experimentId)}`
+  return `experiment-record.${idSegment(tenantId)}.${idSegment(runId)}.${idSegment(experimentId)}`
 }
 
-export function toExperimentRecordDocument(runId: string, exp: Experiment, position: number): SanityExperimentRecordDocument {
+export function toExperimentRecordDocument(tenantId: string, runId: string, exp: Experiment, position: number): SanityExperimentRecordDocument {
   const d = exp.definition
   return {
-    _id: experimentRecordId(runId, d.id),
+    _id: experimentRecordId(tenantId, runId, d.id),
     _type: 'experimentRecord',
+    tenantId,
     runId,
     experimentId: d.id,
     position,
@@ -418,15 +443,17 @@ export function fromExperimentRecordDocument(doc: SanityExperimentRecordDocument
 
 export class SanityExperimentStore implements ExperimentStore {
   private readonly client: SanityStoreClient
-  constructor(client: SanityStoreClient) {
+  private readonly tenantId: string
+  constructor(client: SanityStoreClient, tenantId: string = DEFAULT_GENESIS_TENANT) {
     assertAllowedSanityProject(client.projectId)
     this.client = client
+    this.tenantId = tenantId
   }
   private async docs(runId: string): Promise<SanityExperimentRecordDocument[]> {
     checkRunId(runId)
     const docs = await this.client.fetch<SanityExperimentRecordDocument[]>(
-      '*[_type == $type && runId == $runId && !(_id in path("drafts.**"))] | order(position asc)',
-      { type: 'experimentRecord', runId },
+      '*[_type == $type && tenantId == $tenantId && runId == $runId && !(_id in path("drafts.**"))] | order(position asc)',
+      { type: 'experimentRecord', tenantId: this.tenantId, runId },
     )
     return [...docs].sort((a, b) => a.position - b.position || a._id.localeCompare(b._id))
   }
@@ -434,17 +461,17 @@ export class SanityExperimentStore implements ExperimentStore {
     return (await this.docs(runId)).map(fromExperimentRecordDocument)
   }
   async put(runId: string, experiment: Experiment): Promise<void> {
-    const id = experimentRecordId(runId, experiment.definition.id)
+    const id = experimentRecordId(this.tenantId, runId, experiment.definition.id)
     const current = await this.client.getDocument<SanityExperimentRecordDocument>(id)
     const prev = current ? fromExperimentRecordDocument(current) : undefined
     checkExperiment(prev, experiment)
     try {
       if (!current) {
         const position = (await this.docs(runId)).reduce((m, d) => Math.max(m, d.position), 0) + 1
-        await this.client.mutate([{ create: { ...toExperimentRecordDocument(runId, experiment, position) } }])
+        await this.client.mutate([{ create: { ...toExperimentRecordDocument(this.tenantId, runId, experiment, position) } }])
         return
       }
-      const next = toExperimentRecordDocument(runId, experiment, current.position)
+      const next = toExperimentRecordDocument(this.tenantId, runId, experiment, current.position)
       const set: Record<string, unknown> = {
         status: next.status,
         measurementsJson: next.measurementsJson,
@@ -468,6 +495,7 @@ export class SanityExperimentStore implements ExperimentStore {
 export interface SanityContentReviewDocument {
   _id: string
   _type: 'contentReview'
+  tenantId: string
   runId: string
   reviewId: string
   kind: ContentReviewRecord['kind']
@@ -483,15 +511,17 @@ export interface SanityContentReviewDocument {
   channel: string
 }
 
-export function contentReviewDocumentId(runId: string, reviewId: string): string {
+/** Namespaced by tenant so two tenants' reviews can never collide on id. */
+export function contentReviewDocumentId(tenantId: string, runId: string, reviewId: string): string {
   checkRunId(runId)
-  return `content-review.${idSegment(runId)}.${idSegment(reviewId)}`
+  return `content-review.${idSegment(tenantId)}.${idSegment(runId)}.${idSegment(reviewId)}`
 }
 
-export function toContentReviewDocument(runId: string, r: ContentReviewRecord): SanityContentReviewDocument {
+export function toContentReviewDocument(tenantId: string, runId: string, r: ContentReviewRecord): SanityContentReviewDocument {
   return {
-    _id: contentReviewDocumentId(runId, r.reviewId),
+    _id: contentReviewDocumentId(tenantId, runId, r.reviewId),
     _type: 'contentReview',
+    tenantId,
     runId,
     reviewId: r.reviewId,
     kind: r.kind,
@@ -527,22 +557,24 @@ export function fromContentReviewDocument(d: SanityContentReviewDocument): Conte
 
 export class SanityContentReviewStore implements ContentReviewStore {
   private readonly client: SanityStoreClient
-  constructor(client: SanityStoreClient) {
+  private readonly tenantId: string
+  constructor(client: SanityStoreClient, tenantId: string = DEFAULT_GENESIS_TENANT) {
     assertAllowedSanityProject(client.projectId)
     this.client = client
+    this.tenantId = tenantId
   }
   async list(runId: string): Promise<ContentReviewRecord[]> {
     checkRunId(runId)
     const docs = await this.client.fetch<SanityContentReviewDocument[]>(
-      '*[_type == $type && runId == $runId && !(_id in path("drafts.**"))] | order(reviewedAt asc)',
-      { type: 'contentReview', runId },
+      '*[_type == $type && tenantId == $tenantId && runId == $runId && !(_id in path("drafts.**"))] | order(reviewedAt asc)',
+      { type: 'contentReview', tenantId: this.tenantId, runId },
     )
     return sortReviews([...docs].sort((a, b) => a._id.localeCompare(b._id)).map(fromContentReviewDocument))
   }
   async append(runId: string, review: ContentReviewRecord): Promise<void> {
     checkReviewAppend(runId, [], review)
     // createIfNotExists never overwrites: if the id is taken, Sanity returns the stored review.
-    const stored = await this.client.createIfNotExists(toContentReviewDocument(runId, review))
+    const stored = await this.client.createIfNotExists(toContentReviewDocument(this.tenantId, runId, review))
     if (!sameReview(fromContentReviewDocument(stored), review)) throw new ContentReviewConflictError(runId, review.reviewId)
   }
 }
@@ -561,14 +593,15 @@ export interface GenesisStores {
  * NEXT_PUBLIC_SANITY_PROJECT_ID and SANITY_WRITE_TOKEN (legacy: SANITY_AUTH_TOKEN); the legacy challenge
  * project is refused). Anything else keeps the files under `dir`.
  */
-export async function genesisStoresFromEnv(options: { dir: string; budgetUsd: number; env?: NodeJS.ProcessEnv; client?: SanityStoreClient }): Promise<GenesisStores> {
+export async function genesisStoresFromEnv(options: { dir: string; budgetUsd: number; tenantId?: string; env?: NodeJS.ProcessEnv; client?: SanityStoreClient }): Promise<GenesisStores> {
   const env = options.env ?? process.env
+  const tenantId = options.tenantId ?? DEFAULT_GENESIS_TENANT
   if ((env.QUICKSILVER_GENESIS_STORE ?? 'file').trim() === 'sanity') {
     const client = options.client ?? (await createSanityStoreClient(env))
     if (!client) throw new Error('QUICKSILVER_GENESIS_STORE=sanity needs NEXT_PUBLIC_SANITY_PROJECT_ID and SANITY_WRITE_TOKEN (or the legacy SANITY_AUTH_TOKEN).')
-    return { kind: 'sanity', ledger: new SanityMoneyLedgerStore(client), experiments: new SanityExperimentStore(client), reviews: new SanityContentReviewStore(client) }
+    return { kind: 'sanity', ledger: new SanityMoneyLedgerStore(client, tenantId), experiments: new SanityExperimentStore(client, tenantId), reviews: new SanityContentReviewStore(client, tenantId) }
   }
-  return { kind: 'file', ledger: new FileMoneyLedgerStore(options.dir, { budgetUsd: options.budgetUsd }), experiments: new FileExperimentStore(options.dir), reviews: new FileContentReviewStore(options.dir) }
+  return { kind: 'file', ledger: new FileMoneyLedgerStore(options.dir, { budgetUsd: options.budgetUsd, tenantId }), experiments: new FileExperimentStore(options.dir, tenantId), reviews: new FileContentReviewStore(options.dir, tenantId) }
 }
 
 // ── Host API adapter ──────────────────────────────────────────────────────

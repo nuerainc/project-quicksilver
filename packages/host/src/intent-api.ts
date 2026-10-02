@@ -100,6 +100,7 @@ export async function handleIntentRoute(ctx: IntentApiContext, deps: IntentApiDe
       if (autonomyDepth !== undefined && !AUTONOMY_DEPTHS.includes(autonomyDepth as never)) return { status: 422, body: { error: `autonomyDepth must be one of ${AUTONOMY_DEPTHS.join(', ')}.` } }
       const result = await createIntent(objective, {
         requestedBy: principal.id,
+        tenantId,
         id: `intent-${randomUUID()}`,
         now: now(),
         ...(deps.parser ? { parser: deps.parser } : {}),
@@ -112,13 +113,13 @@ export async function handleIntentRoute(ctx: IntentApiContext, deps: IntentApiDe
     if (parts.length === 2 && method === 'GET') {
       const denied = allow('decision:read')
       if (denied) return denied
-      const graphs = (await deps.graphs.list()).sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      const graphs = (await deps.graphs.list(tenantId)).sort((a, b) => b.createdAt.localeCompare(a.createdAt))
       return { status: 200, body: { intents: graphs.map((g) => ({ id: g.id, objective: g.objective, mode: g.mode, requestedBy: g.requestedBy, createdAt: g.createdAt })), questionQuality: questionQuality(graphs) } }
     }
     if (parts.length === 3 && method === 'GET') {
       const denied = allow('decision:read')
       if (denied) return denied
-      const graph = await deps.graphs.get(parts[2]!).catch(() => undefined)
+      const graph = await deps.graphs.get(parts[2]!, tenantId).catch(() => undefined)
       return graph ? { status: 200, body: { intent: summary(graph, ranker), graph } } : { status: 404, body: { error: 'No such intent.' } }
     }
     if (parts.length === 4 && parts[3] === 'answers' && method === 'POST') {
@@ -127,7 +128,7 @@ export async function handleIntentRoute(ctx: IntentApiContext, deps: IntentApiDe
       // An answer is recorded as HUMAN_SPECIFIED, the provider's own words, which
       // only a human may change: refuse service and agent principals (threat model F-3).
       if (principal.kind !== 'human') return { status: 403, body: { error: 'Only a human answers intent questions.' } }
-      const graph = await deps.graphs.get(parts[2]!).catch(() => undefined)
+      const graph = await deps.graphs.get(parts[2]!, tenantId).catch(() => undefined)
       if (!graph) return { status: 404, body: { error: 'No such intent.' } }
       const body = await ctx.readBody()
       if (!body.ok) return { status: body.status, body: { error: body.error } }
@@ -152,7 +153,7 @@ export async function handleIntentRoute(ctx: IntentApiContext, deps: IntentApiDe
     if (parts.length === 4 && parts[3] === 'dismiss' && method === 'POST') {
       const denied = allow('intent:provide')
       if (denied) return denied
-      const graph = await deps.graphs.get(parts[2]!).catch(() => undefined)
+      const graph = await deps.graphs.get(parts[2]!, tenantId).catch(() => undefined)
       if (!graph) return { status: 404, body: { error: 'No such intent.' } }
       const body = await ctx.readBody()
       if (!body.ok) return { status: body.status, body: { error: body.error } }

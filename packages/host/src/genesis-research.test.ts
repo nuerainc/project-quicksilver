@@ -110,7 +110,8 @@ test('Genesis CLI requires explicit owner privacy review and writes the bounded 
   config.runId = runId
   const configPath = join(dir, 'genesis.json')
   const dataDir = join(dir, 'data')
-  const runDir = join(dataDir, runId)
+  // genesis-cli.ts resolves tenantId from QUICKSILVER_TENANT_ID, defaulting to "default" when unset (as here).
+  const runDir = join(dataDir, 'default', runId)
   await mkdir(runDir, { recursive: true })
   await writeFile(configPath, JSON.stringify(config))
   await writeFile(join(runDir, 'ledger.json'), JSON.stringify(ledger()))

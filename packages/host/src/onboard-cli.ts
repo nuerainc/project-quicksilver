@@ -101,7 +101,7 @@ switch (cmd) {
   case 'start': {
     const objective = positional[0]
     if (!objective) fail('Usage: start "<objective>"')
-    const { graph } = await createIntent(objective, { requestedBy: actorId, id: `intent-${Date.now().toString(36)}`, mode: 'onboard' })
+    const { graph } = await createIntent(objective, { requestedBy: actorId, tenantId, id: `intent-${Date.now().toString(36)}`, mode: 'onboard' })
     await graphs.put(graph)
     console.log(`Intent ${graph.id} (onboard).`)
     for (const q of openQuestions(graph, ranker).slice(0, 3)) console.log(`  ? ${q.variableId}: ${q.question}`)

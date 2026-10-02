@@ -178,8 +178,8 @@ test('money ledger: append and load round-trip with the chain verified (file and
     await store.append(RUN, list[2]!) // a retry of the same entry is a no-op
     assert.deepEqual(await store.load(RUN), list, kind)
     assert.deepEqual(await store.load('another-run'), [], kind)
-    if (backing instanceof FakeSanity) assert.deepEqual([...backing.docs.keys()].sort(), ['money-entry.genesis-500.00000001', 'money-entry.genesis-500.00000002', 'money-entry.genesis-500.00000003'])
-    else assert.deepEqual(Object.keys(JSON.parse(await readFile(join(backing, RUN, 'ledger.json'), 'utf8'))).sort(), ['budgetUsd', 'entries', 'runId'], 'the file layout genesis-cli always used')
+    if (backing instanceof FakeSanity) assert.deepEqual([...backing.docs.keys()].sort(), ['money-entry.default.genesis-500.00000001', 'money-entry.default.genesis-500.00000002', 'money-entry.default.genesis-500.00000003'])
+    else assert.deepEqual(Object.keys(JSON.parse(await readFile(join(backing, 'default', RUN, 'ledger.json'), 'utf8'))).sort(), ['budgetUsd', 'entries', 'runId'], 'the file layout genesis-cli always used, now nested one level deeper under the default tenant')
   }
 })
 
@@ -199,10 +199,10 @@ test('money ledger: an entry edited behind the store\'s back fails verification 
   for (const [kind, store, backing] of await ledgerStores()) {
     for (const e of entries(3)) await store.append(RUN, e)
     if (backing instanceof FakeSanity) {
-      const doc = backing.docs.get('money-entry.genesis-500.00000002')!
+      const doc = backing.docs.get('money-entry.default.genesis-500.00000002')!
       backing.docs.set(doc._id, { ...doc, amountUsd: 1 })
     } else {
-      const path = join(backing, RUN, 'ledger.json')
+      const path = join(backing, 'default', RUN, 'ledger.json')
       await writeFile(path, (await readFile(path, 'utf8')).replace('"amountUsd": 11', '"amountUsd": 1'))
     }
     await assert.rejects(store.load(RUN), (e: unknown) => e instanceof MoneyLedgerIntegrityError && /Entry 2 was altered/.test(e.message), kind)
@@ -264,7 +264,7 @@ test('experiments: a stale write loses to the revision check in Sanity', async (
   assert.ok(started.ok)
   sanity.beforeMutate = () => {
     sanity.beforeMutate = undefined
-    const doc = sanity.docs.get('experiment-record.genesis-500.exp-landing-1')!
+    const doc = sanity.docs.get('experiment-record.default.genesis-500.exp-landing-1')!
     sanity.docs.set(doc._id, { ...doc, _rev: 'someone-else' })
   }
   await assert.rejects(store.put(RUN, started.experiment), ExperimentConflictError)
@@ -346,8 +346,74 @@ test('content reviews: append-only in files and Sanity; a taken id is never rewr
     assert.deepEqual((await store.list(RUN)).map((r) => r.verdict), ['pass', 'block'], `${name}: unchanged after the refused write`)
     await assert.rejects(store.append(RUN, { ...make('pass', T0), reviewerKind: 'service' }), /must be made by a human/, name)
   }
-  const doc = sanity.docs.get(`content-review.${RUN}.${first.reviewId}`)!
+  const doc = sanity.docs.get(`content-review.default.${RUN}.${first.reviewId}`)!
   assert.equal(doc._type, 'contentReview')
   assert.equal(doc.kind, 'manual')
   assert.equal(doc.text, 'Weekly feed price digest.')
+})
+
+// ── Tenant isolation (P-107) ───────────────────────────────────────────────
+
+test('Genesis stores: two tenants stay isolated even when they pick the same runId (file and Sanity)', async () => {
+  // Money ledger
+  const ledgerDir = await mkdtemp(join(tmpdir(), 'genesis-tenant-ledger-'))
+  const ledgerSanity = new FakeSanity()
+  const ledgerPairs: Array<[string, MoneyLedgerStore, MoneyLedgerStore, FakeSanity | string]> = [
+    ['file', new FileMoneyLedgerStore(ledgerDir, { budgetUsd: 500, tenantId: 'tenant-a' }), new FileMoneyLedgerStore(ledgerDir, { budgetUsd: 500, tenantId: 'tenant-b' }), ledgerDir],
+    ['sanity', new SanityMoneyLedgerStore(ledgerSanity, 'tenant-a'), new SanityMoneyLedgerStore(ledgerSanity, 'tenant-b'), ledgerSanity],
+  ]
+  for (const [kind, storeA, storeB, backing] of ledgerPairs) {
+    const [entryA] = entries(1, () => ({ description: 'tenant A spend' }))
+    const [entryB] = entries(1, () => ({ description: 'tenant B spend' }))
+    await storeA.append(RUN, entryA!)
+    await storeB.append(RUN, entryB!)
+    assert.deepEqual((await storeA.load(RUN)).map((e) => e.description), ['tenant A spend'], kind)
+    assert.deepEqual((await storeB.load(RUN)).map((e) => e.description), ['tenant B spend'], kind)
+    if (backing instanceof FakeSanity) {
+      assert.deepEqual([...backing.docs.keys()].sort(), ['money-entry.tenant-a.genesis-500.00000001', 'money-entry.tenant-b.genesis-500.00000001'])
+    } else {
+      assert.deepEqual(Object.keys(JSON.parse(await readFile(join(backing, 'tenant-a', RUN, 'ledger.json'), 'utf8'))).sort(), ['budgetUsd', 'entries', 'runId'], 'tenant A has its own nested file')
+      assert.deepEqual(Object.keys(JSON.parse(await readFile(join(backing, 'tenant-b', RUN, 'ledger.json'), 'utf8'))).sort(), ['budgetUsd', 'entries', 'runId'], 'tenant B has its own nested file, never tenant A\'s')
+    }
+  }
+
+  // Experiments
+  const expDir = await mkdtemp(join(tmpdir(), 'genesis-tenant-exp-'))
+  const expSanity = new FakeSanity()
+  const expPairs: Array<[string, ExperimentStore, ExperimentStore]> = [
+    ['file', new FileExperimentStore(expDir, 'tenant-a'), new FileExperimentStore(expDir, 'tenant-b')],
+    ['sanity', new SanityExperimentStore(expSanity, 'tenant-a'), new SanityExperimentStore(expSanity, 'tenant-b')],
+  ]
+  for (const [kind, storeA, storeB] of expPairs) {
+    const a = drafted({ ...def, id: 'shared-exp-id', budgetUsd: 50 })
+    const b = drafted({ ...def, id: 'shared-exp-id', budgetUsd: 90 })
+    await storeA.put(RUN, a)
+    await storeB.put(RUN, b)
+    assert.deepEqual((await storeA.list(RUN)).map((e) => e.definition.budgetUsd), [50], kind)
+    assert.deepEqual((await storeB.list(RUN)).map((e) => e.definition.budgetUsd), [90], `${kind}: tenant B never sees tenant A's experiment, even with a colliding experiment id`)
+  }
+  assert.deepEqual([...expSanity.docs.keys()].sort(), ['experiment-record.tenant-a.genesis-500.shared-exp-id', 'experiment-record.tenant-b.genesis-500.shared-exp-id'])
+
+  // Content reviews
+  const reviewDir = await mkdtemp(join(tmpdir(), 'genesis-tenant-reviews-'))
+  const reviewSanity = new FakeSanity()
+  const reviewPairs: Array<[string, ContentReviewStore, ContentReviewStore]> = [
+    ['file', new FileContentReviewStore(reviewDir, 'tenant-a'), new FileContentReviewStore(reviewDir, 'tenant-b')],
+    ['sanity', new SanityContentReviewStore(reviewSanity, 'tenant-a'), new SanityContentReviewStore(reviewSanity, 'tenant-b')],
+  ]
+  let lastSharedId = ''
+  for (const [kind, storeA, storeB] of reviewPairs) {
+    const reviewA = createManualReview({ text: 'Tenant A landing copy.', channel: 'email', verdict: 'pass', note: 'A', experimentId: 'shared-exp-id' }, human, T0)
+    const reviewB = createManualReview({ text: 'Tenant B landing copy.', channel: 'email', verdict: 'block', note: 'B', experimentId: 'shared-exp-id' }, human, T0)
+    assert.ok(reviewA.ok && reviewB.ok)
+    // Both reviews are given the same reviewId, to prove a colliding id in one tenant never collides with another.
+    const sharedId = reviewA.review.reviewId
+    lastSharedId = sharedId
+    const forB = { ...reviewB.review, reviewId: sharedId }
+    await storeA.append(RUN, reviewA.review)
+    await storeB.append(RUN, forB)
+    assert.deepEqual((await storeA.list(RUN)).map((r) => r.text), ['Tenant A landing copy.'], kind)
+    assert.deepEqual((await storeB.list(RUN)).map((r) => r.text), ['Tenant B landing copy.'], `${kind}: tenant B never sees tenant A's review, even with a colliding reviewId`)
+  }
+  assert.deepEqual([...reviewSanity.docs.keys()].sort(), [`content-review.tenant-a.${RUN}.${lastSharedId}`, `content-review.tenant-b.${RUN}.${lastSharedId}`].sort())
 })

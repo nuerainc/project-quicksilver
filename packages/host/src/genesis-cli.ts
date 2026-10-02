@@ -78,9 +78,11 @@ async function writeJson(path: string, value: unknown) {
 const config = JSON.parse(await readFile(configPath, 'utf8')) as GenesisRunConfig
 const configErrors = validateGenesisConfig(config)
 if (configErrors.length) fail(`The run config is invalid:\n  - ${configErrors.join('\n  - ')}`)
+// Same tenant the host config resolves (QUICKSILVER_TENANT_ID), so the CLI and the host read and write the same tenant-scoped run.
+const tenantId = process.env.QUICKSILVER_TENANT_ID?.trim() || 'default'
 const dataDir = resolve(root, process.env.QUICKSILVER_GENESIS_DIR ?? 'data/genesis')
-const stores = await genesisStoresFromEnv({ dir: dataDir, budgetUsd: config.budgetUsd }).catch((e: Error) => fail(e.message))
-const runPath = join(dataDir, config.runId, 'run.json')
+const stores = await genesisStoresFromEnv({ dir: dataDir, budgetUsd: config.budgetUsd, tenantId }).catch((e: Error) => fail(e.message))
+const runPath = join(dataDir, tenantId, config.runId, 'run.json')
 let entries: MoneyLedger['entries']
 try {
   entries = await stores.ledger.load(config.runId)

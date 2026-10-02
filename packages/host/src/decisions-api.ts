@@ -43,12 +43,12 @@ export interface DecisionApiContext {
 
 type Response = { status: number; body: unknown }
 
-/** Journal entries and shadow verdicts, as decisions, oldest first. */
-export async function allDecisions(deps: Pick<DecisionApiDeps, 'store' | 'shadow'>): Promise<Decision[]> {
+/** Journal entries and shadow verdicts, as decisions, oldest first. `tenantId`, when given, limits the shadow graphs scanned to that tenant's own. */
+export async function allDecisions(deps: Pick<DecisionApiDeps, 'store' | 'shadow'>, tenantId?: string): Promise<Decision[]> {
   const journal = await deps.store.list()
   const shadow: Decision[] = []
   if (deps.shadow) {
-    for (const g of await deps.shadow.graphs.list().catch(() => [])) {
+    for (const g of await deps.shadow.graphs.list(tenantId).catch(() => [])) {
       const { log } = await deps.shadow.store.load(g.id).catch(() => ({ log: { recommendations: [] } }))
       shadow.push(...verdictsAsDecisions(log, { intentId: g.id }))
     }
@@ -88,7 +88,7 @@ export async function handleDecisionRoute(ctx: DecisionApiContext, deps: Decisio
     const denied = allow('decision:read')
     if (denied) return denied
     const limit = Math.min(500, Math.max(1, Number(ctx.query?.get('limit') ?? 50) || 50))
-    const all = await allDecisions(deps)
+    const all = await allDecisions(deps, tenantId)
     const counts = { journal: 0, shadow: 0, scenario: 0 }
     for (const d of all) counts[d.source]++
     return { status: 200, body: { decisions: all.slice().reverse().slice(0, limit), total: all.length, counts, baseline: prequentialOnDecisions(all) } }

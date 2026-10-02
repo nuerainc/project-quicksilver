@@ -198,10 +198,10 @@ async function buildGenesis(config: HostConfig, log: Logger): Promise<GenesisApi
   if (!runWaes) log.warn('no model provider is configured; model-backed WAES reviews will fail closed')
   if ((process.env.QUICKSILVER_GENESIS_STORE ?? 'file').trim() === 'sanity') {
     const { genesisStoresFromEnv, StoresGenesisAdapter } = await import('./genesis-store.ts')
-    const stores = await genesisStoresFromEnv({ dir: dir ?? join(baseDir, 'data', 'genesis'), budgetUsd: genesis.budgetUsd })
+    const stores = await genesisStoresFromEnv({ dir: dir ?? join(baseDir, 'data', 'genesis'), budgetUsd: genesis.budgetUsd, tenantId: config.tenantId })
     return { config: genesis, store: new StoresGenesisAdapter(stores), ...(runWaes ? { runWaes } : {}) }
   }
-  return { config: genesis, store: dir ? new FileGenesisStore(dir) : new MemoryGenesisStore(), ...(runWaes ? { runWaes } : {}) }
+  return { config: genesis, store: dir ? new FileGenesisStore(dir, config.tenantId) : new MemoryGenesisStore(config.tenantId), ...(runWaes ? { runWaes } : {}) }
 }
 
 async function buildAgentRunner(log: Logger): Promise<AgentRunner | undefined> {

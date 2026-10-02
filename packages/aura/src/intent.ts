@@ -15,8 +15,13 @@ import type { AutonomyDepth, DecisionEdge, GraphVariable, IntentGraph, Operating
  * - Standing rules (NQC Kernel authority, WAES review) are SYSTEM_CONSTRAINTs.
  */
 
+/** A single-tenant caller (a CLI, a test) that does not pass `tenantId` gets this default, matching today's one-tenant-per-process deployment. A multi-tenant caller (the host) always passes its own tenantId explicitly. */
+export const DEFAULT_TENANT_ID = 'default-tenant'
+
 export interface CreateIntentOptions {
   requestedBy: string
+  /** The tenant this intent belongs to; stamped onto the graph so stores can isolate it. Defaults to DEFAULT_TENANT_ID. */
+  tenantId?: string
   id?: string
   /** Defaults to the rule-based baseline parser. */
   parser?: ObjectiveParser
@@ -144,6 +149,7 @@ export async function createIntent(objective: string, options: CreateIntentOptio
 
   const graph: IntentGraph = {
     id: options.id ?? `intent-${now.getTime().toString(36)}`,
+    tenantId: options.tenantId ?? DEFAULT_TENANT_ID,
     objective: objective.trim(),
     mode,
     autonomyDepth: options.autonomyDepth ?? parsed.autonomy?.value ?? 'propose',
