@@ -104,12 +104,12 @@ today; leave this unset). Schema deploys keep their own `SANITY_DEPLOY_TOKEN`
 or a `sanity login` session. `npm test` checks that no other file creates a
 Sanity client or reads these variables (`sanity-tokens.test.ts`).
 
-**Founder action:** in [sanity.io/manage](https://sanity.io/manage), project
-→ API → Tokens, create a **Viewer** token and set it as `SANITY_READ_TOKEN`,
-and an **Editor** token and set it as `SANITY_WRITE_TOKEN`, in the root `.env`
-and in every hosting environment (Vercel, Render). Once both are set
-everywhere and the app runs without the fallback warning, delete the old
-combined token in sanity.io/manage and remove `SANITY_AUTH_TOKEN`.
+**Status:** `SANITY_READ_TOKEN` (Viewer) and `SANITY_WRITE_TOKEN` (Editor)
+have been created in [sanity.io/manage](https://sanity.io/manage) and are in
+use. Remaining founder follow-up: confirm both are set in every environment
+that runs this code (root `.env`, Vercel, the Azure hosting environment once
+chosen) so no process still falls back with the warning, then delete the old
+combined token in sanity.io/manage and remove `SANITY_AUTH_TOKEN` everywhere.
 
 **Founder decision (not changed from code):** anyone with an Editor token, or
 with an Editor role in Studio, can write an `approvalRecord`, `approvedBy`, a

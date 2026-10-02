@@ -2,21 +2,32 @@
 
 M2 runs the host on the founder's computer. That is enough for the Onboard
 pilot. The Genesis run needs the host up day and night, because payment
-providers send webhooks to a public address. These templates are ready. None
-is deployed yet: that waits on the entity decision and the payment accounts.
+providers send webhooks to a public address. None is deployed yet: that
+waits on the entity decision and the payment accounts.
+
+**Chosen path: Azure**, using the founder's Azure free credits, host on
+**Azure App Service (Web App for Containers)** with **Azure Database for
+PostgreSQL – Flexible Server** as the managed Postgres. This is the closest
+Azure analog to the Render option below (least operations work; the
+platform handles TLS, restarts and a managed Postgres), and it runs the
+repo's existing `deploy/Dockerfile.host` image as-is rather than requiring a
+different build. An Azure deploy template (the `render.yaml` equivalent)
+has not been written yet — that is the next piece of hosting work once the
+specific App Service plan/tier is picked.
 
 ## Choose one
 
 | Option | Files | Good for | Rough cost |
 |---|---|---|---|
-| Render (managed) | `deploy/render.yaml` | Least operations work; managed Postgres, TLS and restarts | A starter web service, a small Postgres and a 1 GB disk; check Render's current prices |
+| Azure App Service (Web App for Containers) + Azure Database for PostgreSQL | *template not yet written* | **Chosen path.** Least operations work on free Azure credits; managed Postgres, TLS and restarts | Covered by Azure free credits initially; check current App Service + Flexible Server tier prices before they run out |
+| Render (managed) | `deploy/render.yaml` | Documented fallback; not the current plan | A starter web service, a small Postgres and a 1 GB disk; check Render's current prices |
 | Any small VPS | `deploy/docker-compose.yml` + `deploy/docker-compose.public.yml` | Full control; Caddy handles TLS | A small VPS |
 | Founder's computer (today) | `deploy/quicksilver.local.example.json` | Onboard pilot | None; no public webhooks |
 
 Hosting is compute, so its cost is **capital** in the Genesis money ledger
 (`kind: compute`, `category: hosting`), charged against the $500 budget.
 
-## Render
+## Render (documented fallback, not the current plan)
 
 1. In Render, create a Blueprint from this repository with the blueprint
    path `deploy/render.yaml`. The service has `autoDeploy: false`, so
