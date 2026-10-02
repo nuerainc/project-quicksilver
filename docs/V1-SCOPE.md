@@ -55,32 +55,32 @@ independent human approval or reviewer-separation rules for runtime actions.
 | Decision | Recommended default | Status |
 |---|---|---|
 | P-001–P-123 release scope | All P-001–P-123 are v1.0.0 requirements | **Selected by product owner (2026-09-30)** |
-| Pilot scenarios | Nuera Onboard; founder-owned, digital-only Genesis microbusiness with $500/30-day limits; Operate on that venture after Genesis handover | Onboard and Genesis are already in the product definition; Operate linkage needs confirmation |
-| Deployment | Vercel for `apps/web`; Render for the persistent host and managed Postgres; keep Sanity Studio/project separate | Proposed; not deployed |
-| Host replica count | One replica for initial founder pilots; require B-16 shared webhook replay protection before enabling multiple replicas | Proposed |
-| Runtime and support matrix | Node 22 (matches CI); PostgreSQL for hosted runs; current stable Chrome, Edge, and Firefox; existing Azure, OpenAI, Anthropic, Google, and explicit local Ollama provider modes | Proposed; browser/provider support needs acceptance evidence |
-| WAES/manual review | Require WAES for customer-facing content; allow founder review only as a separately labelled, exact-content manual path during pilots; manual review is never reported as WAES | Product docs already describe this path; confirm policy |
-| Data classes and provider handling | Founder-owned pilot business data only after access/security gates; no restricted patent data, raw payment data, secrets in prompts/logs, or regulated data; select providers/configurations that do not train on submitted data; minimize and document retention by data class | Proposed; retention durations and provider terms need confirmation |
-| Finance and spend | Keep the defined $500 Genesis cap, 30-day limit, daily caps and pre-set experiment thresholds; reconcile every payment to the ledger | Product-defined; implementation/evidence remains incomplete |
-| Release/change policy | SemVer; protected `main`; PR required; Ubuntu + Windows CI and Go checks required; migrations and changelog entries accompany schema/API changes; exceptions recorded here with parity IDs and expiry | Proposed |
+| Pilot scenarios | Genesis and Operate are decoupled, not force-linked. Genesis is a reusable startup tool: it takes a defined goal/endpoint set early in the conversation (or from the first prompt, if not stated otherwise), and on completion the venture *may* optionally be handed to Operate — this is enterprise/SaaS-facing, supporting many ventures, not one fixed founder-owned path. The Onboard pilot does not start on CSV/JSON-only connector scope; it waits until P-088 (live connectors) ships. | **Confirmed by product owner (2026-10-02)** |
+| Deployment | Vercel for `apps/web`; persistent host + Postgres on Azure, starting on the time-boxed student trial credit and rolling onto the $100/12-month student credit after, kept as a loose choice rather than a long-term platform commitment — revisit if the credits run out or Azure stops fitting; Sanity Studio/project stays separate either way | **Confirmed by product owner (2026-10-02)** |
+| Host replica count | One replica for initial founder pilots; require B-16 shared webhook replay protection before enabling multiple replicas | **Confirmed by product owner (2026-10-02)** |
+| Runtime and support matrix | Node 22 (matches CI); PostgreSQL for hosted runs; current stable Chrome, Edge, and Firefox; existing Azure, OpenAI, Anthropic, Google, and explicit local Ollama provider modes | **Confirmed by product owner (2026-10-02)**; browser/provider support still needs acceptance evidence |
+| WAES/manual review | Require WAES for customer-facing content; allow founder review only as a separately labelled, exact-content manual path during pilots; manual review is never reported as WAES | **Confirmed by product owner (2026-10-02)** |
+| Data classes and provider handling | Founder-owned pilot business data only after access/security gates; no restricted patent data, raw payment data, secrets in prompts/logs, or regulated data; select providers/configurations that do not train on submitted data; retain pilot/business data 30 days per data class by default, unless a class needs longer for audit evidence | **Confirmed by product owner (2026-10-02)**; provider contractual retention/training terms still need confirmation |
+| Finance and spend | Genesis is reused across many ventures with different budgets, so no single dollar cap or time window is a product-wide hard ceiling. `deploy/genesis/genesis-500.json` ($500/30-day) remains the out-of-the-box convenience/demo config a run can start from, but any run may override its cap and window freely. Reconcile every payment to the ledger regardless of the configured cap. | **Confirmed by product owner (2026-10-02)**; implementation/evidence remains incomplete |
+| Release/change policy | SemVer; protected `main`; PR required; Ubuntu + Windows CI and Go checks required; migrations and changelog entries accompany schema/API changes; exceptions recorded here with parity IDs and expiry | **Confirmed by product owner (2026-10-02)** |
 | Sanity separation | Dedicated Quicksilver project `f87t11g1`, private `production` dataset; never connect the public Sanity Challenge dataset | Selected in prior setup; credentials/deployment still blocked |
 
 ## Gate 0 completion checklist
 
 - [x] Product owner selects literal baseline (2026-09-29).
-- [ ] Exact pilot scenarios and supported connectors/channels are listed.
+- [x] Exact pilot scenarios and supported connectors/channels are listed (2026-10-02: Genesis/Operate decoupled and configurable per venture; Onboard pilot gated on P-088 shipping, not CSV/JSON-only scope).
 - [x] P-001–P-123 are included in v1.0.0 per the product owner's decision.
 - [x] P-122 and P-123 are included in the completion and v1.0.0 acceptance scope by the product owner's explicit direction (2026-09-30).
 - [x] Product, security, operations, data, and finance decision owner is Brodi.
-- [ ] Runtime, provider, data-class, WAES, and replica decisions are recorded.
+- [x] Runtime, provider, data-class, WAES, and replica decisions are recorded (2026-10-02).
 - [ ] `V1-ACCEPTANCE.md` maps every in-scope item to automated evidence and,
       where required, operational evidence; P-014/P-081/P-089/P-096/P-121
       remain explicit operational blockers.
 
-The P-001–P-123 baseline is approved. Gate 0 remains open until the remaining
-operational decisions, named owners, and acceptance evidence are completed. No
-claim is made that a required capability is complete merely because the scope
-decision is recorded.
+The P-001–P-123 baseline is approved. All Gate 0 owner decisions are now
+recorded; Gate 0 remains open only on `V1-ACCEPTANCE.md`, which still needs to
+be written. No claim is made that a required capability is complete merely
+because a scope or policy decision is recorded.
 
 See the [v1 external credential and access checklist](platform/v1-credential-prerequisites.md)
 for the provider access needed to unblock live testing and operational evidence.
