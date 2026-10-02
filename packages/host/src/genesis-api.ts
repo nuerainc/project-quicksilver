@@ -23,7 +23,7 @@ import {
 import { decideSpend, genesisBlockers, genesisFacts, validateGenesisConfig, type GenesisRunConfig } from '@quicksilver/kernel/playbooks/genesis'
 
 import { checkReviewAppend, createManualReview, createWaesServiceReview, MANUAL_REVIEW_LABEL, parseContentReviewInput, parseWaesServiceInput, reviewSummary, sortReviews, type ContentReviewRecord, type WaesServiceAssessment, type WaesServiceInput } from './genesis-reviews.ts'
-import { FileContentReviewStore } from './genesis-store.ts'
+import { DEFAULT_GENESIS_TENANT, FileContentReviewStore } from './genesis-store.ts'
 
 /**
  * Genesis run on the host (M5): the same commands as `npm run genesis`, over HTTP.
@@ -99,14 +99,19 @@ const emptyState = (c: GenesisRunConfig): GenesisState => ({ ledger: { runId: c.
 
 // ── Stores ────────────────────────────────────────────────────────────────
 
-/** Files at <dir>/<runId>/{ledger,experiments,run,reviews}.json: the layout `npm run genesis` uses. */
+/**
+ * Files at <dir>/<tenantId>/<runId>/{ledger,experiments,run,reviews}.json: the
+ * layout `npm run genesis` uses, nested one level deeper under the bound
+ * tenant so a multi-tenant host can never read or write another tenant's run.
+ */
 export class FileGenesisStore implements GenesisStore {
   private readonly dir: string
+  private readonly tenantId: string
   private readonly reviews: FileContentReviewStore
-  constructor(dir: string) { this.dir = dir; this.reviews = new FileContentReviewStore(dir) }
+  constructor(dir: string, tenantId: string = DEFAULT_GENESIS_TENANT) { this.dir = dir; this.tenantId = tenantId; this.reviews = new FileContentReviewStore(dir, tenantId) }
   private path(runId: string, file: string) {
     if (!RUN_ID.test(runId)) throw new Error('Invalid run id.')
-    return join(this.dir, runId, file)
+    return join(this.dir, this.tenantId, runId, file)
   }
   private async read<T>(runId: string, file: string, fallback: T): Promise<T> {
     try { return JSON.parse(await readFile(this.path(runId, file), 'utf8')) as T } catch (e) {
@@ -116,7 +121,7 @@ export class FileGenesisStore implements GenesisStore {
   }
   private async write(runId: string, file: string, value: unknown) {
     const target = this.path(runId, file)
-    await mkdir(join(this.dir, runId), { recursive: true })
+    await mkdir(join(this.dir, this.tenantId, runId), { recursive: true })
     await writeFile(`${target}.tmp`, JSON.stringify(value, null, 1), { mode: 0o600 })
     await rename(`${target}.tmp`, target)
   }
@@ -135,18 +140,23 @@ export class FileGenesisStore implements GenesisStore {
   appendReview(runId: string, review: ContentReviewRecord) { return this.reviews.append(runId, review) }
 }
 
+/** The tenant is part of the Map key, so two tenant-bound instances sharing nothing in-process still cannot see each other's runs; a tenant-scoped instance also cannot see another tenant's runId even if it collides. */
 export class MemoryGenesisStore implements GenesisStore {
+  private readonly tenantId: string
+  constructor(tenantId: string = DEFAULT_GENESIS_TENANT) { this.tenantId = tenantId }
   private readonly data = new Map<string, Partial<GenesisState>>()
-  async load(c: GenesisRunConfig) { return structuredClone({ ...emptyState(c), ...this.data.get(c.runId) }) }
-  private put(runId: string, patch: Partial<GenesisState>) { this.data.set(runId, structuredClone({ ...this.data.get(runId), ...patch })) }
+  private key(runId: string) { return `${this.tenantId}\u0000${runId}` }
+  async load(c: GenesisRunConfig) { return structuredClone({ ...emptyState(c), ...this.data.get(this.key(c.runId)) }) }
+  private put(runId: string, patch: Partial<GenesisState>) { const k = this.key(runId); this.data.set(k, structuredClone({ ...this.data.get(k), ...patch })) }
   async saveLedger(runId: string, ledger: MoneyLedger) { this.put(runId, { ledger }) }
   async saveExperiments(runId: string, experiments: Experiment[]) { this.put(runId, { experiments }) }
   async saveRun(runId: string, run: GenesisRunState) { this.put(runId, { run }) }
   private readonly reviews = new Map<string, ContentReviewRecord[]>()
-  async loadReviews(runId: string) { return sortReviews(structuredClone(this.reviews.get(runId) ?? [])) }
+  async loadReviews(runId: string) { return sortReviews(structuredClone(this.reviews.get(this.key(runId)) ?? [])) }
   async appendReview(runId: string, review: ContentReviewRecord) {
-    const current = this.reviews.get(runId) ?? []
-    if (checkReviewAppend(runId, current, review)) this.reviews.set(runId, [...current, structuredClone(review)])
+    const k = this.key(runId)
+    const current = this.reviews.get(k) ?? []
+    if (checkReviewAppend(runId, current, review)) this.reviews.set(k, [...current, structuredClone(review)])
   }
 }
 

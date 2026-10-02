@@ -46,7 +46,7 @@ test('provenance: every tag has its own source rules', () => {
 
 test('graph validation: duplicates, dangling edges and cycles are refused', () => {
   const g: IntentGraph = {
-    id: 'g', objective: 'x', mode: null, autonomyDepth: 'propose', requestedBy: 'u', createdAt: NOW.toISOString(), history: [],
+    id: 'g', tenantId: 'default-tenant', objective: 'x', mode: null, autonomyDepth: 'propose', requestedBy: 'u', createdAt: NOW.toISOString(), history: [],
     variables: [variable({ id: 'a' }), variable({ id: 'b' }), variable({ id: 'a' })],
     edges: [{ from: 'a', to: 'b', relation: 'depends-on' }, { from: 'b', to: 'a', relation: 'depends-on' }, { from: 'a', to: 'zz', relation: 'informs' }],
   }

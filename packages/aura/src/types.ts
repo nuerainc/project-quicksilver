@@ -65,6 +65,8 @@ export interface DecisionEdge {
 
 export interface IntentGraph {
   id: string
+  /** The tenant this graph belongs to. Stores key and filter by it, so one tenant never sees another's graphs. */
+  tenantId: string
   objective: string
   mode: OperatingMode | null
   autonomyDepth: AutonomyDepth

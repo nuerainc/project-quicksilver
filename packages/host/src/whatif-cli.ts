@@ -92,7 +92,9 @@ async function loadRun(kind: string): Promise<RunData> {
   }
   if (kind === 'genesis') {
     const config = await readConfig<GenesisRunConfig>(resolve(root, process.env.QUICKSILVER_GENESIS_CONFIG ?? 'deploy/genesis/genesis-500.json'))
-    const stores = await genesisStoresFromEnv({ dir: resolve(root, process.env.QUICKSILVER_GENESIS_DIR ?? 'data/genesis'), budgetUsd: config.budgetUsd }).catch((e: Error) => fail(e.message))
+    // Same tenant genesis-cli.ts resolves (QUICKSILVER_TENANT_ID), so this reads the same tenant-scoped run it wrote.
+    const tenantId = process.env.QUICKSILVER_TENANT_ID?.trim() || 'default'
+    const stores = await genesisStoresFromEnv({ dir: resolve(root, process.env.QUICKSILVER_GENESIS_DIR ?? 'data/genesis'), budgetUsd: config.budgetUsd, tenantId }).catch((e: Error) => fail(e.message))
     const entries = await stores.ledger.load(config.runId).catch((e: Error) => fail(e.message))
     const ledger: MoneyLedger = { runId: config.runId, budgetUsd: config.budgetUsd, entries }
     const t = moneyTotals(ledger)

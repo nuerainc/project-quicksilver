@@ -231,6 +231,7 @@ export interface SanityIntentGraphDocument {
   _id: string
   _type: 'intentGraph'
   graphId: string
+  tenantId: string
   objective: string
   mode: IntentGraph['mode']
   autonomyDepth: IntentGraph['autonomyDepth']
@@ -244,10 +245,13 @@ export interface SanityIntentGraphDocument {
 
 export function toSanityIntentGraph(graph: IntentGraph): SanityIntentGraphDocument {
   if (!/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$/.test(graph.id)) throw new Error(`Invalid graph id "${graph.id}".`)
+  if (!/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/.test(graph.tenantId)) throw new Error(`Invalid tenantId "${graph.tenantId}".`)
   return {
-    _id: `intent-graph.${graph.id}`,
+    // Namespaced by tenant so two tenants' graphs can never collide on one id.
+    _id: `intent-graph.${graph.tenantId}.${graph.id}`,
     _type: 'intentGraph',
     graphId: graph.id,
+    tenantId: graph.tenantId,
     objective: graph.objective,
     mode: graph.mode,
     autonomyDepth: graph.autonomyDepth,
@@ -268,6 +272,7 @@ export function toSanityIntentGraph(graph: IntentGraph): SanityIntentGraphDocume
 export function fromSanityIntentGraph(doc: SanityIntentGraphDocument): IntentGraph {
   return {
     id: doc.graphId,
+    tenantId: doc.tenantId,
     objective: doc.objective,
     mode: doc.mode,
     autonomyDepth: doc.autonomyDepth,
@@ -290,18 +295,33 @@ export function fromSanityIntentGraph(doc: SanityIntentGraphDocument): IntentGra
 // Intent graph stores (latest version of each graph; its history travels inside it)
 
 export interface IntentGraphStore {
-  get(id: string): Promise<IntentGraph | undefined>
+  /**
+   * `tenantId`, when given, scopes the read: a graph that belongs to a
+   * different tenant is treated as not found, exactly as tasks.ts scopes
+   * `TaskStore.get`. Omitting it keeps today's single-tenant behavior (every
+   * graph in the store).
+   */
+  get(id: string, tenantId?: string): Promise<IntentGraph | undefined>
+  /** `graph.tenantId` must be a valid tenant id; the store never infers or defaults it. */
   put(graph: IntentGraph): Promise<void>
-  list(): Promise<IntentGraph[]>
+  list(tenantId?: string): Promise<IntentGraph[]>
 }
 
 const GRAPH_ID = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$/
+const GRAPH_TENANT_ID = /^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/
 
 export class MemoryIntentGraphStore implements IntentGraphStore {
   private readonly graphs = new Map<string, IntentGraph>()
-  async get(id: string) { const g = this.graphs.get(id); return g ? structuredClone(g) : undefined }
-  async put(graph: IntentGraph) { if (!GRAPH_ID.test(graph.id)) throw new Error(`Invalid graph id "${graph.id}".`); this.graphs.set(graph.id, structuredClone(graph)) }
-  async list() { return [...this.graphs.values()].map((g) => structuredClone(g)) }
+  async get(id: string, tenantId?: string) {
+    const g = this.graphs.get(id)
+    return g && (tenantId === undefined || g.tenantId === tenantId) ? structuredClone(g) : undefined
+  }
+  async put(graph: IntentGraph) {
+    if (!GRAPH_ID.test(graph.id)) throw new Error(`Invalid graph id "${graph.id}".`)
+    if (!GRAPH_TENANT_ID.test(graph.tenantId)) throw new Error(`Invalid tenantId "${graph.tenantId}" for graph "${graph.id}".`)
+    this.graphs.set(graph.id, structuredClone(graph))
+  }
+  async list(tenantId?: string) { return [...this.graphs.values()].filter((g) => tenantId === undefined || g.tenantId === tenantId).map((g) => structuredClone(g)) }
 }
 
 /** One JSON file per graph, replaced atomically (write then rename). */
@@ -314,22 +334,25 @@ export class FileIntentGraphStore implements IntentGraphStore {
     if (!GRAPH_ID.test(id)) throw new Error(`Invalid graph id "${id}".`)
     return join(this.dir, `${id}.intent-graph.json`)
   }
-  async get(id: string): Promise<IntentGraph | undefined> {
+  async get(id: string, tenantId?: string): Promise<IntentGraph | undefined> {
+    let graph: IntentGraph
     try {
-      return JSON.parse(await readFile(this.path(id), 'utf8')) as IntentGraph
+      graph = JSON.parse(await readFile(this.path(id), 'utf8')) as IntentGraph
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined
       throw error
     }
+    return tenantId === undefined || graph.tenantId === tenantId ? graph : undefined
   }
   async put(graph: IntentGraph): Promise<void> {
+    if (!GRAPH_TENANT_ID.test(graph.tenantId)) throw new Error(`Invalid tenantId "${graph.tenantId}" for graph "${graph.id}".`)
     const path = this.path(graph.id)
     await mkdir(this.dir, { recursive: true })
     const tmp = `${path}.${process.pid}.tmp`
     await writeFile(tmp, JSON.stringify(graph), { encoding: 'utf8', mode: 0o600 })
     await rename(tmp, path)
   }
-  async list(): Promise<IntentGraph[]> {
+  async list(tenantId?: string): Promise<IntentGraph[]> {
     let names: string[]
     try {
       names = await readdir(this.dir)
@@ -338,7 +361,10 @@ export class FileIntentGraphStore implements IntentGraphStore {
       throw error
     }
     const out: IntentGraph[] = []
-    for (const n of names.filter((f) => f.endsWith('.intent-graph.json'))) out.push(JSON.parse(await readFile(join(this.dir, n), 'utf8')) as IntentGraph)
+    for (const n of names.filter((f) => f.endsWith('.intent-graph.json'))) {
+      const graph = JSON.parse(await readFile(join(this.dir, n), 'utf8')) as IntentGraph
+      if (tenantId === undefined || graph.tenantId === tenantId) out.push(graph)
+    }
     return out
   }
 }

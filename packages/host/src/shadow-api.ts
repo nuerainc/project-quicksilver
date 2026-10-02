@@ -217,7 +217,7 @@ async function route(ctx: ShadowApiContext, deps: ShadowApiDeps): Promise<Respon
     return ds.some((d) => d.allowed) ? undefined : { status: 403, body: { error: ds[0]!.reasons.join(' ') } }
   }
   const now = () => new Date(deps.now?.() ?? Date.now())
-  const graph = await deps.graphs.get(intentId).catch(() => undefined)
+  const graph = await deps.graphs.get(intentId, tenantId).catch(() => undefined)
   if (!graph) return { status: 404, body: { error: 'No such intent.' } }
 
   if (parts.length === 3 && method === 'GET') {

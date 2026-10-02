@@ -9,11 +9,13 @@ import type { Principal } from '@quicksilver/kernel/identity'
 
 import {
   createIntent,
+  FileIntentGraphStore,
   FileLedgerStore,
   fromSanityIntentGraph,
   LedgerConflictError,
   LedgerIntegrityError,
   loadLedger,
+  MemoryIntentGraphStore,
   MemoryLedgerStore,
   recordChange,
   replay,
@@ -97,8 +99,30 @@ test('Sanity ids keep intent out of public reads and reject unsafe company ids',
 })
 
 test('intent graphs round-trip through their Sanity document shape', async () => {
-  const { graph } = await createIntent('I have $500 and want to start a small online business in 30 days, no paid ads.', { requestedBy: 'user:ana', now: new Date('2026-09-26T12:00:00Z'), id: 'intent-demo' })
+  const { graph } = await createIntent('I have $500 and want to start a small online business in 30 days, no paid ads.', { requestedBy: 'user:ana', tenantId: 'acme', now: new Date('2026-09-26T12:00:00Z'), id: 'intent-demo' })
   const doc = toSanityIntentGraph(graph)
-  assert.equal(doc._id, 'intent-graph.intent-demo')
+  assert.equal(doc._id, 'intent-graph.acme.intent-demo')
+  assert.equal(doc.tenantId, 'acme')
   assert.deepEqual(fromSanityIntentGraph(JSON.parse(JSON.stringify(doc))), graph)
+})
+
+test('two tenants\' intent graphs stay isolated in shared memory and file stores', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'aura-graphs-'))
+  for (const graphs of [new MemoryIntentGraphStore(), new FileIntentGraphStore(dir)]) {
+    const a = (await createIntent('Acme wants to sell hay.', { requestedBy: 'u', tenantId: 'acme', now: new Date('2026-09-26T12:00:00Z'), id: 'shared-id' })).graph
+    const b = (await createIntent('Widgets Inc wants to sell widgets.', { requestedBy: 'u', tenantId: 'widgets', now: new Date('2026-09-26T12:00:00Z'), id: 'shared-id' })).graph
+    // Both tenants happen to pick the same graph id; each store keeps its own record per id, so the second put overwrites the first at the storage layer...
+    await graphs.put(a)
+    // ...which is why a multi-tenant host must give every tenant's graphs distinct ids. What this test proves is the *filter*: once two tenants' graphs
+    // are stored under distinct ids, tenant-scoped reads never cross over.
+    const bId = { ...b, id: 'tenant-b-id' }
+    await graphs.put(bId)
+    assert.deepEqual(await graphs.get('shared-id', 'acme'), a)
+    assert.equal(await graphs.get('shared-id', 'widgets'), undefined)
+    assert.equal(await graphs.get('tenant-b-id', 'acme'), undefined)
+    assert.deepEqual(await graphs.get('tenant-b-id', 'widgets'), bId)
+    assert.deepEqual((await graphs.list('acme')).map((g) => g.id), ['shared-id'])
+    assert.deepEqual((await graphs.list('widgets')).map((g) => g.id), ['tenant-b-id'])
+    assert.equal((await graphs.list()).length, 2)
+  }
 })

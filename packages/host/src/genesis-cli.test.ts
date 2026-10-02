@@ -54,7 +54,7 @@ test('Genesis CLI records a manual content review against the exact text and rea
     assert.match(listed.stdout, /Reviewed by the founder/)
     const records = await run('check-content', text, '--proposer', 'agent-genesis')
     assert.match(records.stdout, /Latest review of this exact text: pass/)
-    const raw = await readFile(join(dir, 'data', config.runId as string, 'reviews.json'), 'utf8').catch(() => '')
+    const raw = await readFile(join(dir, 'data', 'default', config.runId as string, 'reviews.json'), 'utf8').catch(() => '')
     assert.equal(raw.includes(text), true, 'review record persists the exact reviewed text')
     const readResponse = await fetch(`http://127.0.0.1:${port}/api/genesis`, { headers: { authorization: `Bearer ${credentials.token}` } })
     const readBody = await readResponse.json() as { reviews: Array<{ text: string; reviewer: string; kind: string }> }

@@ -266,7 +266,7 @@ test('input validation', async () => {
   } finally { await host.stop() }
 })
 
-test('the file store uses the CLI layout: <dir>/<runId>/{experiments,ledger,run}.json', async () => {
+test('the file store uses the CLI layout: <dir>/<tenantId>/<runId>/{experiments,ledger,run}.json', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'genesis-api-'))
   try {
     const { host, call, tokens } = await start({ store: new FileGenesisStore(dir) })
@@ -275,7 +275,8 @@ test('the file store uses the CLI layout: <dir>/<runId>/{experiments,ledger,run}
       await call(`${E}/exp-landing/start`, tokens.founder, {})
       await call('/api/genesis/money', tokens.founder, { kind: 'spend', amountUsd: 5, category: 'advertising', description: 'Ad', source: { type: 'receipt', ref: 'r' }, experimentId: 'exp-landing' })
     } finally { await host.stop() }
-    const read = async (f: string) => JSON.parse(await readFile(join(dir, 'genesis-test', f), 'utf8'))
+    // FileGenesisStore(dir) with no explicit tenantId nests under the default tenant partition.
+    const read = async (f: string) => JSON.parse(await readFile(join(dir, 'default', 'genesis-test', f), 'utf8'))
     assert.equal((await read('experiments.json'))[0].status, 'running')
     assert.equal((await read('ledger.json')).entries.length, 1)
     assert.equal((await read('ledger.json')).budgetUsd, 500)
@@ -362,7 +363,7 @@ test('reviews: only a human provider records a manual founder review, with the c
       assert.deepEqual(g.body.reviewSummary.manual, { total: 2, pass: 1, revise: 1, block: 0 })
       assert.deepEqual(g.body.reviewSummary.waes, { total: 0, pass: 0, revise: 0, block: 0 })
     } finally { await host.stop() }
-    const stored = JSON.parse(await readFile(join(dir, 'genesis-test', 'reviews.json'), 'utf8'))
+    const stored = JSON.parse(await readFile(join(dir, 'default', 'genesis-test', 'reviews.json'), 'utf8'))
     assert.equal(stored.length, 2)
     assert.equal(stored[0].contentDigest, (await import('@quicksilver/kernel/waes')).waesContentDigest(offer))
   } finally { await rm(dir, { recursive: true, force: true }) }
