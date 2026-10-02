@@ -19,7 +19,7 @@ import {
   type AuthorizationSigningKey,
   type ExecutionAuthorizationRecord,
 } from '@quicksilver/kernel/runtime'
-import { ToolRegistry, type ToolAccessClass, type ToolManifest } from '@quicksilver/kernel/tools'
+import { ToolRegistry, type ToolAccessClass, type ToolManifest } from '@quicksilver/kernel/tools/registry'
 import type { WorkflowNode } from '@quicksilver/kernel/workflows/graph'
 import type { WorkflowRuntimeContext } from '@quicksilver/kernel/workflows/runtime'
 
