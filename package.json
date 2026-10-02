@@ -16,6 +16,7 @@
     "onboard": "npm run onboard --workspace=@quicksilver/host --",
     "build": "npm run build --workspaces --if-present",
     "verify": "node scripts/verify.mjs",
+    "parity:test": "node --test scripts/parity-matrix.test.mjs",
     "sdk:test": "node --experimental-strip-types --no-warnings --test packages/sdk/src/index.test.ts",
     "schema:deploy": "npm run schema:deploy --workspace=@quicksilver/studio --",
     "smoke": "npm run smoke --workspace=@quicksilver/studio",

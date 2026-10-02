@@ -56,7 +56,7 @@ and zero failures; all eight workspace TypeScript checks passed. Four new
 OIDC identity-mapping tests are included in the web `seed:test` CI suite. They
 verify an explicit issuer/subject allowlist and reject untrusted role/tenant
 claims, unknown identities, and cross-tenant mappings. P-108 remains missing:
-no login protocol or server-side session exists yet.
+no login protocol or server-side session existed at this checkpoint.
 
 Checkpoint verification on 2026-09-30: the seven sequential `verify.mjs`
 regression groups passed with 865 passing tests and one Windows-only sandbox
@@ -65,8 +65,14 @@ test skipped; all eight workspace TypeScript checks passed, and `git diff
 files; the Sanity project-separation suite had been omitted, so it is now part
 of `seed:test` and passes 3/3. OIDC test coverage now verifies token signatures,
 issuer, audience/authorized-party, expiry/age, nonce, explicit user mapping,
-and tenant separation. This remains protocol-helper evidence only; P-108 is
-not closed without the login/session flow and live IdP callback evidence.
+and tenant separation. This was protocol-helper evidence only at that
+checkpoint; see the current P-108 row for subsequent implementation.
+
+Checkpoint verification on 2026-10-01: `npm run verify` passed 873/873 tests
+and all TypeScript checks. The run includes the browser OIDC authorization-code
+and PKCE flow, durable session store, revocation, and route-guard regressions.
+This proves the tested code path, not a live identity-provider deployment or
+task-based usability review.
 
 A requirement is not complete until it meets the roadmap's completion
 standard: connected to its runtime path, auditable, with defined failure
@@ -293,7 +299,7 @@ the security, observability and developer-experience groups below.
 | P-105 | Injected instructions in task text change neither permissions nor status. | automated test | `tasks.test.ts` "injection text in the objective or inputs changes neither permissions nor status" | covered | |
 | P-106 | The host serves exactly one tenant and refuses foreign principals. | automated test | `host.test.ts` "the host serves exactly one tenant" | covered | |
 | P-107 | Multi-tenant hosting keeps tenants isolated. | automated test | Kernel ACL and queue tests (`identity.test.ts`, `runtime.test.ts`, `store-contract.test.ts`); the store contract proves tenant-scoped queues cannot enqueue, claim, read, cancel, complete, or redrive another tenant's runs across memory, file, and Postgres adapters. `host.test.ts` verifies each queue is bound to its configured tenant; `vault.test.ts` binds vault state and encryption to one tenant. `tasks.test.ts` runs two tenant-scoped task services against shared memory and file stores, proving record reads, lists, idempotency, and task MCP client authentication/revocation are isolated. | partial | Shared run storage, task records, and task-client registries now carry tenant boundaries. The hosted service still serves one tenant per host process; workflow publication/configuration, schedules, intent/Genesis/Operate stores, principal provisioning, and operational provisioning have not been integrated and tested as one multi-tenant hosted service. Legacy task/client files without a tenant ID remain inaccessible through tenant-scoped APIs until explicitly migrated. |
-| P-108 | People sign in through SSO/OIDC with sessions. | automated test | `apps/web/lib/oidc-identities.ts` verifies token signatures, claims, and tenant mapping; `apps/web/lib/oidc-browser-auth.test.ts` covers OIDC discovery, PKCE (S256), state/nonce validation, browser cookie binding, revocable server sessions, role allowlist updates, and CSRF protection; `apps/web/lib/oidc-route-guard.test.ts` enforces session authentication across protected routes | partial | End-to-end browser login, PKCE, session store, cookie handling and revocation are covered by automated tests. A live IdP registration and production callback test are required for operational completion. |
+| P-108 | People sign in through SSO/OIDC with sessions. | automated test, live IdP verification | `oidc-browser-auth.test.ts` covers HTTPS discovery, authorization-code exchange, S256 PKCE, state/nonce/browser binding, secure HttpOnly session cookies, server-side token digests, revocation, current role mapping, and refusal of replay/cross-browser attempts; `oidc-route-guard.test.ts` proves browser sessions use the same RBAC and authorization audit as bearer principals. Routes: `/api/auth/oidc/start`, `/api/auth/oidc/callback`, `/api/auth/session`, `/api/auth/logout`; session records use the dedicated Sanity store. | partial | Protocol and session implementation is present and tested. Still needed: a user-facing SSO entry/control integrated with the console, a selected IdP app registration and live callback test, and operational evidence for deployed session persistence. |
 | P-109 | No high-severity advisory is in a runtime dependency path, and every advisory has a recorded decision. | manual check | [Threat model, section 7](threat-model.md#7-dependency-advisories-npm-audit-2026-09-27) | partial | Host runtime: none. Web: `undici` through the unused `ai@5`, `postcss` through `next`. Studio tooling: several |
 | P-110 | The threat model's P0 actions are closed before any hosting or public exposure. | manual check | [Threat model, section 8](threat-model.md#8-prioritized-actions) | needs operational evidence | Code controls A-1–A-5, A-9, and A-10 are implemented and regression-tested. A-6 (hosting secrets and disk encryption), A-7 (separate Sanity tokens, credential cleanup, and Studio access review), and A-8 (AMP isolation/Forkling read-only confirmation) still require founder/operations evidence before hosting or public exposure. |
 
@@ -469,16 +475,16 @@ the provider's own hand-over.
 
 | Status | Count |
 |---|---|
-| covered | 85 |
-| partial | 20 |
-| missing | 9 |
+| covered | 86 |
+| partial | 25 |
+| missing | 3 |
 | needs operational evidence | 9 |
 | **Total** | **123** |
 
-As of 2026-10-01, the matrix has 9 missing, 20 partial, and 9 requirements
-that need operational evidence. P-088 moved to covered with live connector
-(payments, CRM, email) parsing and unified ingest regression coverage.
-P-108 moved to partial with browser PKCE discovery, sessions and route-guard tests.
+As of 2026-10-01, the matrix has 86 covered, 25 partial, 3 missing, and 9
+requirements that need operational evidence. P-108 moved from missing to
+partial after the browser login/session path and route-guard tests were added;
+the SSO entry UI and live IdP evidence are still open.
 P-039 and P-113 moved to covered with execution-binding regression tests and
 durable web/host authorization audit stores. P-115, P-116, and P-120 moved to
 covered with SDK contract suites and workflow layout regression coverage.
@@ -499,7 +505,7 @@ P-025 through P-027 remain missing; these represent media, experiment hosting,
 and commerce. P-031 now has a privacy-reviewed quantitative Genesis experiment
 trajectory export but remains partial pending general batch runs, broader
 observable workflow trajectories, and a reviewed import into Genesis priors.
-Eight rows still require operational evidence; three are Aura-ladder rows that do not gate
+Six Quicksilver rows still require operational evidence; three are Aura-ladder rows that do not gate
 Quicksilver releases. P-122 and P-123 extend V1.0.0 with responsive interface
 and end-to-end usability acceptance criteria.
 
@@ -512,8 +518,9 @@ and end-to-end usability acceptance criteria.
 2. **Turn the remaining mode partials into covered:** store the spend decision
    and confirmation in the ledger (P-079); finish route-level coverage for the
    remaining plan/query contracts (P-042, P-015).
-3. **Build what the roadmap already commits to before 0.9.0:** SSO/OIDC
-   (P-108) and multi-tenant isolation with tests (P-107).
+3. **Finish identity and tenant operation:** expose the implemented SSO/OIDC
+   flow in the console and verify it against a real IdP (P-108); complete
+   integrated multi-tenant isolation across hosted services (P-107).
 4. **Apply the M8–M9 enterprise decision.** The authoritative enterprise
    specification and [M8–M9 enterprise plan](../M8-M9-ENTERPRISE-PLAN.md) now
    commit all new enterprise capabilities to completion by M9. The exact

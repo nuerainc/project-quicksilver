@@ -8,6 +8,7 @@ const commands = [
   ['aura:test', 'Aura regression suite'],
   ['seed:test', 'Seed and web security suite'],
   ['sdk:test', 'TypeScript SDK contract suite'],
+  ['parity:test', 'Release parity matrix integrity suite'],
   ['typecheck', 'TypeScript checks'],
 ]
 
