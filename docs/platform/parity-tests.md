@@ -257,7 +257,7 @@ the security, observability and developer-experience groups below.
 | P-078 | Every ledger entry has a source, compute counts as capital, tampering is detected, and a broken chain stops recording. | automated test | `economics.test.ts` "the money ledger: compute is capital, entries need sources, tampering is detected"; `genesis-api.test.ts` "the ledger is verified on read, and a broken chain stops further recording"; `sanity-stores.test.ts` "money ledger: an entry edited behind the store's back fails verification on load" | covered | |
 | P-079 | Every recorded dollar is traceable to its source **and** to the spend decision and who confirmed it. | automated test | Hash-chained `spendAuthorization` stores decision id, kernel recommendation, risk, reasons, confirmer and confirmation time on spend/compute entries; API and CLI attach it; file and Sanity stores preserve it. `economics.test.ts`, `genesis-api.test.ts`, `sanity-stores.test.ts` | covered | Existing ledger rows created before this field remain verifiable; new spend/compute entries require the authorization record. |
 | P-080 | Manual founder reviews are bound to the exact text, labeled manual, counted apart from WAES, and made only by a human. | automated test | `genesis-reviews.test.ts` "a manual review is bound to the exact text, marked manual, and made only by a human"; `genesis-api.test.ts` "reviews: only a human provider records a manual founder review, with the caller as reviewer; GET lists them apart from WAES" | covered | |
-| P-081 | **Operational:** the $500, 30-day digital-only run completes, and every dollar is traceable. | operational evidence | [Genesis run](genesis-run.md) | needs operational evidence | Criteria in section 5.1. Blocked on the entity path, payment accounts and always-on hosting (P-014) |
+| P-081 | **Operational:** a configured Genesis run completes within that run's own budget, duration and category rules, and every dollar is traceable. | operational evidence | [Genesis run](genesis-run.md) | needs operational evidence | Criteria in section 5.1. `deploy/genesis/genesis-500.json` ($500, 30 days, digital only) is the out-of-the-box default any run may override; no dollar figure or time window is a product-wide hard ceiling. Blocked on the entity path, payment accounts and always-on hosting (P-014) |
 
 ### F. Onboard mode
 
@@ -424,11 +424,19 @@ They are the pass/fail line for the operational rows.
 
 ### 5.1 Genesis (P-081)
 
+Genesis is reused across many ventures with different budgets, durations and
+category scopes, so no single dollar figure or time window below is a
+product-wide hard ceiling. `deploy/genesis/genesis-500.json` ($500, 30 days,
+digital only, $50 daily cap, $10 autonomous-spend ceiling) is the
+out-of-the-box convenience/demo config a run can start from; the criteria
+below are written against that default and apply, scaled to whatever budget,
+duration and spend limits that run's own config sets.
+
 | Criterion | Pass when | Source |
 |---|---|---|
 | The run happens | An approved entity exists, the payment accounts are in the host vault, and the host is always on | [Genesis run](genesis-run.md), `genesisBlockers()` |
-| Budget and duration | Capital used (compute included) stays within $500 over 30 days; digital only | `deploy/genesis/genesis-500.json` |
-| Spend rules held | No recorded spend in a prohibited or unlisted category; none over the $50 daily cap or an experiment's budget; every spend above $10, above risk 2 or outside an experiment carries the founder's confirmation | `decideSpend`; B-4 in the threat model for recording the confirmation |
+| Budget and duration | Capital used (compute included) stays within that run's configured budget and duration (the default config: $500 over 30 days; digital only) | `deploy/genesis/genesis-500.json` |
+| Spend rules held | No recorded spend in a prohibited or unlisted category; none over that run's configured daily cap or an experiment's budget; every spend above that run's autonomous-spend ceiling, above risk 2 or outside an experiment carries the founder's confirmation | `decideSpend`; B-4 in the threat model for recording the confirmation |
 | Every dollar traceable | Every ledger entry has a source; the chain verifies at the end; each entry reconciles to a receipt, provider usage or processor record | `verifyMoneyLedger`; section "What the run reports" |
 | Thresholds fixed in advance | Every experiment's kill, hold and scale values were pinned at its start, and every verdict names who applied it | `startExperiment`, `applyEvaluation` |
 | Customer-facing text reviewed | Every shipped text has a passing review of its exact digest, with manual founder reviews listed apart from WAES reviews | `reviewSummary` |

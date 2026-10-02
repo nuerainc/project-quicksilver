@@ -1,8 +1,14 @@
-# Genesis run (M5): $500, 30 days, digital only
+# Genesis run (M5): a configured budget, duration and category scope
 
 Genesis shows that Quicksilver can start something from nothing under
-governance. It has a small, fixed budget, experiments whose thresholds are
+governance. It is reused across many ventures with different budgets and
+durations, so no single dollar figure or time window is a product-wide hard
+ceiling; each run sets its own budget, duration, and allowed/prohibited
+categories before it starts, enforced by experiments whose thresholds are
 set before they start, and every dollar in a hash-chained ledger.
+`deploy/genesis/genesis-500.json` ($500, 30 days, digital only) is the
+out-of-the-box convenience/demo config a run can start from, overridable via
+`QUICKSILVER_GENESIS_CONFIG`.
 
 **Status:** everything that can be built without the run itself is built.
 The run cannot start until:
@@ -19,7 +25,7 @@ prints it.
 | Piece | Where | What it enforces |
 |---|---|---|
 | Economic playbook | `deploy/playbooks/genesis.json` | observe → hypothesize → experiment → measure → update beliefs → allocate → expand, modify or kill |
-| Run config | `deploy/genesis/genesis-500.json` | $500 budget (compute included), 30 days, digital only, allowed and prohibited categories, spend limits, prerequisites |
+| Run config | `deploy/genesis/genesis-500.json` (the default; overridable per-run) | $500 budget (compute included), 30 days, digital only, allowed and prohibited categories, spend limits, prerequisites |
 | `experiment` | `packages/kernel/src/playbooks/economics.ts` | Hypothesis, metric, kill/hold/scale thresholds, budget and duration fixed when a human starts it (digest pinned); measurements need a source |
 | Money ledger | same file | Spend, compute, revenue and refunds, each with a source, in a hash chain. **Compute is capital.** |
 | Spend risk scale | same file | Risk is based on each spend's share of what is **left**: ≤2% → 1, ≤5% → 2, ≤10% → 3, ≤25% → 4, more → 5 |
