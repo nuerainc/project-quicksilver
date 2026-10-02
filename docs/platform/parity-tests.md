@@ -184,7 +184,7 @@ the security, observability and developer-experience groups below.
 | P-025 | Media: image, video, speech, transcription, diagrams, image understanding. | — | — | missing | |
 | P-026 | Hosting: sites, apps, services, custom domains and version history; experiment pages created and torn down per experiment. | — | — | missing | The host templates host Quicksilver itself, not experiment pages |
 | P-027 | Commerce: payments, products, prices, payment links and orders, feeding the finance layer. | — | The money ledger records money that already moved (P-078) | missing | Nothing takes or makes payments |
-| P-028 | Integrations: MCP client and server, an app catalog, office and productivity tools; Onboard connectors write `OBSERVED` values. | automated test | MCP server: `packages/host/src/mcp-tasks.test.ts` "MCP tool calls return the same results as the HTTP API"; MCP client: the Sanity Context MCP path (`contracts.test.ts`); CSV connector: P-083 | partial | App catalog and office tools: missing. Live connectors: P-088 |
+| P-028 | Integrations: MCP client and server, an app catalog, office and productivity tools; Onboard connectors write `OBSERVED` values. | automated test | MCP server: `packages/host/src/mcp-tasks.test.ts` "MCP tool calls return the same results as the HTTP API"; MCP client: the Sanity Context MCP path (`contracts.test.ts`); CSV connector: P-083 | partial | App catalog and office tools: missing. Live connectors: deferred until P-088 closes (sequenced last by product-owner decision) |
 | P-029 | Governance and security: command approval, sandboxing, behavior rules, per-agent permissions, no training on user data. | automated test, manual check | Approval and per-agent permissions: P-030 to P-037; behavior rules: policies (P-034) | partial | Command approval and sandboxing now in `packages/operator` (`operator.test.ts` "policy: …", "gate: …", "loop: approvals …"). "No training on user data" is a model-provider term to confirm (manual check, founder decision) |
 | P-030 | Interfaces: desktop, CLI, cloud, API with streaming, open-source option; one intent entry point that selects mode and autonomy depth. | automated test | CLI (P-117), HTTP API (host tests), the console and P-053 intent entry point; global chat offers Ask (read-only `/api/query`), Plan (NQC-governed `/api/plan`), and Work (keyword-auto-routed or explicitly selected business specialist via authenticated, rate-limited `/api/agents/run`); Work carries at most six prior turns (8 KB total) as explicitly labeled context, omits BLOCKed outputs, and specialists return evaluated recommendations without effects; `chat-request.test.ts`, `business-agent-context.test.ts`, `agent-chat-widget.test.ts`, `business-agent-request.test.ts`, `app-routes.test.ts` | partial | No desktop app or streaming API. Chat context applies to Work only; chat does not itself approve or execute actions. Proposals are reviewable in existing workspaces |
 | P-031 | Research tooling: batch runs and trajectory export for training; experiment logs used as priors for Genesis. | `node --experimental-strip-types --no-warnings --test packages/host/src/genesis-research.test.ts` | `genesis research export` projects decided Genesis experiments into a digest-bound structured trajectory dataset; export is owner-only, requires explicit privacy confirmation, verifies the ledger, omits free text/raw measurements/source refs/transaction details/private reasoning, and excludes undecided experiments | partial | No general batch-run service, tool/output trajectory export, or reviewed import of trajectory priors back into Genesis; the bounded quantitative export is a foundation only |
@@ -269,7 +269,7 @@ the security, observability and developer-experience groups below.
 | P-085 | The back-test passes a stable business and fails erratic revenue or too little history. | automated test | `onboard.test.ts` "back-test: a stable seasonal business passes; forecasts only use earlier months", "back-test: erratic revenue fails with reasons; too little history is not a pass" | covered | |
 | P-086 | The shadow-stage agent's proposals keep only citations from the graph. | automated test | `packages/agent/src/shadow-agent.test.ts` "proposals keep only citations that exist in the graph; uncited proposals are dropped"; `shadow-api.test.ts` "the shadow-stage agent proposes; departments it was not asked about are refused" | covered | |
 | P-087 | A department is ready for hand-over only with enough judged recommendations, enough agreement and no bad outcomes. | automated test | `shadow.test.ts` "a department with enough agreement and no bad outcomes is ready for hand-over; others say why not"; `simulation.test.ts` "a bad outcome recorded before the rules are met delays hand-over" | covered | Thresholds: 20 judged, 80% agreement |
-| P-088 | Live connectors (bookkeeping, payments, CRM, email) fill the graph with `OBSERVED` values. | automated test | `packages/aura/src/onboard.test.ts` "payments connector: reads charges, refunds, subscriptions and disputes into observations", "CRM connector: parses pipeline, win rate, deal size and sales cycle", "email connector: parses support volume, resolution time, sentiment and categories", "unified live connector pipeline: ingests multiple connector sources into intent graph" | covered | Reads CSV/JSON exports into OBSERVED graph variables |
+| P-088 | Live connectors (bookkeeping, payments, CRM, email) fill the graph with `OBSERVED` values. | automated test | `packages/aura/src/onboard.test.ts` "payments connector: reads charges, refunds, subscriptions and disputes into observations", "CRM connector: parses pipeline, win rate, deal size and sales cycle", "email connector: parses support volume, resolution time, sentiment and categories", "unified live connector pipeline: ingests multiple connector sources into intent graph" | missing | Tests cover CSV/JSON file parsing into OBSERVED graph variables, not live API sync. No provider OAuth/API-key credentials or vault wiring exist yet; file parsing does not satisfy the requirement's "live connectors" language. Sequenced last among remaining 0.9.0 work (see Shortest path, below); P-028 stays partial until this closes. |
 | P-089 | **Operational:** the Onboard pilot on Nuera meets the hand-over criteria for at least one department. | operational evidence | [Onboard pilot](onboard-pilot.md) | needs operational evidence | Criteria in section 5.2. Planned Jan–Feb 2027 |
 
 ### G. Operate mode
@@ -356,7 +356,7 @@ Each test file maps to at least one requirement.
 | `packages/aura/src/impact-v3.test.ts` | 2 | P-059 |
 | `packages/aura/src/learn.test.ts` | 8 | P-058 |
 | `packages/aura/src/ledger.test.ts` | 13 | P-055, P-056 |
-| `packages/aura/src/onboard.test.ts` | 11 | P-083, P-084, P-085, P-088, P-104 |
+| `packages/aura/src/onboard.test.ts` | 11 | P-083, P-084, P-085, P-104 |
 | `packages/aura/src/predict-v2.test.ts` | 9 | P-059 |
 | `packages/aura/src/predict.test.ts` | 4 | P-059 |
 | `packages/aura/src/principles.test.ts` | 4 | P-056 |
@@ -475,16 +475,20 @@ the provider's own hand-over.
 
 | Status | Count |
 |---|---|
-| covered | 86 |
+| covered | 85 |
 | partial | 25 |
-| missing | 3 |
+| missing | 4 |
 | needs operational evidence | 9 |
 | **Total** | **123** |
 
-As of 2026-10-01, the matrix has 86 covered, 25 partial, 3 missing, and 9
-requirements that need operational evidence. P-108 moved from missing to
-partial after the browser login/session path and route-guard tests were added;
-the SSO entry UI and live IdP evidence are still open.
+As of 2026-10-01, the matrix has 85 covered, 25 partial, 4 missing, and 9
+requirements that need operational evidence. P-088 moved from covered to
+missing: the existing tests cover CSV/JSON file parsing, not live API sync,
+and the product owner has decided it stays missing until real provider
+credentials and vault wiring land -- deliberately sequenced as the last
+requirement closed before 0.9.0. P-108 moved from missing to partial after
+the browser login/session path and route-guard tests were added; the SSO
+entry UI and live IdP evidence are still open.
 P-039 and P-113 moved to covered with execution-binding regression tests and
 durable web/host authorization audit stores. P-115, P-116, and P-120 moved to
 covered with SDK contract suites and workflow layout regression coverage.
@@ -501,8 +505,8 @@ pre-1.0 OpenAPI contract and route/method drift test, but stable 1.0.0
 semantics remain unfinished. P-119's agent draft/review/publish API is present;
 its former “API absent” gap is corrected, while the local Go toolchain and CI
 evidence for the current working tree remain outstanding.
-P-025 through P-027 remain missing; these represent media, experiment hosting,
-and commerce. P-031 now has a privacy-reviewed quantitative Genesis experiment
+P-025 through P-027 and P-088 remain missing: media, experiment hosting,
+commerce, and live business connectors. P-031 now has a privacy-reviewed quantitative Genesis experiment
 trajectory export but remains partial pending general batch runs, broader
 observable workflow trajectories, and a reviewed import into Genesis priors.
 Six Quicksilver rows still require operational evidence; three are Aura-ladder rows that do not gate
@@ -529,8 +533,12 @@ and end-to-end usability acceptance criteria.
    the rationale, owner, replacement behavior, and explicit product-owner
    exception before the 0.9.0 candidate.
 5. **Build the mode-critical missing pieces** that remain in scope after step
-   4: live connectors (P-088), effectful executors behind approval (P-095),
-   and complete WAES live-provider calibration and evidence-quality evaluation (P-045).
+   4: effectful executors behind approval (P-095) and complete WAES
+   live-provider calibration and evidence-quality evaluation (P-045).
+6. **Live connectors (P-088), deliberately last.** The product owner has
+   decided this closes after every other P-item above. P-028 (Integrations)
+   depends on it and stays partial until P-088 closes -- do not pull P-028
+   or P-088 forward ahead of this ordering.
 
 ### Shortest path to 1.0.0 (with operational evidence)
 
