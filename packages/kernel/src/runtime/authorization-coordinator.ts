@@ -122,6 +122,6 @@ export function createSignedAuthorizationCoordinator(
   }
 }
 
-function actionFingerprint(node: WorkflowNode, capability: string): string {
+export function actionFingerprint(node: WorkflowNode, capability: string): string {
   return `action:${node.id}:${capability}`
 }
