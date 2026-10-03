@@ -516,3 +516,11 @@ body:has(.app-topbar) > #main-content { min-height: 100dvh; margin-inline-start:
   .app-command-backdrop { padding-top: 0.6rem; }
   .app-command-dialog { max-height: calc(100dvh - 1.2rem); }
 }
+
+.app-session { display: flex; align-items: center; gap: 0.5rem; margin: 0; font-size: 0.85rem; color: inherit; }
+.app-session__name { max-width: 10rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.app-session__button { font: inherit; color: inherit; text-decoration: none; cursor: pointer; padding: 0.4rem 0.75rem; border: 1px solid currentColor; border-radius: 0.5rem; background: transparent; opacity: 0.9; }
+.app-session__button:hover, .app-session__button:focus-visible { opacity: 1; }
+.app-session--mobile { margin-top: 0.75rem; }
+.app-session--mobile:not(.app-session__button) { justify-content: space-between; }
+.app-topbar[data-collapsed='true'] .app-session__name { display: none; }
