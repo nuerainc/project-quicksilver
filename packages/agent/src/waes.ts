@@ -179,11 +179,15 @@ export function aggregateWaesComponents(results: WaesComponentResult[]): WaesVer
 }
 
 /** All components must return a valid result; provider or schema failures throw and produce no review record. */
-export async function reviewCustomerFacingContent(input: WaesReviewRequest): Promise<WaesAssessment> {
+/**
+ * `options.now` fixes the clock used to judge how old the evidence is. Production leaves it unset (the real time);
+ * the calibration benchmark sets it, because its dataset's evidence dates are fixed.
+ */
+export async function reviewCustomerFacingContent(input: WaesReviewRequest, options: { now?: number } = {}): Promise<WaesAssessment> {
   if (!input.text.trim() || input.text.length > 20_000 || input.evidence.length > 50) throw new Error('WAES input is outside the supported bounds.')
   assertAgentDispatch('nuera-quicksilver:reviewer', 'evaluation')
 
-  const evidenceQuality = evaluateWaesEvidenceQuality(input.text, input.evidence)
+  const evidenceQuality = evaluateWaesEvidenceQuality(input.text, input.evidence, options.now !== undefined ? { now: options.now } : {})
 
   const evidence = input.evidence.length
     ? input.evidence.map((item) => {

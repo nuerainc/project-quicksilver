@@ -12,6 +12,7 @@ import {
   createDeterministicWaesEvaluator,
   runWaesCalibrationSuite,
   WAES_CALIBRATION_DATASET_V1,
+  WAES_CALIBRATION_NOW,
 } from './waes-calibration.ts'
 
 const result = (component: typeof WAES_COMPONENTS[number], verdict: 'pass' | 'revise' | 'block' = 'pass'): WaesComponentResult => ({ component, verdict, findings: [] })
@@ -112,4 +113,24 @@ test('WAES calibration benchmark: fails closed if a critical block case erroneou
   assert.equal(report.calibrated, false, 'unconditional pass evaluator must fail calibration')
   assert.ok(report.criticalFalsePassCount > 0, 'must detect critical false passes')
   assert.ok(report.agreementRate < 0.5, 'agreement rate must be low for naive evaluator')
+})
+
+test('WAES calibration: a report says what produced the verdicts, and the reference evaluator is never mistaken for a live one', async () => {
+  const evaluator = createDeterministicWaesEvaluator()
+  assert.equal((await runWaesCalibrationSuite(evaluator)).evaluatorKind, 'deterministic-reference', 'the default label is the cautious one')
+  assert.equal((await runWaesCalibrationSuite(evaluator, WAES_CALIBRATION_DATASET_V1, 'live-provider')).evaluatorKind, 'live-provider')
+})
+
+test('WAES calibration: the dataset has fixed evidence dates, so a live reviewer must be given the dataset clock', () => {
+  // Without it, "fresh" evidence from the dataset is judged against today's date and reads as stale,
+  // so a live run would mark good content "revise" for a reason that has nothing to do with the model.
+  const passCases = WAES_CALIBRATION_DATASET_V1.filter((c) => c.expectedVerdict === 'pass' && c.request.evidence.length > 0)
+  assert.ok(passCases.length >= 2)
+  for (const c of passCases) {
+    const atDatasetClock = evaluateWaesEvidenceQuality(c.request.text, c.request.evidence, { now: WAES_CALIBRATION_NOW })
+    assert.equal(atDatasetClock.hasStaleEvidence, false, `${c.id} is fresh at the dataset's own moment`)
+  }
+  // Observed evidence ages out; fixed system constraints (a price catalog) do not, so one case is enough to show the effect.
+  const farLater = passCases.map((c) => evaluateWaesEvidenceQuality(c.request.text, c.request.evidence, { now: WAES_CALIBRATION_NOW + 400 * 86_400_000 }).hasStaleEvidence)
+  assert.ok(farLater.some(Boolean), 'at least one pass case reads as stale a year later, which is why the clock has to be passed')
 })
