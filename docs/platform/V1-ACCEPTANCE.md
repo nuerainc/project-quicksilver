@@ -11,7 +11,7 @@ exists so the acceptance question ("is every in-scope item mapped to
 evidence?") has one direct answer instead of requiring a full read of the
 register.
 
-**As of 2026-10-02:** 85 covered, 9 needing operational evidence, 28 partial, 1 missing (123 total).
+**As of 2026-10-02:** 85 covered, 9 needing operational evidence, 29 partial, 0 missing (123 total).
 
 ## Automated evidence (every P-001–P-123 row)
 
@@ -108,7 +108,7 @@ claimed for that row at this status.
 | P-085 | covered | `onboard.test.ts` "back-test: a stable seasonal business passes; forecasts only use earlier months", "back-test: erratic revenue fails with reasons; too little history is not a pass" |
 | P-086 | covered | `packages/agent/src/shadow-agent.test.ts` "proposals keep only citations that exist in the graph; uncited proposals are dropped"; `shadow-api.test.ts` "the shadow-stage agent proposes; departments it was not asked about are refused" |
 | P-087 | covered | `shadow.test.ts` "a department with enough agreement and no bad outcomes is ready for hand-over; others say why not"; `simulation.test.ts` "a bad outcome recorded before the rules are met delays hand-over" |
-| P-088 | missing | `packages/aura/src/onboard.test.ts` "payments connector: reads charges, refunds, subscriptions and disputes into observations", "CRM connector: parses pipeline, win rate, deal size and sales cycle", "email connector: parses support volume, resolution time, sentiment and categories", "unified live connector pipeline: ingests multiple connector sources into intent graph" |
+| P-088 | partial | `packages/aura/src/onboard.test.ts` "payments connector: reads charges, refunds, subscriptions and disputes into observations", "CRM connector: parses pipeline, win rate, deal size and sales cycle", "email connector: parses support volume, resolution time, sentiment and categories", "unified live connector pipeline: ingests multiple connector sources into intent graph" |
 | P-089 | needs operational evidence | [Onboard pilot](onboard-pilot.md) |
 | P-090 | covered | `packages/kernel/src/playbooks/operate.test.ts` "autonomy: shadow evidence caps act-within-limits at act-with-approval", "autonomy: the grant is the ceiling; evidence never raises it"; `packages/host/src/operate.test.ts` "status: effective autonomy is min(grant, shadow evidence)" |
 | P-091 | covered | `operate.test.ts` (kernel) "approving a plan is the founder's, and periods never overlap"; `operate.test.ts` (host) "plan and approve-plan: a proposal, then the founder's append-only approval", "store: plans are append-only and written atomically with mode 0600" |
@@ -183,7 +183,7 @@ release gate, per [V1-SCOPE.md](../V1-SCOPE.md#release-evidence-categories):
 
 | ID | Requirement | Note |
 |---|---|---|
-| P-088 | Live connectors (bookkeeping, payments, CRM, email) fill the graph with `OBSERVED` values. | Tests cover CSV/JSON file parsing into OBSERVED graph variables, not live API sync. No provider OAuth/API-key credentials or vault wiring exist yet; file parsing does not satisfy the requirement's "live connectors" language. Sequenced last among remaining 0.9.0 work (see Shortest path, below); P-028 stays partial until this closes. |
+| P-088 | Live connectors (bookkeeping, payments, CRM, email) fill the graph with `OBSERVED` values. | Read-only Stripe, HubSpot and QuickBooks Online connectors are built (`connect-live`) and tested against a fake API only; no run against real accounts is recorded, credentials are environment variables rather than vault entries, and there is no live support-inbox source (Resend is a mail channel). P-028 stays partial until a real-account run is recorded. |
 
 ## Keeping this map honest
 

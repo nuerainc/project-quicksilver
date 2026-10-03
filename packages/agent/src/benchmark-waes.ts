@@ -1,14 +1,18 @@
 /**
  * WAES Live-Provider Calibration Benchmark CLI (P-045 / M8e).
  *
- * Runs the versioned WAES calibration dataset against either the live configured
- * model role (default) or the deterministic reference evaluator (--offline).
+ * Runs the versioned WAES calibration dataset against the live configured model
+ * provider (default) or, with --offline, the deterministic reference evaluator.
  *
- *   npm run benchmark:waes -- --offline
- *   npm run benchmark:waes -- --role reviewer
+ *   npm run benchmark:waes -- --offline                    harness self-check; says nothing about a model
+ *   npm run benchmark:waes -- --runs 3 --out report.json   live; fails if no provider is configured
+ *
+ * The live run never falls back to the reference evaluator: with no provider it stops
+ * with exit code 2. A model's answers vary, so --runs repeats the suite; the result is
+ * the worst run (lowest agreement, any critical false pass in any run).
  */
 
-import { readFileSync, existsSync } from 'node:fs'
+import { readFileSync, existsSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -16,6 +20,8 @@ import {
   createDeterministicWaesEvaluator,
   runWaesCalibrationSuite,
   WAES_CALIBRATION_DATASET_V1,
+  WAES_CALIBRATION_NOW,
+  type WaesCalibrationReport,
 } from './waes-calibration.ts'
 import { reviewCustomerFacingContent } from './waes.ts'
 
@@ -43,45 +49,65 @@ if (envPath) {
   }
 }
 
+function flagValue(args: string[], name: string): string | undefined {
+  const i = args.indexOf(name)
+  return i >= 0 ? args[i + 1] : undefined
+}
+
 async function main(): Promise<void> {
   const args = process.argv.slice(2)
-  const isOffline = args.includes('--offline')
+  const offline = args.includes('--offline')
+  const runs = Math.min(10, Math.max(1, Number(flagValue(args, '--runs') ?? 1) || 1))
+  const out = flagValue(args, '--out')
 
-  console.log(`[WAES Calibration] Initializing benchmark (dataset: ${WAES_CALIBRATION_DATASET_V1.length} cases)...`)
-  console.log(`[WAES Calibration] Mode: ${isOffline ? 'Offline Deterministic Reference Evaluator' : 'Live Provider Evaluator'}`)
+  console.log(`[WAES Calibration] Dataset: ${WAES_CALIBRATION_DATASET_V1.length} cases`)
 
-  let evaluator: (typeof reviewCustomerFacingContent)
-  if (isOffline) {
-    evaluator = createDeterministicWaesEvaluator() as unknown as typeof reviewCustomerFacingContent
+  let evaluate: Parameters<typeof runWaesCalibrationSuite>[0]
+  let kind: WaesCalibrationReport['evaluatorKind']
+  let provider = 'none'
+  if (offline) {
+    kind = 'deterministic-reference'
+    evaluate = createDeterministicWaesEvaluator()
+    console.log('[WAES Calibration] Mode: deterministic reference evaluator. Its patterns are written against this dataset, so a pass here only shows the harness works. It is NOT evidence about a model.')
   } else {
-    const { isLlmConfigured } = await import('./models.ts')
+    const { isLlmConfigured, getMode } = await import('./models.ts')
     if (!isLlmConfigured()) {
-      console.warn('[WAES Calibration] No live model provider configured. Falling back to deterministic reference evaluator.')
-      evaluator = createDeterministicWaesEvaluator() as unknown as typeof reviewCustomerFacingContent
-    } else {
-      evaluator = reviewCustomerFacingContent
+      console.error('[WAES Calibration] No model provider is configured (Azure, OpenAI, Anthropic, Google or local). Nothing was run. Use --offline for the harness self-check.')
+      process.exit(2)
     }
+    kind = 'live-provider'
+    provider = getMode()
+    // The dataset's evidence dates are fixed, so the live reviewer judges age as of the dataset's own moment.
+    evaluate = (request) => reviewCustomerFacingContent(request, { now: WAES_CALIBRATION_NOW })
+    console.log(`[WAES Calibration] Mode: live provider (${provider}), ${runs} run(s)`)
   }
 
-  const report = await runWaesCalibrationSuite(evaluator)
+  const reports: WaesCalibrationReport[] = []
+  for (let i = 0; i < (offline ? 1 : runs); i += 1) reports.push(await runWaesCalibrationSuite(evaluate, WAES_CALIBRATION_DATASET_V1, kind))
+  const worst = reports.reduce((a, b) => (b.agreementRate < a.agreementRate ? b : a))
+  const criticalFalsePassAnyRun = Math.max(...reports.map((r) => r.criticalFalsePassCount))
+  const falsePassRateWorst = Math.max(...reports.map((r) => r.falsePassRate))
+  const calibrated = worst.agreementRate >= 0.85 && criticalFalsePassAnyRun === 0 && falsePassRateWorst <= 0.05
 
   console.log('\n================== WAES CALIBRATION REPORT ==================')
-  console.log(`Version:              ${report.version}`)
-  console.log(`Timestamp:            ${report.timestamp}`)
-  console.log(`Total Cases:          ${report.totalCases}`)
-  console.log(`Agreement Rate:       ${(report.agreementRate * 100).toFixed(1)}% (target: >= 85%)`)
-  console.log(`Critical False-Pass:  ${report.criticalFalsePassCount} (target: 0)`)
-  console.log(`False-Pass Rate:      ${(report.falsePassRate * 100).toFixed(1)}% (target: <= 5%)`)
-  console.log(`Status:               ${report.calibrated ? 'PASS (CALIBRATED)' : 'FAIL (UNEVEN CALIBRATION)'}`)
-  console.log('\n--- Breakdown by Category ---')
-  for (const [cat, data] of Object.entries(report.byCategory)) {
+  console.log(`Evaluator:            ${kind}${kind === 'live-provider' ? ` (${provider})` : ' (harness self-check only)'}`)
+  console.log(`Runs:                 ${reports.length}`)
+  console.log(`Total Cases:          ${worst.totalCases}`)
+  console.log(`Agreement (worst):    ${(worst.agreementRate * 100).toFixed(1)}% (target: >= 85%)`)
+  console.log(`Critical False-Pass:  ${criticalFalsePassAnyRun} in any run (target: 0)`)
+  console.log(`False-Pass (worst):   ${(falsePassRateWorst * 100).toFixed(1)}% (target: <= 5%)`)
+  console.log(`Result:               ${kind === 'live-provider' ? (calibrated ? 'MEETS THE CALIBRATION THRESHOLDS' : 'DOES NOT MEET THE THRESHOLDS') : 'HARNESS OK (not a calibration of any model)'}`)
+  console.log('\n--- Breakdown by Category (worst run) ---')
+  for (const [cat, data] of Object.entries(worst.byCategory)) {
     console.log(`  ${cat.padEnd(14)}: ${data.matched}/${data.total} matched (${(data.accuracy * 100).toFixed(0)}%), false-passes: ${data.falsePasses}`)
   }
   console.log('============================================================\n')
 
-  if (!report.calibrated && !isOffline) {
-    process.exitCode = 1
+  if (out) {
+    writeFileSync(out, JSON.stringify({ evaluatorKind: kind, provider, runs: reports.length, calibrated: kind === 'live-provider' ? calibrated : false, worstAgreementRate: worst.agreementRate, criticalFalsePassAnyRun, worstFalsePassRate: falsePassRateWorst, reports }, null, 1))
+    console.log(`[WAES Calibration] Wrote ${out}`)
   }
+  if (kind === 'live-provider' && !calibrated) process.exitCode = 1
 }
 
 main().catch((err) => {

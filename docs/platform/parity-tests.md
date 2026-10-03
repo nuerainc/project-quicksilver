@@ -224,7 +224,7 @@ the security, observability and developer-experience groups below.
 | P-042 | Every agent step's evaluation is stored as an `evaluationRecord`, and the response reports whether the write succeeded. | automated test | Kernel and host persistence tests plus `apps/web/lib/evaluation-store.test.ts` prove empty, successful, failed, and privacy-safe writes; query and workflow APIs return `audit.persisted` and record IDs | covered | |
 | P-043 | Spend risk is measured against the budget that is left. | automated test | `packages/kernel/src/playbooks/economics.test.ts` "spend risk is measured against what is left" | covered | |
 | P-044 | A customer-facing action is hard-blocked without a passing review of its exact content by someone other than the proposer. | automated test | `economics.test.ts` "WAES gate: customer-facing actions are hard-blocked without a passing review of the exact content"; `packages/host/src/genesis-reviews.test.ts` "the gate: a manual pass unlocks the exact text only when the run allows it, and never for the reviewer as proposer" | covered | The gate is covered; the WAES evaluator is P-045 |
-| P-045 | WAES runs as a service and produces the reviews the gate requires. | `packages/agent/src/waes.test.ts`; `packages/host/src/genesis-api.test.ts` WAES service review cases | Three NQC-governed model evaluations produce one exact-content, append-only, service-attributed WAES review; incomplete results, unavailable providers and malformed requests fail closed without a record | partial | Automated contract and failure-path coverage exists. Live-provider calibration, evidence-quality evaluation and operational evidence remain required before claiming production-grade evaluation. |
+| P-045 | WAES runs as a service and produces the reviews the gate requires. | `packages/agent/src/waes.test.ts`; `packages/host/src/genesis-api.test.ts` WAES service review cases | Three NQC-governed model evaluations produce one exact-content, append-only, service-attributed WAES review; incomplete results, unavailable providers and malformed requests fail closed without a record | partial | Automated contract and failure-path coverage exists, and a calibration harness (`npm run benchmark:waes`, 14 labeled cases across truthfulness, wellbeing and safety). The harness's built-in "deterministic reference evaluator" uses patterns written against that same dataset, so its 100% shows the harness works and is not evidence about a model; reports are labeled `deterministic-reference` or `live-provider`. The live run refuses to start without a configured provider (exit 2) instead of falling back, passes the dataset's own clock to the reviewer (its evidence dates are fixed, and against today's date good content would read as stale), and with `--runs N --out file` records the worst of N runs. No live run is recorded, 14 cases is a small sample, and live-provider calibration, evidence-quality evaluation on real content and operational evidence remain required before claiming production-grade evaluation. |
 | P-046 | Every task, from every channel, goes through one intake: RBAC, rate limit, validation, boundaries, then `authorize()`. | automated test | `tasks.test.ts` "the three kernel outcomes through the real authorize(): refused, awaiting-approval, queued", "webhooks: a signed delivery becomes a task through the same intake; the payload cannot pick the capability", "the CLI uses the same intake: a founder submits, lists and denies" | covered | |
 | P-047 | The MCP task server gives the same results as the HTTP API and has no approving tool. | automated test | `mcp-tasks.test.ts` "the tools: five, none approves, and each says the kernel decides and a human approves in the console", "MCP tool calls return the same results as the HTTP API" | covered | |
 | P-048 | The seed policies carry structured effects and fail closed on unknown exposure. | automated test | `apps/studio/seed/policies.test.ts` "Budget 3 requires approval above $50,000 and fails closed when exposure is unknown", "every live seed policy has a structured effect, so live decisions use the resolver" | covered | Threat model T-40: the planner can report an exposure of 0 |
@@ -287,7 +287,7 @@ the security, observability and developer-experience groups below.
 | P-085 | The back-test passes a stable business and fails erratic revenue or too little history. | automated test | `onboard.test.ts` "back-test: a stable seasonal business passes; forecasts only use earlier months", "back-test: erratic revenue fails with reasons; too little history is not a pass" | covered | |
 | P-086 | The shadow-stage agent's proposals keep only citations from the graph. | automated test | `packages/agent/src/shadow-agent.test.ts` "proposals keep only citations that exist in the graph; uncited proposals are dropped"; `shadow-api.test.ts` "the shadow-stage agent proposes; departments it was not asked about are refused" | covered | |
 | P-087 | A department is ready for hand-over only with enough judged recommendations, enough agreement and no bad outcomes. | automated test | `shadow.test.ts` "a department with enough agreement and no bad outcomes is ready for hand-over; others say why not"; `simulation.test.ts` "a bad outcome recorded before the rules are met delays hand-over" | covered | Thresholds: 20 judged, 80% agreement |
-| P-088 | Live connectors (bookkeeping, payments, CRM, email) fill the graph with `OBSERVED` values. | automated test | `packages/aura/src/onboard.test.ts` "payments connector: reads charges, refunds, subscriptions and disputes into observations", "CRM connector: parses pipeline, win rate, deal size and sales cycle", "email connector: parses support volume, resolution time, sentiment and categories", "unified live connector pipeline: ingests multiple connector sources into intent graph" | missing | Tests cover CSV/JSON file parsing into OBSERVED graph variables, not live API sync. No provider OAuth/API-key credentials or vault wiring exist yet; file parsing does not satisfy the requirement's "live connectors" language. Sequenced last among remaining 0.9.0 work (see Shortest path, below); P-028 stays partial until this closes. |
+| P-088 | Live connectors (bookkeeping, payments, CRM, email) fill the graph with `OBSERVED` values. | automated test | `packages/aura/src/onboard.test.ts` "payments connector: reads charges, refunds, subscriptions and disputes into observations", "CRM connector: parses pipeline, win rate, deal size and sales cycle", "email connector: parses support volume, resolution time, sentiment and categories", "unified live connector pipeline: ingests multiple connector sources into intent graph"; `packages/aura/src/live-connectors.test.ts` (Stripe, HubSpot and QuickBooks Online readers against a scripted fake API: GET only, provider-host allow-list, paging and size limits, restricted-key rule, QuickBooks refresh-token rotation); `packages/host/src/live-connect.test.ts` (credential handling and token persistence) | partial | Read-only live connectors exist for payments (Stripe), CRM (HubSpot) and bookkeeping (QuickBooks Online, cash basis), run with `npm run onboard -- connect-live`. They have only been exercised against a fake API: no run against a real Stripe, HubSpot or QuickBooks account is recorded yet, and the provider credentials are supplied through environment variables on the founder's computer, not the vault. The support-inbox connector has no live source: Resend is an outbound/inbound mail channel (P-022), not a ticket system. Closes when a dated run against real accounts is recorded. |
 | P-089 | **Operational:** the Onboard pilot on Nuera meets the hand-over criteria for at least one department. | operational evidence | [Onboard pilot](onboard-pilot.md) | needs operational evidence | Criteria in section 5.2. Planned Jan–Feb 2027 |
 
 ### G. Operate mode
@@ -502,12 +502,12 @@ the provider's own hand-over.
 | Status | Count |
 |---|---|
 | covered | 85 |
-| partial | 28 |
-| missing | 1 |
+| partial | 29 |
+| missing | 0 |
 | needs operational evidence | 9 |
 | **Total** | **123** |
 
-As of 2026-10-01, the matrix has 85 covered, 28 partial, 1 missing, and 9
+As of 2026-10-01, the matrix has 85 covered, 29 partial, 0 missing, and 9
 requirements that need operational evidence. P-026 moved from missing to
 partial (2026-10-03): static experiment pages can be staged as immutable
 releases, published by a human behind the review gate, and torn down with their
@@ -540,7 +540,7 @@ pre-1.0 OpenAPI contract and route/method drift test, but stable 1.0.0
 semantics remain unfinished. P-119's agent draft/review/publish API is present;
 its former “API absent” gap is corrected, while the local Go toolchain and CI
 evidence for the current working tree remain outstanding.
-P-088 remains missing: live business connectors. P-025 (media) is partial:
+P-088 moved from missing to partial (2026-10-03): read-only live Stripe, HubSpot and QuickBooks connectors exist and are tested against a fake API; no real-account run is recorded. P-025 (media) is partial:
 the contract and controls exist, with no real provider.
 P-026 (experiment hosting) is partial: the contract, stores and a file adapter
 exist, with no real deploy target. P-027 (commerce) is partial: incoming Stripe payments are
@@ -574,10 +574,13 @@ and end-to-end usability acceptance criteria.
 5. **Build the mode-critical missing pieces** that remain in scope after step
    4: effectful executors behind approval (P-095) and complete WAES
    live-provider calibration and evidence-quality evaluation (P-045).
-6. **Live connectors (P-088), deliberately last.** The product owner has
-   decided this closes after every other P-item above. P-028 (Integrations)
-   depends on it and stays partial until P-088 closes -- do not pull P-028
-   or P-088 forward ahead of this ordering.
+6. **Live connectors (P-088).** Originally sequenced last. On 2026-10-03 the
+   product owner chose Stripe, HubSpot, QuickBooks Online and Resend and
+   directed that live connectors proceed in parallel with the other items, so
+   this ordering no longer holds. Read-only Stripe, HubSpot and QuickBooks
+   connectors are built and tested against a fake API; P-088 closes when a
+   run against real accounts is recorded. P-028 (Integrations) stays partial
+   until then.
 
 ### Shortest path to 1.0.0 (with operational evidence)
 
