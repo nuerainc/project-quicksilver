@@ -193,6 +193,15 @@ const memoryWriteQueues = new Map<string, Promise<void>>()
 const MEMORY_LOCK_STALE_MS = 10 * 60_000
 const MEMORY_LOCK_WAIT_MS = 30_000
 
+/**
+ * Whether a failed lock-directory mkdir means another process holds (or is
+ * releasing) the lock. Windows reports EPERM, not EEXIST, while the directory
+ * is pending deletion by the process that just released it.
+ */
+export function isLockContention(code: string | undefined, platform: string = process.platform): boolean {
+  return code === 'EEXIST' || code === 'EISDIR' || (platform === 'win32' && code === 'EPERM')
+}
+
 async function withMemoryFileLock<T>(path: string, operation: () => Promise<T>): Promise<T> {
   await mkdir(dirname(path), { recursive: true, mode: 0o700 })
   const lockDir = `${path}.lock`
@@ -209,7 +218,7 @@ async function withMemoryFileLock<T>(path: string, operation: () => Promise<T>):
       break
     } catch (error) {
       const code = (error as NodeJS.ErrnoException).code
-      if (code !== 'EEXIST' && code !== 'EISDIR') throw error
+      if (!isLockContention(code)) throw error
       try {
         const lockStat = await stat(lockDir)
         if (Date.now() - lockStat.mtimeMs > MEMORY_LOCK_STALE_MS) {
