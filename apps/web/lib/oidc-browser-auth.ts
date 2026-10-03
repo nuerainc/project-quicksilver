@@ -66,6 +66,31 @@ function configFrom(env: OidcBrowserEnv): { issuer: string; clientId: string; cl
   }
 }
 
+/**
+ * Why sign-in is not configured, as setting names and reasons only; never a value. Empty when the
+ * settings are usable. Logged when a login cannot even start, which otherwise looks like any failure.
+ */
+export function oidcConfigProblems(env: OidcBrowserEnv): string[] {
+  const problems: string[] = []
+  const url = (name: 'OIDC_ISSUER' | 'OIDC_REDIRECT_URI') => {
+    const raw = env[name]
+    if (!raw?.trim()) { problems.push(`${name}: missing or blank`); return }
+    const parsed = httpsUrl(raw)
+    if (!parsed) problems.push(`${name}: must be an https URL with no username, password or fragment`)
+    else if (parsed.search || parsed.hash) problems.push(`${name}: must not contain a query string or fragment`)
+  }
+  url('OIDC_ISSUER')
+  url('OIDC_REDIRECT_URI')
+  if (!env.OIDC_CLIENT_ID?.trim()) problems.push('OIDC_CLIENT_ID: missing or blank')
+  if (!env.OIDC_CLIENT_SECRET) problems.push('OIDC_CLIENT_SECRET: missing or blank')
+  else if (env.OIDC_CLIENT_SECRET.length < 8) problems.push('OIDC_CLIENT_SECRET: shorter than 8 characters')
+  return problems
+}
+
+function logNotConfigured(env: OidcBrowserEnv): void {
+  console.error('[oidc] sign-in is not configured', JSON.stringify({ problems: oidcConfigProblems(env) }))
+}
+
 async function boundedJson(response: Response): Promise<Record<string, unknown>> {
   const declared = Number(response.headers.get('content-length') ?? 0)
   if (declared > MAX_PROVIDER_RESPONSE_BYTES) throw new Error('OIDC provider response exceeded the size limit.')
@@ -145,7 +170,10 @@ function cookieValue(request: Request, name: string): string | null {
 
 export async function startOidcLogin(request: Request, env: OidcBrowserEnv, deps: OidcAuthDependencies = {}): Promise<Response> {
   const config = configFrom(env)
-  if (!config) return appFailure(request)
+  if (!config) {
+    logNotConfigured(env)
+    return appFailure(request)
+  }
   const now = deps.now?.() ?? new Date()
   const random = deps.random ?? randomBytes
   const fetcher = deps.fetcher ?? fetch
@@ -189,6 +217,7 @@ export async function completeOidcLogin(request: Request, env: OidcBrowserEnv, d
   const state = stateValues.length === 1 ? stateValues[0] : null
   const code = codeValues.length === 1 ? codeValues[0] : null
   const binding = cookieValue(request, OIDC_LOGIN_COOKIE)
+  if (!config) logNotConfigured(env)
   if (!config || !state || state.length > 256 || !binding) return appFailure(request)
 
   const now = deps.now?.() ?? new Date()

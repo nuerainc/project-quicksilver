@@ -5,6 +5,7 @@ import { randomUUID } from 'node:crypto'
 import { exportJWK, SignJWT } from 'jose'
 import {
   completeOidcLogin,
+  oidcConfigProblems,
   OIDC_LOGIN_COOKIE,
   OIDC_SESSION_COOKIE,
   readBrowserSession,
@@ -212,6 +213,41 @@ test('a verified login that is not on the allowlist is refused and logged with i
     assert.equal(warn.mock.calls.length, 0)
   } finally {
     warn.mock.restore()
+    error.mock.restore()
+  }
+})
+
+test('a login that cannot start names the settings that are wrong, never their values', async () => {
+  const error = mock.method(console, 'error', () => {})
+  try {
+    const { deps, env } = await setup()
+    assert.deepEqual(oidcConfigProblems(env), [], 'a good configuration reports nothing')
+
+    const secret = 'zq9xk'
+    const bad = { ...env, OIDC_ISSUER: undefined, OIDC_REDIRECT_URI: 'http://app.example.test/api/auth/oidc/callback', OIDC_CLIENT_ID: ' ', OIDC_CLIENT_SECRET: secret } as OidcBrowserEnv
+    assert.deepEqual(oidcConfigProblems(bad), [
+      'OIDC_ISSUER: missing or blank',
+      'OIDC_REDIRECT_URI: must be an https URL with no username, password or fragment',
+      'OIDC_CLIENT_ID: missing or blank',
+      'OIDC_CLIENT_SECRET: shorter than 8 characters',
+    ])
+    assert.deepEqual(oidcConfigProblems({ ...env, OIDC_ISSUER: 'https://accounts.google.com?x=1' }), ['OIDC_ISSUER: must not contain a query string or fragment'])
+    assert.deepEqual(oidcConfigProblems({ ...env, OIDC_CLIENT_SECRET: undefined }), ['OIDC_CLIENT_SECRET: missing or blank'])
+
+    const refused = await startOidcLogin(new Request('https://app.example.test/api/auth/oidc/start'), bad, deps)
+    assert.equal(refused.headers.get('location'), 'https://app.example.test/?auth=failed')
+    const lines = error.mock.calls.map((c) => c.arguments.map(String).join(' '))
+    assert.equal(lines.length, 1)
+    assert.match(lines[0]!, /^\[oidc\] sign-in is not configured /)
+    assert.ok(lines[0]!.includes('OIDC_ISSUER: missing or blank'))
+    assert.ok(!lines[0]!.includes(secret), 'the secret value is never logged')
+    assert.ok(!lines[0]!.includes('app.example.test'), 'no setting value is logged')
+
+    error.mock.resetCalls()
+    const ok = await startOidcLogin(new Request('https://app.example.test/api/auth/oidc/start'), env, deps)
+    assert.equal(ok.status, 303)
+    assert.equal(error.mock.calls.length, 0, 'a working configuration logs nothing')
+  } finally {
     error.mock.restore()
   }
 })
