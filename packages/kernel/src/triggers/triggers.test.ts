@@ -15,6 +15,7 @@ import {
   nextCronTime,
   parseCron,
   previousCronTime,
+  signStripeWebhook,
   signWebhook,
   validateCron,
 } from './index.ts'
@@ -406,4 +407,58 @@ test('Webhook: a deliver sink gets only verified deliveries, with the same idemp
   assert.equal((await store.list()).length, 0)
   assert.equal(trigger.list()[0]!.workflowId, 'task-intake')
   assert.throws(() => new WebhookTrigger({ queue, endpoints: [{ id: 'nothing', tenantId: 'acme', secrets: [secret] }] }), /workflow graph or a deliver sink/)
+})
+
+// ── Stripe signature scheme (P-027) ──────────────────────────────────────
+
+function stripeHook(nowMs: number) {
+  const now = { t: nowMs }
+  const queue = new WorkflowRunQueue({ store: new InMemoryWorkflowRunStore(), now: () => now.t, access: new AccessController() })
+  const seen: unknown[] = []
+  const trigger = new WebhookTrigger({
+    queue,
+    now: () => now.t,
+    endpoints: [{ id: 'stripe-payments', tenantId: 'acme', scheme: 'stripe', secrets: [secret], principal: hookPrincipal, deliver: async (d) => { seen.push(d.payload); return { status: 200, body: { accepted: true } } } }],
+  })
+  return { trigger, now, seen }
+}
+
+const stripeHeaders = (value: string) => new Headers({ 'content-type': 'application/json; charset=utf-8', 'stripe-signature': value })
+
+test('Webhook (stripe scheme): a Stripe-Signature header (t=, v1=, ignored v0=) verifies and reaches the sink', async () => {
+  const { trigger, now, seen } = stripeHook(iso('2026-10-02T12:00:00Z'))
+  const body = JSON.stringify({ id: 'evt_1', type: 'payment_intent.succeeded' })
+  const ts = Math.floor(now.t / 1000)
+  const header = `${signStripeWebhook(secret, ts, body)},v0=${'0'.repeat(64)}`
+  assert.match(header, /^t=\d+,v1=[0-9a-f]{64},v0=/)
+  const ok = await trigger.receive('stripe-payments', stripeHeaders(header), body)
+  assert.equal(ok.status, 200)
+  assert.deepEqual(seen, [{ id: 'evt_1', type: 'payment_intent.succeeded' }])
+  // The same signature again is a replay: Stripe retries re-sign with a new timestamp.
+  assert.equal((await trigger.receive('stripe-payments', stripeHeaders(header), body)).status, 409)
+  const retry = signStripeWebhook(secret, ts + 5, body)
+  now.t += 5_000
+  assert.equal((await trigger.receive('stripe-payments', stripeHeaders(retry), body)).status, 200)
+  assert.equal(seen.length, 2, 'the sink sees the retry; deduplicating on the Stripe event id is its job')
+})
+
+test('Webhook (stripe scheme): wrong secret, stale or doubled t=, quicksilver headers and a missing header are all 401', async () => {
+  const { trigger, now, seen } = stripeHook(iso('2026-10-02T12:00:00Z'))
+  const body = JSON.stringify({ id: 'evt_2', type: 'charge.refunded' })
+  const ts = Math.floor(now.t / 1000)
+  const refused = [
+    stripeHeaders(signStripeWebhook(generateWebhookSecret(), ts, body)),
+    stripeHeaders(signStripeWebhook(secret, ts - 301, body)),
+    stripeHeaders(`t=${ts},t=${ts + 1},${signWebhook(secret, ts, body)}`),
+    stripeHeaders(`t=${ts},v0=${signWebhook(secret, ts, body).slice(3)}`),
+    new Headers({ 'content-type': 'application/json' }),
+    new Headers({ 'content-type': 'application/json', 'x-quicksilver-timestamp': String(ts), 'x-quicksilver-signature': signWebhook(secret, ts, body) }),
+  ]
+  for (const headers of refused) assert.equal((await trigger.receive('stripe-payments', headers, body)).status, 401)
+  assert.equal(seen.length, 0)
+})
+
+test('Webhook: an unknown scheme is refused at configuration time', () => {
+  const queue = new WorkflowRunQueue({ store: new InMemoryWorkflowRunStore(), access: new AccessController() })
+  assert.throws(() => new WebhookTrigger({ queue, endpoints: [{ id: 'x', tenantId: 'acme', scheme: 'paypal' as never, graph, secrets: [secret] }] }), /unknown signature scheme/)
 })

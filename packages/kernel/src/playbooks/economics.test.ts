@@ -224,3 +224,11 @@ test('WAES gate: reviews recorded before `kind` existed still behave as WAES rev
   assert.equal(waesFacts({ ...legacy, components: [] }, content, 'agent-genesis')['waes.review'], 'missing')
   assert.equal(waesFacts({ ...legacy, kind: 'other' as never }, content, 'agent-genesis')['waes.review'], 'missing')
 })
+
+test('autoRecordPaymentWebhooks (P-027) is optional, defaults off, and must be a boolean', () => {
+  assert.deepEqual(validateGenesisConfig(config), [])
+  assert.equal(config.autoRecordPaymentWebhooks, undefined, 'the shipped run config keeps human confirmation')
+  assert.deepEqual(validateGenesisConfig({ ...config, autoRecordPaymentWebhooks: true }), [])
+  assert.deepEqual(validateGenesisConfig({ ...config, autoRecordPaymentWebhooks: false }), [])
+  assert.deepEqual(validateGenesisConfig({ ...config, autoRecordPaymentWebhooks: 'yes' as unknown as boolean }), ['autoRecordPaymentWebhooks must be true or false.'])
+})

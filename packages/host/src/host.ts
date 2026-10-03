@@ -26,6 +26,7 @@ import { SecretsVault, VaultError } from './vault.ts'
 import { handleIntentRoute, type IntentApiDeps } from './intent-api.ts'
 import { handleShadowRoute, type ShadowApiDeps } from './shadow-api.ts'
 import { handleGenesisRoute, type GenesisApiDeps } from './genesis-api.ts'
+import { genesisPaymentWebhookSink } from './genesis-payment-webhook.ts'
 import { handleDecisionRoute, type DecisionApiDeps } from './decisions-api.ts'
 import { handleTaskRoute } from './tasks-api.ts'
 import { TaskError, TaskService, type TaskRunBackend, type TaskServiceDeps } from './tasks.ts'
@@ -249,10 +250,13 @@ export class QuicksilverHost {
     const endpoints = []
     for (const wh of this.config.webhooks) {
       if (wh.task && !this.tasks) throw new Error(`Webhook "${wh.id}" routes to the task intake, but the task interface is not configured.`)
+      if (wh.genesisPayment && !this.deps.genesis?.pending) throw new Error(`Webhook "${wh.id}" records Genesis payments, but no Genesis run with a pending-payment store is configured.`)
       endpoints.push({
         id: wh.id,
         tenantId: this.config.tenantId,
-        ...(wh.task ? { deliver: (d: VerifiedWebhookDelivery) => this.webhookTask(wh.task!, d) } : { graph: this.config.workflows[wh.workflow!]! }),
+        ...(wh.scheme ? { scheme: wh.scheme } : {}),
+        ...(wh.genesisPayment ? { deliver: (d: VerifiedWebhookDelivery) => this.genesisPaymentWebhook(d) }
+          : wh.task ? { deliver: (d: VerifiedWebhookDelivery) => this.webhookTask(wh.task!, d) } : { graph: this.config.workflows[wh.workflow!]! }),
         secrets: await this.resolveSecret(wh.secret),
         principal: services.get(wh.principal)!,
         ...(wh.priority !== undefined ? { priority: wh.priority } : {}),
@@ -330,6 +334,12 @@ export class QuicksilverHost {
     const values = await this.vault.useAll(this.hostPrincipal, ref.slice(6))
     values.forEach(redactValue)
     return values
+  }
+
+  /** P-027: a verified Stripe delivery into the Genesis ledger (pending or recorded). Never calls Stripe. */
+  private genesisPaymentWebhook(d: VerifiedWebhookDelivery): Promise<WebhookSinkOutcome> {
+    const g = this.deps.genesis!
+    return genesisPaymentWebhookSink({ config: g.config, store: g.store, pending: g.pending!, ...(this.deps.now ? { now: this.deps.now } : g.now ? { now: g.now } : {}) })(d)
   }
 
   /** A verified task-webhook delivery: into the one intake, as the endpoint's service principal. */

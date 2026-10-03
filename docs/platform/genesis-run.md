@@ -146,6 +146,9 @@ console (`/console`) has a **Genesis run** section built on these routes.
 | `POST /api/genesis/experiments/:id/evaluate` | `decision:read` | `evaluate`: kill, continue, expiry and over-budget apply as the kernel; scale and hold come back as `awaitingDecision` |
 | `POST /api/genesis/experiments/:id/decide` `{ note? }` | the founder | `decide` |
 | `POST /api/genesis/money` `{ kind, amountUsd, category, description, source: { type, ref }, experimentId?, confirm? }` | the founder | `spend` / `compute` / `revenue` / `refund`. Refused spends → 422 with reasons; a founder decision without `confirm: true` → 409 with reasons |
+| `GET /api/genesis/pending-payments` | `decision:read` | Payments a Stripe webhook reported: `pending` rows, the 50 newest `decided`, and `autoRecord` |
+| `POST /api/genesis/pending-payments/:id/confirm` `{ note? }` | the founder (`intent:provide`, human) | Records the payment as `revenue` (source `payment-processor`, ref = PaymentIntent id) with the caller as recorder. 404 unknown id, 409 already decided or already in the ledger |
+| `POST /api/genesis/pending-payments/:id/reject` `{ note? }` | the founder | Marks the row rejected; records nothing |
 | `POST /api/genesis/reviews` `{ text, channel, verdict, note?, experimentId? }` | the founder (`intent:provide`, human) | `review`: always recorded as a manual founder review with the caller as reviewer, whatever the body says. `GET /api/genesis` returns the 20 newest as `reviews` and the counts as `reviewSummary` (`waes` and `manual` apart) |
 
 The console's Genesis section has a **Review customer-facing text** form and
@@ -157,6 +160,75 @@ pays, charges or executes anything; every response says `executed: false`.
 Config: `QUICKSILVER_GENESIS_CONFIG` (default `deploy/genesis/genesis-500.json`);
 data: next to the intent stores, or `QUICKSILVER_GENESIS_DIR`. The blockers
 check payment-account names against the host's own vault.
+
+## Stripe payments into the ledger (P-027, recording only)
+
+A Stripe webhook can report payments that **already happened** in Stripe, so
+revenue does not have to be typed in by hand. This is the same boundary as the
+money route: it records money that moved; it never charges, pays, refunds or
+transfers anything, holds no Stripe API key, and makes no call to Stripe. The
+only secret is the endpoint's **webhook signing secret** (`whsec_…`).
+
+**1. Store the signing secret in the vault** under the name
+`genesis-stripe-webhook` (a signing secret, never an API key; it is not a
+payment account, so it does not go in `prerequisites.paymentAccounts`):
+
+```sh
+printf '%s' "$STRIPE_SIGNING_SECRET" | npm run host -- vault put genesis-stripe-webhook
+```
+
+**2. Add the endpoint to the host config:**
+
+```json
+"services": [{ "id": "svc:stripe-webhook", "roles": ["trigger"] }],
+"webhooks": [{
+  "id": "stripe-payments",
+  "genesisPayment": true,
+  "scheme": "stripe",
+  "secret": "vault:genesis-stripe-webhook",
+  "principal": "svc:stripe-webhook"
+}]
+```
+
+`genesisPayment` needs `scheme: "stripe"` and names no `workflow` or `task`.
+The host refuses to start if the Genesis run is not configured.
+
+**3. In the Stripe dashboard**, add an endpoint at
+`https://<host>/webhooks/stripe-payments` for `payment_intent.succeeded` and
+`checkout.session.completed`, and copy its signing secret into step 1.
+Rotating the secret: `PUT /api/secrets/genesis-stripe-webhook` (or
+`vault put` then `POST /api/admin/reload-secrets`); the previous secret stays
+valid for the grace period, like every other webhook.
+
+**What a delivery does.** The kernel checks the `Stripe-Signature` header
+(`t=…,v1=…`; same HMAC, five-minute tolerance and replay cache as every
+signed webhook) before anything else. Then, by the run config's
+`autoRecordPaymentWebhooks`:
+
+| Setting | Result |
+|---|---|
+| `false` (default) | A pending row, confirmed or rejected by the founder on the routes above. Nothing reaches the ledger without a human. |
+| `true` | A `revenue` entry straight away, recorded by the `genesis-stripe-webhook` service. |
+
+One payment is recorded once: the PaymentIntent id is both the pending row's
+id and the ledger entry's `source.ref`, so Stripe retries, and the two events
+a Checkout payment sends, are no-ops after the first. A payment already
+recorded by hand with that `source.ref` is not recorded again.
+
+| Event | Handling |
+|---|---|
+| `payment_intent.succeeded` | Recorded (`amount_received`) |
+| `checkout.session.completed`, paid, with a PaymentIntent | Recorded (`amount_total`); same key as its `payment_intent.succeeded` |
+| Unpaid or PaymentIntent-less Checkout sessions, test-mode events, other types | Ignored, 200 (Stripe stops retrying) |
+| `charge.refunded` | Ignored, 200. The ledger's `refund` kind means money back to the run (it lowers capital used); a refund to a customer is money out, so it needs a human until the ledger has a kind for it |
+| Non-USD, malformed, zero or negative amounts | 422 |
+| Invalid run config, broken ledger chain | 503 (Stripe retries later) |
+
+**Known gaps (v1):** the pending queue is file-only
+(`<dir>/<tenant>/<runId>/pending-payments.json`); there is no Sanity-backed
+pending store yet, so in Sanity mode the queue stays in local files. Customer
+refunds, products, prices, payment links and orders are not handled. The
+console has no pending-payments panel yet; use the routes.
 
 ## What the run reports
 

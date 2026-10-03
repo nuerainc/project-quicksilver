@@ -11,7 +11,7 @@ exists so the acceptance question ("is every in-scope item mapped to
 evidence?") has one direct answer instead of requiring a full read of the
 register.
 
-**As of 2026-10-02:** 85 covered, 9 needing operational evidence, 25 partial, 4 missing (123 total).
+**As of 2026-10-02:** 85 covered, 9 needing operational evidence, 26 partial, 3 missing (123 total).
 
 ## Automated evidence (every P-001–P-123 row)
 
@@ -47,7 +47,7 @@ claimed for that row at this status.
 | P-024 | partial | `packages/operator/src/web-search.ts` Brave public web search provider, read-only `web_search` and bounded multi-query `deep_research` evidence tools; `web-search.test.ts` covers citation normalization/deduplication, query coverage, partial failures, key handling, limits, error redaction, timeout and cancellation |
 | P-025 | missing | — |
 | P-026 | missing | — |
-| P-027 | missing | The money ledger records money that already moved (P-078) |
+| P-027 | partial | `packages/host/src/genesis-payment-webhook.test.ts` "end to end (default): a Stripe-signed delivery through the running host lands in pending; a human confirms it into the ledger", "end to end (autoRecordPaymentWebhooks: true): the delivery is recorded straight into the ledger, once", "mapStripeEvent: …", "sink: concurrent deliveries of the same payment still record it once"; `triggers.test.ts` "Webhook (stripe scheme): …" |
 | P-028 | partial | MCP server: `packages/host/src/mcp-tasks.test.ts` "MCP tool calls return the same results as the HTTP API"; MCP client: the Sanity Context MCP path (`contracts.test.ts`); CSV connector: P-083 |
 | P-029 | partial | Approval and per-agent permissions: P-030 to P-037; behavior rules: policies (P-034) |
 | P-030 | partial | CLI (P-117), HTTP API (host tests), the console and P-053 intent entry point; global chat offers Ask (read-only `/api/query`), Plan (NQC-governed `/api/plan`), and Work (keyword-auto-routed or explicitly selected business specialist via authenticated, rate-limited `/api/agents/run`); Work carries at most six prior turns (8 KB total) as explicitly labeled context, omits BLOCKed outputs, and specialists return evaluated recommendations without effects; `chat-request.test.ts`, `business-agent-context.test.ts`, `agent-chat-widget.test.ts`, `business-agent-request.test.ts`, `app-routes.test.ts` |
@@ -185,7 +185,6 @@ release gate, per [V1-SCOPE.md](../V1-SCOPE.md#release-evidence-categories):
 |---|---|---|
 | P-025 | Media: image, video, speech, transcription, diagrams, image understanding. | — |
 | P-026 | Hosting: sites, apps, services, custom domains and version history; experiment pages created and torn down per experiment. | The host templates host Quicksilver itself, not experiment pages |
-| P-027 | Commerce: payments, products, prices, payment links and orders, feeding the finance layer. | Nothing takes or makes payments |
 | P-088 | Live connectors (bookkeeping, payments, CRM, email) fill the graph with `OBSERVED` values. | Tests cover CSV/JSON file parsing into OBSERVED graph variables, not live API sync. No provider OAuth/API-key credentials or vault wiring exist yet; file parsing does not satisfy the requirement's "live connectors" language. Sequenced last among remaining 0.9.0 work (see Shortest path, below); P-028 stays partial until this closes. |
 
 ## Keeping this map honest

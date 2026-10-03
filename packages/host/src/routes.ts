@@ -101,6 +101,10 @@ export const HOST_ROUTES: readonly HostRoute[] = Object.freeze<HostRoute[]>([
   // Evaluate can apply a kill or close (stopping never needs more than decision:read, by design); it still writes.
   { method: 'POST', path: '/api/genesis/experiments/:id/evaluate', feature: 'genesis', rateLimit: 'write', access: anyOf('decision:read') },
   { method: 'POST', path: '/api/genesis/experiments/:id/decide', feature: 'genesis', rateLimit: 'write', access: anyOf('intent:provide') },
+  // P-027: payments a verified Stripe webhook reported; confirm/reject are humans-only in the handler, like /money.
+  { method: 'GET', path: '/api/genesis/pending-payments', feature: 'genesis', access: anyOf('decision:read') },
+  { method: 'POST', path: '/api/genesis/pending-payments/:id/confirm', feature: 'genesis', rateLimit: 'write', access: anyOf('intent:provide') },
+  { method: 'POST', path: '/api/genesis/pending-payments/:id/reject', feature: 'genesis', rateLimit: 'write', access: anyOf('intent:provide') },
 
   // ── Runs ──
   { method: 'GET', path: '/api/runs', access: anyOf('run:read') },
