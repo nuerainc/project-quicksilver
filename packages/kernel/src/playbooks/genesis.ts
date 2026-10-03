@@ -39,6 +39,14 @@ export interface GenesisRunConfig {
    * A manual pass is always recorded as manual (`waes.reviewKind: 'manual'`).
    */
   waesManualReviewAllowed?: boolean
+  /**
+   * P-027: what a verified payment-processor webhook (a Stripe payment that
+   * already happened) does. false (default): it waits in a pending queue
+   * until a human confirms it into the ledger, keeping the money route's
+   * humans-only boundary. true: it is recorded straight away as revenue by
+   * the webhook service. Either way nothing is charged, paid or executed.
+   */
+  autoRecordPaymentWebhooks?: boolean
   prerequisites: {
     /** Set only by the founder, once an entity path is approved. */
     entityApproved: boolean
@@ -57,6 +65,7 @@ export function validateGenesisConfig(c: GenesisRunConfig): string[] {
   if (c.digitalOnly !== true) errors.push('Genesis runs are digital-only.')
   if (c.waesRequired !== true) errors.push('waesRequired must be true.')
   if (c.waesManualReviewAllowed !== undefined && typeof c.waesManualReviewAllowed !== 'boolean') errors.push('waesManualReviewAllowed must be true or false.')
+  if (c.autoRecordPaymentWebhooks !== undefined && typeof c.autoRecordPaymentWebhooks !== 'boolean') errors.push('autoRecordPaymentWebhooks must be true or false.')
   if (!c.allowedCategories?.length) errors.push('allowedCategories must list at least one category.')
   const overlap = (c.allowedCategories ?? []).filter((x) => (c.prohibitedCategories ?? []).includes(x))
   if (overlap.length) errors.push(`Categories cannot be both allowed and prohibited: ${overlap.join(', ')}.`)

@@ -86,6 +86,16 @@ same message for every failure) → valid JSON (400) → replay check → enqueu
 **Queue outcomes:** RBAC refusal → 403. Backpressure → 429, which tells the
 sender to retry. Invalid workflow graph → 422.
 
+### Stripe signature scheme
+
+An endpoint with `scheme: "stripe"` reads Stripe's `Stripe-Signature:
+t=<ts>,v1=<hex>` header instead of the `X-Quicksilver-*` headers. Stripe signs
+the same `${timestamp}.${rawBody}` string with HMAC-SHA256, so the tolerance,
+rotation and replay checks are unchanged. Stripe sends no delivery id, so the
+signature stands in for one, and the sink deduplicates on the Stripe payload
+itself. `signStripeWebhook(secret, ts, body)` builds the header for tests. The
+host uses it for Genesis payment webhooks ([genesis-run](genesis-run.md#stripe-payments-into-the-ledger-p-027-recording-only)).
+
 ## Not yet built
 
 - ~~Hosted process and management API~~ and ~~vault-backed endpoint

@@ -45,6 +45,15 @@ export interface WebhookConfig {
    * payload is untrusted data and cannot choose them.
    */
   task?: WebhookTaskConfig
+  /**
+   * P-027: route verified deliveries into the Genesis money ledger (pending
+   * human confirmation, or recorded directly when the run config sets
+   * `autoRecordPaymentWebhooks`). Records payments that already happened;
+   * never calls the processor. Needs `scheme: 'stripe'` and a Genesis run.
+   */
+  genesisPayment?: true
+  /** Signature header scheme (default `quicksilver`; `stripe` reads `Stripe-Signature`). */
+  scheme?: 'quicksilver' | 'stripe'
   /** Secret references: `vault:<name>` or `env:<NAME>`. */
   secret: string
   principal: string
@@ -296,7 +305,12 @@ export function parseHostConfig(input: unknown): HostConfig {
     if (webhooks.some((x) => x.id === wh.id)) p.push(`${where} is defined twice.`)
     if (typeof wh.secret !== 'string' || !SECRET_REF.test(wh.secret)) p.push(`${where}: secret must be a reference ("vault:<name>" or "env:<NAME>"), never the secret itself.`)
     if (typeof wh.secret === 'string' && wh.secret.startsWith('vault:') && !vault) p.push(`${where}: uses a vault secret but no vault is configured.`)
-    if (wh.task !== undefined) {
+    if (wh.scheme !== undefined && wh.scheme !== 'quicksilver' && wh.scheme !== 'stripe') p.push(`${where}: scheme must be "quicksilver" or "stripe".`)
+    if (wh.genesisPayment !== undefined) {
+      if (wh.genesisPayment !== true) p.push(`${where}: genesisPayment must be true when set.`)
+      if (wh.task !== undefined || wh.workflow !== undefined) p.push(`${where}: a Genesis payment webhook names no task or workflow; it only records payments.`)
+      if (wh.scheme !== 'stripe') p.push(`${where}: a Genesis payment webhook needs scheme "stripe" (the only payment processor supported).`)
+    } else if (wh.task !== undefined) {
       const t = wh.task as WebhookTaskConfig
       if (!t || typeof t !== 'object') p.push(`${where}: task must be an object.`)
       else {

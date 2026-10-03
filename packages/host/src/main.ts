@@ -42,6 +42,7 @@ import { createSanityClient, createSanityStoreClient } from './sanity-client.ts'
 import { FileShadowStore, MemoryShadowStore, type ShadowApiDeps, type ShadowStore } from './shadow-api.ts'
 import { SanityShadowStore } from './shadow-store-sanity.ts'
 import { FileGenesisStore, MemoryGenesisStore, type GenesisApiDeps } from './genesis-api.ts'
+import { FilePendingPaymentStore, MemoryPendingPaymentStore } from './genesis-store.ts'
 import { SecretsVault, generateMasterKey } from './vault.ts'
 import { taskSetup } from './tasks-setup.ts'
 import { createShutdownHandler } from './shutdown.ts'
@@ -199,9 +200,12 @@ async function buildGenesis(config: HostConfig, log: Logger): Promise<GenesisApi
   if ((process.env.QUICKSILVER_GENESIS_STORE ?? 'file').trim() === 'sanity') {
     const { genesisStoresFromEnv, StoresGenesisAdapter } = await import('./genesis-store.ts')
     const stores = await genesisStoresFromEnv({ dir: dir ?? join(baseDir, 'data', 'genesis'), budgetUsd: genesis.budgetUsd, tenantId: config.tenantId })
-    return { config: genesis, store: new StoresGenesisAdapter(stores), ...(runWaes ? { runWaes } : {}) }
+    // No Sanity-backed pending-payment store yet (P-027 v1): the queue stays in files.
+    const pending = new FilePendingPaymentStore(dir ?? join(baseDir, 'data', 'genesis'), config.tenantId)
+    return { config: genesis, store: new StoresGenesisAdapter(stores), pending, ...(runWaes ? { runWaes } : {}) }
   }
-  return { config: genesis, store: dir ? new FileGenesisStore(dir, config.tenantId) : new MemoryGenesisStore(config.tenantId), ...(runWaes ? { runWaes } : {}) }
+  const pending = dir ? new FilePendingPaymentStore(dir, config.tenantId) : new MemoryPendingPaymentStore(config.tenantId)
+  return { config: genesis, store: dir ? new FileGenesisStore(dir, config.tenantId) : new MemoryGenesisStore(config.tenantId), pending, ...(runWaes ? { runWaes } : {}) }
 }
 
 async function buildAgentRunner(log: Logger): Promise<AgentRunner | undefined> {

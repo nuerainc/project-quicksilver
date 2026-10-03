@@ -23,7 +23,7 @@ import {
 import { decideSpend, genesisBlockers, genesisFacts, validateGenesisConfig, type GenesisRunConfig } from '@quicksilver/kernel/playbooks/genesis'
 
 import { checkReviewAppend, createManualReview, createWaesServiceReview, MANUAL_REVIEW_LABEL, parseContentReviewInput, parseWaesServiceInput, reviewSummary, sortReviews, type ContentReviewRecord, type WaesServiceAssessment, type WaesServiceInput } from './genesis-reviews.ts'
-import { DEFAULT_GENESIS_TENANT, FileContentReviewStore } from './genesis-store.ts'
+import { DEFAULT_GENESIS_TENANT, FileContentReviewStore, PENDING_PAYMENT_ID, PendingPaymentError, type PendingPaymentStore } from './genesis-store.ts'
 
 /**
  * Genesis run on the host (M5): the same commands as `npm run genesis`, over HTTP.
@@ -40,6 +40,10 @@ import { DEFAULT_GENESIS_TENANT, FileContentReviewStore } from './genesis-store.
  *                                                            intent:provide, humans only: records a
  *                                                            MANUAL FOUNDER REVIEW of the exact text,
  *                                                            with the caller as reviewer (never a WAES run)
+ *   GET  /api/genesis/pending-payments                       decision:read
+ *   POST /api/genesis/pending-payments/:id/confirm { note? } intent:provide, humans only: records the
+ *                                                            webhook-reported payment as revenue
+ *   POST /api/genesis/pending-payments/:id/reject  { note? } intent:provide, humans only
  *
  * Nothing here moves money or executes an action. The money route RECORDS
  * money that has already moved, after the kernel's spend rules; every
@@ -77,6 +81,8 @@ export interface GenesisApiDeps {
   now?: () => number
   /** Optional model-backed WAES evaluator. Absence fails closed with 503. */
   runWaes?: (input: WaesServiceInput) => Promise<WaesServiceAssessment>
+  /** P-027: payments a verified payment webhook reported, waiting for a human. The pending-payment routes return 404 when absent. */
+  pending?: PendingPaymentStore
 }
 
 export interface GenesisApiContext {
@@ -160,9 +166,9 @@ export class MemoryGenesisStore implements GenesisStore {
   }
 }
 
-// One write at a time per run, so concurrent requests cannot lose each other's entries.
+// One write at a time per run, so concurrent requests (and payment webhooks) cannot lose each other's entries.
 const locks = new Map<string, Promise<unknown>>()
-function withLock<T>(key: string, fn: () => Promise<T>): Promise<T> {
+export function withLock<T>(key: string, fn: () => Promise<T>): Promise<T> {
   const prev = locks.get(key) ?? Promise.resolve()
   const next = prev.then(fn, fn)
   locks.set(key, next.catch(() => undefined))
@@ -319,7 +325,53 @@ export async function handleGenesisRoute(ctx: GenesisApiContext, deps: GenesisAp
     }
   }
 
+  // GET /api/genesis/pending-payments
+  if (parts[2] === 'pending-payments' && !deps.pending) return { status: 404, body: { error: 'No payment webhook queue is configured on this host.' } }
+  if (parts.length === 3 && parts[2] === 'pending-payments' && method === 'GET') {
+    const denied = needAny('decision:read')
+    if (denied) return denied
+    const rows = await deps.pending!.list(config.runId)
+    return { status: 200, body: { pending: rows.filter((r) => r.status === 'pending'), decided: rows.filter((r) => r.status !== 'pending').slice(-50).reverse(), autoRecord: config.autoRecordPaymentWebhooks === true, executes: false } }
+  }
+
   if (configErrors.length) return { status: 409, body: { error: 'The run config is invalid; fix it before recording anything.', reasons: configErrors } }
+
+  // POST /api/genesis/pending-payments/:id/(confirm|reject)
+  if (parts.length === 5 && parts[2] === 'pending-payments' && (parts[4] === 'confirm' || parts[4] === 'reject') && method === 'POST') {
+    const confirming = parts[4] === 'confirm'
+    const denied = humanOnly(confirming ? 'confirms a payment into the ledger' : 'rejects a reported payment')
+    if (denied) return denied
+    const id = parts[3]!
+    if (!PENDING_PAYMENT_ID.test(id)) return { status: 404, body: { error: 'Unknown pending payment.' } }
+    const body = await bodyOf()
+    if (!body.ok) return body.res
+    const note = body.value.note
+    if (note !== undefined && !isStr(note, 500)) return { status: 422, body: { error: 'note must be 1 to 500 characters.' } }
+    const pending = deps.pending!
+    return withLock(config.runId, async () => {
+      const row = await pending.get(config.runId, id)
+      if (!row) return { status: 404, body: { error: `No pending payment "${id}".` } }
+      if (row.status !== 'pending') return { status: 409, body: { error: `Payment "${id}" was already ${row.status}.`, payment: row, executed: false } }
+      const at = now()
+      const decision = { by: principal.id, at: at.toISOString(), ...(typeof note === 'string' ? { note: note.trim() } : {}) }
+      try {
+        if (!confirming) return { status: 200, body: { payment: await pending.decide(config.runId, id, { status: 'rejected', ...decision }), executed: false } }
+        const s = await store.load(config)
+        const broken = brokenLedger(s)
+        if (broken) return broken
+        const already = s.ledger.entries.find((e) => e.source.type === row.input.source.type && e.source.ref === row.input.source.ref)
+        if (already) return { status: 409, body: { error: `This payment is already in the ledger (entry ${already.seq}); reject this row instead.`, executed: false } }
+        const r = appendMoney(s.ledger, row.input, actor, at)
+        if (!r.ok) return { status: 422, body: { error: 'Not recorded.', reasons: r.reasons, executed: false } }
+        await store.saveLedger(config.runId, r.ledger)
+        const payment = await pending.decide(config.runId, id, { status: 'confirmed', ...decision, ledgerSeq: r.entry.seq })
+        return { status: 201, body: { payment, entry: r.entry, totals: moneyTotals(r.ledger), executed: false, note: RECORDS_ONLY } }
+      } catch (error) {
+        if (error instanceof PendingPaymentError) return { status: error.code === 'not-found' ? 404 : 409, body: { error: error.message, executed: false } }
+        throw error
+      }
+    })
+  }
 
   // POST /api/genesis/experiments
   if (parts.length === 3 && parts[2] === 'experiments' && method === 'POST') {

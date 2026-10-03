@@ -201,7 +201,7 @@ the security, observability and developer-experience groups below.
 | P-024 | Web and browser: search, deep research, browser automation including logged-in sites. | automated test, operational evidence | `packages/operator/src/web-search.ts` Brave public web search provider, read-only `web_search` and bounded multi-query `deep_research` evidence tools; `web-search.test.ts` covers citation normalization/deduplication, query coverage, partial failures, key handling, limits, error redaction, timeout and cancellation | partial | Public web search and bounded evidence gathering are implemented; source-page retrieval, durable research reports and browser automation (especially authenticated browser sessions) remain missing. Live provider evidence needs `BRAVE_SEARCH_API_KEY`. |
 | P-025 | Media: image, video, speech, transcription, diagrams, image understanding. | — | — | missing | |
 | P-026 | Hosting: sites, apps, services, custom domains and version history; experiment pages created and torn down per experiment. | — | — | missing | The host templates host Quicksilver itself, not experiment pages |
-| P-027 | Commerce: payments, products, prices, payment links and orders, feeding the finance layer. | — | The money ledger records money that already moved (P-078) | missing | Nothing takes or makes payments |
+| P-027 | Commerce: payments, products, prices, payment links and orders, feeding the finance layer. | automated test | `packages/host/src/genesis-payment-webhook.test.ts` "end to end (default): a Stripe-signed delivery through the running host lands in pending; a human confirms it into the ledger", "end to end (autoRecordPaymentWebhooks: true): the delivery is recorded straight into the ledger, once", "mapStripeEvent: …", "sink: concurrent deliveries of the same payment still record it once"; `triggers.test.ts` "Webhook (stripe scheme): …" | partial | Recording side only: a signed Stripe webhook (`payment_intent.succeeded`, paid `checkout.session.completed`) records revenue that already moved into the Genesis ledger, pending a human confirm by default (`autoRecordPaymentWebhooks`), one entry per PaymentIntent. Nothing initiates a charge, payout, refund or transfer; there is no Stripe API client. Still missing: products, prices, payment links and orders; customer refunds (`charge.refunded` is ignored: the ledger has no kind for money returned to a customer); a Sanity-backed pending queue (file-only for v1); live Stripe delivery evidence |
 | P-028 | Integrations: MCP client and server, an app catalog, office and productivity tools; Onboard connectors write `OBSERVED` values. | automated test | MCP server: `packages/host/src/mcp-tasks.test.ts` "MCP tool calls return the same results as the HTTP API"; MCP client: the Sanity Context MCP path (`contracts.test.ts`); CSV connector: P-083 | partial | App catalog and office tools: missing. Live connectors: deferred until P-088 closes (sequenced last by product-owner decision) |
 | P-029 | Governance and security: command approval, sandboxing, behavior rules, per-agent permissions, no training on user data. | automated test, manual check | Approval and per-agent permissions: P-030 to P-037; behavior rules: policies (P-034) | partial | Command approval and sandboxing now in `packages/operator` (`operator.test.ts` "policy: …", "gate: …", "loop: approvals …"). "No training on user data" is a model-provider term to confirm (manual check, founder decision) |
 | P-030 | Interfaces: desktop, CLI, cloud, API with streaming, open-source option; one intent entry point that selects mode and autonomy depth. | automated test | CLI (P-117), HTTP API (host tests), the console and P-053 intent entry point; global chat offers Ask (read-only `/api/query`), Plan (NQC-governed `/api/plan`), and Work (keyword-auto-routed or explicitly selected business specialist via authenticated, rate-limited `/api/agents/run`); Work carries at most six prior turns (8 KB total) as explicitly labeled context, omits BLOCKed outputs, and specialists return evaluated recommendations without effects; `chat-request.test.ts`, `business-agent-context.test.ts`, `agent-chat-widget.test.ts`, `business-agent-request.test.ts`, `app-routes.test.ts` | partial | No desktop app or streaming API. Chat context applies to Work only; chat does not itself approve or execute actions. Proposals are reviewable in existing workspaces |
@@ -502,13 +502,16 @@ the provider's own hand-over.
 | Status | Count |
 |---|---|
 | covered | 85 |
-| partial | 25 |
-| missing | 4 |
+| partial | 26 |
+| missing | 3 |
 | needs operational evidence | 9 |
 | **Total** | **123** |
 
-As of 2026-10-01, the matrix has 85 covered, 25 partial, 4 missing, and 9
-requirements that need operational evidence. P-088 moved from covered to
+As of 2026-10-01, the matrix has 85 covered, 26 partial, 3 missing, and 9
+requirements that need operational evidence. P-027 moved from missing to
+partial (2026-10-02): a signed Stripe webhook now records payments that
+already happened into the Genesis ledger; nothing initiates a payment, and
+products, prices, payment links, orders and customer refunds remain open. P-088 moved from covered to
 missing: the existing tests cover CSV/JSON file parsing, not live API sync,
 and the product owner has decided it stays missing until real provider
 credentials and vault wiring land -- deliberately sequenced as the last
@@ -531,8 +534,9 @@ pre-1.0 OpenAPI contract and route/method drift test, but stable 1.0.0
 semantics remain unfinished. P-119's agent draft/review/publish API is present;
 its former “API absent” gap is corrected, while the local Go toolchain and CI
 evidence for the current working tree remain outstanding.
-P-025 through P-027 and P-088 remain missing: media, experiment hosting,
-commerce, and live business connectors. P-031 now has a privacy-reviewed quantitative Genesis experiment
+P-025, P-026 and P-088 remain missing: media, experiment hosting, and live
+business connectors. P-027 (commerce) is partial: incoming Stripe payments are
+recorded, but nothing takes or makes payments. P-031 now has a privacy-reviewed quantitative Genesis experiment
 trajectory export but remains partial pending general batch runs, broader
 observable workflow trajectories, and a reviewed import into Genesis priors.
 Six Quicksilver rows still require operational evidence; three are Aura-ladder rows that do not gate

@@ -1,7 +1,7 @@
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 
-import { experimentDigest, verifyMoneyLedger, type Experiment, type ExperimentStatus, type MoneyEntry, type MoneyLedger } from '@quicksilver/kernel/playbooks/economics'
+import { experimentDigest, verifyMoneyLedger, type Experiment, type ExperimentStatus, type MoneyEntry, type MoneyEntryInput, type MoneyLedger } from '@quicksilver/kernel/playbooks/economics'
 
 import { assertAllowedSanityProject, createSanityStoreClient, idSegment, isSanityConflict, type SanityStoreClient } from './sanity-client.ts'
 import type { GenesisState, GenesisStore } from './genesis-api.ts'
@@ -246,6 +246,132 @@ export class FileContentReviewStore implements ContentReviewStore {
     const all = await readJson<ContentReviewRecord[]>(this.path(runId), [])
     if (!checkReviewAppend(runId, all, review)) return
     await writeJsonAtomic(this.path(runId), [...all, review])
+  }
+}
+
+// ── Pending payments (P-027) ──────────────────────────────────────────────
+
+/**
+ * Payments a verified payment-processor webhook reported, waiting for a human
+ * to confirm them into the money ledger (`autoRecordPaymentWebhooks: false`,
+ * the default). One row per payment: `id` is the processor's payment
+ * reference (a Stripe PaymentIntent id), so the several events Stripe sends
+ * for one payment, and its retries, never make two rows. A row is decided
+ * once (confirmed or rejected) and never reopened.
+ *
+ * File-backed only for v1 (<dir>/<tenantId>/<runId>/pending-payments.json).
+ * There is no Sanity-backed pending store yet; in Sanity mode the host keeps
+ * this queue in files next to its other local state.
+ */
+export type PendingPaymentStatus = 'pending' | 'confirmed' | 'rejected'
+
+export interface PendingPaymentEntry {
+  /** The processor's payment reference; also the ledger entry's `source.ref`. */
+  id: string
+  status: PendingPaymentStatus
+  provider: 'stripe'
+  /** The first event that reported this payment. */
+  eventId: string
+  eventType: string
+  livemode: boolean
+  receivedAt: string
+  /** What confirming records (always `revenue` from `payment-processor`). */
+  input: MoneyEntryInput
+  decidedBy?: string
+  decidedAt?: string
+  note?: string
+  /** The ledger entry a confirmation wrote. */
+  ledgerSeq?: number
+}
+
+export interface PendingPaymentDecision {
+  status: 'confirmed' | 'rejected'
+  by: string
+  at: string
+  note?: string
+  ledgerSeq?: number
+}
+
+export interface PendingPaymentStore {
+  /** Rows of the run, oldest first. */
+  list(runId: string): Promise<PendingPaymentEntry[]>
+  get(runId: string, id: string): Promise<PendingPaymentEntry | undefined>
+  /** Add a row unless one with the same id exists (then returns that one, `created: false`). */
+  putPending(runId: string, entry: PendingPaymentEntry): Promise<{ created: boolean; entry: PendingPaymentEntry }>
+  /** Decide a pending row once. Throws PendingPaymentError (`not-found`, `already-decided`). */
+  decide(runId: string, id: string, decision: PendingPaymentDecision): Promise<PendingPaymentEntry>
+}
+
+export class PendingPaymentError extends Error {
+  readonly code: 'not-found' | 'already-decided'
+  constructor(code: 'not-found' | 'already-decided', message: string) {
+    super(message)
+    this.name = 'PendingPaymentError'
+    this.code = code
+  }
+}
+
+export const PENDING_PAYMENT_ID = /^[a-zA-Z0-9][a-zA-Z0-9_.:-]{0,199}$/
+
+function applyPendingPut(all: PendingPaymentEntry[], entry: PendingPaymentEntry): { created: boolean; entry: PendingPaymentEntry; all: PendingPaymentEntry[] } {
+  if (!PENDING_PAYMENT_ID.test(entry.id) || entry.status !== 'pending') throw new Error('A pending payment needs a valid id and status "pending".')
+  const existing = all.find((e) => e.id === entry.id)
+  if (existing) return { created: false, entry: existing, all }
+  return { created: true, entry, all: [...all, entry] }
+}
+
+function applyPendingDecision(runId: string, all: PendingPaymentEntry[], id: string, d: PendingPaymentDecision): { entry: PendingPaymentEntry; all: PendingPaymentEntry[] } {
+  const i = all.findIndex((e) => e.id === id)
+  if (i < 0) throw new PendingPaymentError('not-found', `No pending payment "${id}" in run "${runId}".`)
+  const current = all[i]!
+  if (current.status !== 'pending') throw new PendingPaymentError('already-decided', `Payment "${id}" was already ${current.status}.`)
+  const entry: PendingPaymentEntry = { ...current, status: d.status, decidedBy: d.by, decidedAt: d.at, ...(d.note ? { note: d.note } : {}), ...(d.ledgerSeq !== undefined ? { ledgerSeq: d.ledgerSeq } : {}) }
+  return { entry, all: all.map((e, j) => (j === i ? entry : e)) }
+}
+
+/** <dir>/<tenantId>/<runId>/pending-payments.json. Callers serialize writes per run (the host's withLock). */
+export class FilePendingPaymentStore implements PendingPaymentStore {
+  private readonly dir: string
+  private readonly tenantId: string
+  constructor(dir: string, tenantId: string = DEFAULT_GENESIS_TENANT) {
+    this.dir = dir
+    this.tenantId = tenantId
+  }
+  private path(runId: string) {
+    checkRunId(runId)
+    return join(this.dir, this.tenantId, runId, 'pending-payments.json')
+  }
+  async list(runId: string): Promise<PendingPaymentEntry[]> { return readJson<PendingPaymentEntry[]>(this.path(runId), []) }
+  async get(runId: string, id: string) { return (await this.list(runId)).find((e) => e.id === id) }
+  async putPending(runId: string, entry: PendingPaymentEntry) {
+    const r = applyPendingPut(await this.list(runId), entry)
+    if (r.created) await writeJsonAtomic(this.path(runId), r.all)
+    return { created: r.created, entry: r.entry }
+  }
+  async decide(runId: string, id: string, decision: PendingPaymentDecision) {
+    const r = applyPendingDecision(runId, await this.list(runId), id, decision)
+    await writeJsonAtomic(this.path(runId), r.all)
+    return r.entry
+  }
+}
+
+/** In-memory twin for tests and file-less hosts; partitioned by tenant like MemoryGenesisStore. */
+export class MemoryPendingPaymentStore implements PendingPaymentStore {
+  private readonly tenantId: string
+  private readonly data = new Map<string, PendingPaymentEntry[]>()
+  constructor(tenantId: string = DEFAULT_GENESIS_TENANT) { this.tenantId = tenantId }
+  private key(runId: string) { checkRunId(runId); return `${this.tenantId}\u0000${runId}` }
+  async list(runId: string) { return structuredClone(this.data.get(this.key(runId)) ?? []) }
+  async get(runId: string, id: string) { return (await this.list(runId)).find((e) => e.id === id) }
+  async putPending(runId: string, entry: PendingPaymentEntry) {
+    const r = applyPendingPut(await this.list(runId), structuredClone(entry))
+    if (r.created) this.data.set(this.key(runId), r.all)
+    return { created: r.created, entry: structuredClone(r.entry) }
+  }
+  async decide(runId: string, id: string, decision: PendingPaymentDecision) {
+    const r = applyPendingDecision(runId, await this.list(runId), id, decision)
+    this.data.set(this.key(runId), r.all)
+    return structuredClone(r.entry)
   }
 }
 

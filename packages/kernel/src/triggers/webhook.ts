@@ -20,6 +20,17 @@ import type { WorkflowRunQueue } from '../runtime/queue.ts'
  * Runs are enqueued as the endpoint's service principal, which should hold
  * only the `trigger` role.
  *
+ * An endpoint with `scheme: 'stripe'` reads Stripe's native header instead
+ * (P-027: recording payments that already happened in Stripe):
+ *
+ *   Stripe-Signature: t=<unix seconds>,v1=<hex>[,v1=<hex>][,v0=...]
+ *
+ * Stripe signs the same `${timestamp}.${rawBody}` string with HMAC-SHA256,
+ * keyed by the endpoint's signing secret (`whsec_...`), so verification,
+ * clock skew and replay checks are identical; only the header parsing differs.
+ * Stripe sends no delivery header, so the signature is the delivery id and
+ * the sink must deduplicate on the Stripe event id itself.
+ *
  * An endpoint may instead name a `deliver` sink (M7 part 4: the host routes
  * such deliveries into its one governed task intake). The same checks run
  * first; the sink receives only a verified payload and its idempotency key,
@@ -37,10 +48,16 @@ export interface VerifiedWebhookDelivery {
   principal?: Principal
 }
 
+/** Which signature headers an endpoint reads. */
+export type WebhookScheme = 'quicksilver' | 'stripe'
+export const WEBHOOK_SCHEMES: readonly WebhookScheme[] = Object.freeze(['quicksilver', 'stripe'])
+
 export interface WebhookEndpoint {
   /** Public, unguessable-not-required id used in the URL path. */
   id: string
   tenantId: string
+  /** Signature header scheme (default `quicksilver`). `stripe` reads `Stripe-Signature`. */
+  scheme?: WebhookScheme
   /** The workflow a delivery enqueues. Required unless `deliver` is set. */
   graph?: WorkflowGraph
   /**
@@ -144,6 +161,7 @@ export class WebhookTrigger {
   addEndpoint(endpoint: WebhookEndpoint): void {
     if (!endpoint || typeof endpoint.id !== 'string' || !/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$/.test(endpoint.id)) throw new Error('Webhook endpoint id is invalid.')
     if (this.endpoints.has(endpoint.id)) throw new Error(`Webhook endpoint "${endpoint.id}" already exists.`)
+    if (endpoint.scheme !== undefined && !WEBHOOK_SCHEMES.includes(endpoint.scheme)) throw new Error(`Webhook endpoint "${endpoint.id}" has an unknown signature scheme.`)
     if (!endpoint.graph && typeof endpoint.deliver !== 'function') throw new Error(`Webhook endpoint "${endpoint.id}" needs a workflow graph or a deliver sink.`)
     if (!Array.isArray(endpoint.secrets) || endpoint.secrets.length === 0 || endpoint.secrets.some((s) => typeof s !== 'string' || s.length < MIN_WEBHOOK_SECRET_LENGTH)) {
       throw new Error(`Webhook endpoint "${endpoint.id}" needs at least one secret of ${MIN_WEBHOOK_SECRET_LENGTH}+ characters.`)
@@ -179,12 +197,11 @@ export class WebhookTrigger {
     const contentType = headers.get('content-type') ?? ''
     if (!/^application\/(?:[\w.+-]+\+)?json\b/i.test(contentType)) return fail(415, 'Content-Type must be application/json.')
 
-    const timestampText = headers.get('x-quicksilver-timestamp') ?? ''
-    const signatureHeader = headers.get('x-quicksilver-signature') ?? ''
+    const { timestampText, signatureParts } = endpoint.scheme === 'stripe' ? readStripeSignature(headers) : readQuicksilverSignature(headers)
     if (!/^\d{9,11}$/.test(timestampText)) return fail(401, 'Missing or invalid signature.')
     const timestamp = Number(timestampText)
     if (Math.abs(this.now() / 1000 - timestamp) > this.toleranceSeconds) return fail(401, 'Missing or invalid signature.')
-    const supplied = signatureHeader.split(',').map((part) => part.trim()).filter((part) => /^v1=[0-9a-f]{64}$/.test(part)).map((part) => Buffer.from(part.slice(3), 'hex'))
+    const supplied = signatureParts.filter((part) => /^v1=[0-9a-f]{64}$/.test(part)).map((part) => Buffer.from(part.slice(3), 'hex'))
     if (supplied.length === 0 || supplied.length > 5) return fail(401, 'Missing or invalid signature.')
     let verified = false
     for (const secret of endpoint.secrets) {
@@ -200,7 +217,8 @@ export class WebhookTrigger {
       return fail(400, 'Body must be valid JSON.')
     }
 
-    const deliveryHeader = headers.get('x-quicksilver-delivery')
+    // Stripe sends no delivery header; the signature stands in (see the top of this file).
+    const deliveryHeader = endpoint.scheme === 'stripe' ? null : headers.get('x-quicksilver-delivery')
     if (deliveryHeader !== null && !/^[\x21-\x7e]{1,128}$/.test(deliveryHeader)) return fail(400, 'X-Quicksilver-Delivery must be 1–128 printable characters.')
     const signatureHex = supplied[0]!.toString('hex')
     const deliveryId = deliveryHeader ?? `sig:${signatureHex.slice(0, 32)}`
@@ -277,6 +295,25 @@ export class WebhookTrigger {
     const rawBody = await request.text()
     return json(await this.receive(id, request.headers, rawBody))
   }
+}
+
+function readQuicksilverSignature(headers: { get(name: string): string | null }): { timestampText: string; signatureParts: string[] } {
+  return {
+    timestampText: headers.get('x-quicksilver-timestamp') ?? '',
+    signatureParts: (headers.get('x-quicksilver-signature') ?? '').split(',').map((part) => part.trim()),
+  }
+}
+
+/** `Stripe-Signature: t=<ts>,v1=<hex>[,v1=<hex>][,v0=<hex>]`. Exactly one `t`; `v0` (test-mode legacy) is ignored. */
+function readStripeSignature(headers: { get(name: string): string | null }): { timestampText: string; signatureParts: string[] } {
+  const parts = (headers.get('stripe-signature') ?? '').split(',').map((part) => part.trim())
+  const timestamps = parts.filter((part) => part.startsWith('t=')).map((part) => part.slice(2))
+  return { timestampText: timestamps.length === 1 ? timestamps[0]! : '', signatureParts: parts.filter((part) => part.startsWith('v1=')) }
+}
+
+/** Compute a `Stripe-Signature` header value (for tests and local replays; Stripe signs real deliveries). */
+export function signStripeWebhook(secret: string, timestamp: number, rawBody: string): string {
+  return `t=${timestamp},${signWebhook(secret, timestamp, rawBody)}`
 }
 
 function fail(status: Exclude<WebhookOutcome['status'], 200 | 202>, error: string): WebhookOutcome {
