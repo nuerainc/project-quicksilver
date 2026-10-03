@@ -36,9 +36,12 @@ test('a source that could not be checked is said aloud, and the count says it ma
   assert.match(list, /unchecked\.length === 0/)
 })
 
-test('it refreshes about once a minute and when the tab regains focus, and says it is a check, not a live feed', () => {
-  assert.match(list, /POLL_MS = 60_000/)
-  assert.match(list, /addEventListener\('focus'/)
+test('it refreshes about once a minute and when the tab regains focus, through one shared store, and says it is a check, not a live feed', () => {
+  const store = read('./inbox-store.ts')
+  const hook = read('../components/use-inbox.ts')
+  assert.match(store, /options\.pollMs \?\? 60_000/)
+  assert.match(hook, /addEventListener\('focus'/)
+  assert.match(list, /useInbox\(\)/)
   assert.match(list, /Checked /)
 })
 

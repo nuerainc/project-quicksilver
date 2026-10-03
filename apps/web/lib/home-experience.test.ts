@@ -38,5 +38,5 @@ test('dashboard requires the existing tab-scoped principal and has useful loadin
   assert.match(page, /resolveConsoleAccess\(\)/)
   assert.match(page, /Sign in to load your business data/)
   assert.match(page, /role="alert"/)
-  assert.match(page, /Loading current business records/)
+  assert.match(page, /<AttentionList hideHeading \/>/)
 })

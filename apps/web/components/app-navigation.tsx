@@ -4,12 +4,14 @@ import Link from 'next/link'
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { usePathname } from 'next/navigation'
 import { APP_NAVIGATION_GROUPS, activeNavigationRoute } from '@/lib/app-navigation'
-import { loadSessionState, signInHref, type SessionState } from '@/lib/session-control'
+import { loadSessionState, signInPageHref, type SessionState } from '@/lib/session-control'
+import { AttentionBell } from '@/components/attention-bell'
 
 // Group only destinations that exist today. This gives the shell a task-phase IA
 // without implying that the unfinished platform modules are already available.
 const SHELL_GROUP_ORDER = ['Operate', 'Build', 'Govern', 'Observe'] as const
 const SHELL_ROUTE_GROUP: Record<string, (typeof SHELL_GROUP_ORDER)[number]> = {
+  '/': 'Operate',
   '/decisions': 'Operate',
   '/planning': 'Operate',
   '/workflows': 'Build',
@@ -20,6 +22,7 @@ const SHELL_ROUTE_GROUP: Record<string, (typeof SHELL_GROUP_ORDER)[number]> = {
 }
 const APP_DESTINATIONS = APP_NAVIGATION_GROUPS.flatMap(({ links }) => links)
 const NAV_ICONS: Record<string, string> = {
+  '/': '⌂',
   '/decisions': '✓',
   '/planning': '✳',
   '/workflows': '◇',
@@ -73,7 +76,7 @@ function SessionControl({ pathname, mobile = false }: { pathname: string; mobile
   const className = mobile ? 'app-session app-session--mobile' : 'app-session'
   if (state.status === 'loading') return null
   if (state.status === 'unavailable') return <p className={className} role="status">Sign-in unavailable</p>
-  if (state.status === 'signed-out') return <a className={`${className} app-session__button`} href={signInHref(pathname)}>Sign in</a>
+  if (state.status === 'signed-out') return <a className={`${className} app-session__button`} href={signInPageHref(pathname)}>Sign in</a>
   return (
     <form className={className} method="post" action="/api/auth/logout">
       <span className="app-session__name" title={state.roles.join(', ')}>{state.name}</span>
@@ -165,6 +168,7 @@ export function AppNavigation() {
             <span aria-hidden="true">{sidebarCollapsed ? '»' : '«'}</span>
           </button>
         </div>
+        <AttentionBell variant="row" className="app-bell app-bell--sidebar" />
         <nav aria-label="Primary navigation" className="app-primary-nav app-primary-nav--desktop">
           <NavigationGroups pathname={pathname} collapsed={sidebarCollapsed} />
         </nav>
@@ -172,6 +176,7 @@ export function AppNavigation() {
           <span className="app-command-icon" aria-hidden="true">⌕</span><span>Quick navigate</span><kbd>Ctrl / ⌘ K</kbd>
         </button>
         <SessionControl pathname={pathname} />
+        <AttentionBell className="app-bell app-bell--mobile" />
         <details ref={mobileMenuRef} className="app-mobile-menu">
           <summary className="app-mobile-menu__summary" aria-label={`Open navigation. Current page: ${currentLabel}`}>
             <span className="app-mobile-menu__icon" aria-hidden="true"><span /><span /></span>

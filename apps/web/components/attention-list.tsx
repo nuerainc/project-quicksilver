@@ -1,23 +1,17 @@
 'use client'
 
 import Link from 'next/link'
-import { useCallback, useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 
 import type { AttentionAction, AttentionItem, SourceStatus } from '@/lib/attention'
+import { useInbox } from '@/components/use-inbox'
 import { authFailureMessage, consoleHeaders, resolveConsoleAccess } from '@/lib/console-auth'
-import { signInHref } from '@/lib/session-control'
+import { signInPageHref } from '@/lib/session-control'
+import { usePathname } from 'next/navigation'
 import styles from './attention-list.module.css'
-
-interface Inbox {
-  observedAt: string
-  items: AttentionItem[]
-  sources: SourceStatus[]
-  counts: { actionable: number; other: number; complete: boolean }
-}
 
 interface ItemState { confirming?: AttentionAction['id']; busy?: boolean; done?: string; error?: string }
 
-const POLL_MS = 60_000
 const DONE_TEXT: Record<AttentionAction['id'], string> = { approve: 'Approved.', reject: 'Rejected.', execute: 'Executed (simulated).', review: '' }
 const SOURCE_NAME: Record<SourceStatus['id'], string> = { decisions: 'decisions', workflows: 'workflow activity', agents: 'the agent catalog', traces: 'traces' }
 
@@ -36,44 +30,17 @@ function ago(iso: string | null, now: number): string | null {
  * decides what is offered (lib/attention.ts); this only shows it and makes the call a person
  * clicks, as that person, through the app's own decision routes. Nothing here is written by a model.
  */
-export function AttentionList({ onNavigate, heading = 'Needs you' }: { onNavigate?: () => void; heading?: string }) {
-  const [inbox, setInbox] = useState<Inbox | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [needsSignIn, setNeedsSignIn] = useState(false)
-  const [loading, setLoading] = useState(true)
+export function AttentionList({ onNavigate, heading = 'Needs you', hideHeading = false }: { onNavigate?: () => void; heading?: string; hideHeading?: boolean }) {
+  const { inbox, error, needsSignIn, loading, checkedAt, refresh } = useInbox()
   const [states, setStates] = useState<Record<string, ItemState>>({})
   const [now, setNow] = useState(() => Date.now())
+  const pathname = usePathname() ?? '/'
 
-  const load = useCallback(async () => {
-    setLoading(true)
-    try {
-      const access = await resolveConsoleAccess()
-      if (!access.signedIn) { setNeedsSignIn(true); setInbox(null); setError(null); return }
-      setNeedsSignIn(false)
-      const response = await fetch('/api/inbox', { headers: consoleHeaders('/api/inbox', access.token), cache: 'no-store' })
-      const body = await response.json().catch(() => ({}))
-      if (!response.ok) {
-        if (response.status === 401) setNeedsSignIn(true)
-        setError(authFailureMessage(response.status, 'inbox', body.error) ?? body.error ?? 'Could not check what needs you.')
-        return
-      }
-      setInbox(body as Inbox)
-      setError(null)
-      setNow(Date.now())
-    } catch {
-      setError('Could not reach the server to check what needs you.')
-    } finally {
-      setLoading(false)
-    }
-  }, [])
-
+  // Keep "checked 3 min ago" honest between checks.
   useEffect(() => {
-    void load()
-    const timer = window.setInterval(() => void load(), POLL_MS)
-    const onFocus = () => void load()
-    window.addEventListener('focus', onFocus)
-    return () => { window.clearInterval(timer); window.removeEventListener('focus', onFocus) }
-  }, [load])
+    const timer = window.setInterval(() => setNow(Date.now()), 30_000)
+    return () => window.clearInterval(timer)
+  }, [])
 
   const patch = (id: string, next: ItemState) => setStates((current) => ({ ...current, [id]: next }))
 
@@ -100,14 +67,14 @@ export function AttentionList({ onNavigate, heading = 'Needs you' }: { onNavigat
         return
       }
       patch(item.id, { done: DONE_TEXT[action.id] })
-      await load()
+      await refresh()
     } catch {
       patch(item.id, { error: 'Could not reach the server.' })
     }
   }
 
   if (needsSignIn) {
-    return <div className={styles.root}><p className={styles.empty}>Sign in to see what needs you. <a href={signInHref(typeof window === 'undefined' ? '/' : window.location.pathname)}>Sign in</a></p></div>
+    return <div className={styles.root}><p className={styles.empty}>Sign in to see what needs you. <Link href={signInPageHref(pathname)} onClick={onNavigate}>Sign in</Link></p></div>
   }
 
   const unchecked = inbox?.sources.filter((source) => source.status === 'unavailable') ?? []
@@ -117,10 +84,10 @@ export function AttentionList({ onNavigate, heading = 'Needs you' }: { onNavigat
   return (
     <section className={styles.root} aria-label={heading} aria-busy={loading}>
       <div className={styles.summary}>
-        <h4>{inbox ? `${heading} (${inbox.counts.actionable}${inbox.counts.complete ? '' : '+'})` : heading}</h4>
+        {hideHeading ? <span /> : <h4>{inbox ? `${heading} (${inbox.counts.actionable}${inbox.counts.complete ? '' : '+'})` : heading}</h4>}
         <span className={styles.meta}>
-          {inbox ? `Checked ${ago(inbox.observedAt, now) ?? 'just now'}` : loading ? 'Checking…' : ''}{' '}
-          <button type="button" className={`${styles.link} ${styles.retry}`} onClick={() => void load()} disabled={loading}>Refresh</button>
+          {checkedAt ? `Checked ${ago(new Date(checkedAt).toISOString(), now) ?? 'just now'}` : loading ? 'Checking…' : ''}{' '}
+          <button type="button" className={`${styles.link} ${styles.retry}`} onClick={() => void refresh()} disabled={loading}>Refresh</button>
         </span>
       </div>
       {error && <p className={styles.error} role="alert">{error}</p>}

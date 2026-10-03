@@ -53,16 +53,17 @@ type AccessFetch = (input: string, init?: { headers?: Record<string, string>; ca
  * server on each call) or a signed-in OIDC session (the cookie goes with same-origin
  * requests). Pages used to look only for the token, so a person signed in with OIDC was
  * told to sign in. With neither, or when the server cannot be asked, the answer is "not
- * signed in" and the page shows its sign-in prompt.
+ * signed in" and the page shows its sign-in prompt. The question goes to `/api/auth/status`, which
+ * answers 200 for a visitor who is not signed in, so that is not an error in the console.
  */
 export async function resolveConsoleAccess(fetcher: AccessFetch = (input, init) => fetch(input, init), storage?: () => TokenStorage | undefined): Promise<ConsoleAccess> {
   const token = storage ? readConsoleToken(storage) : readConsoleToken()
   if (token) return { token, signedIn: true, whoami: null }
   try {
-    const res = await fetcher('/api/whoami', { cache: 'no-store', credentials: 'same-origin' })
+    const res = await fetcher('/api/auth/status', { cache: 'no-store', credentials: 'same-origin' })
     if (res.status !== 200) return { token: null, signedIn: false, whoami: null }
-    const body = await res.json() as Partial<ConsoleWhoami> | null
-    if (!body || typeof body.principalId !== 'string' || !Array.isArray(body.permissions)) return { token: null, signedIn: false, whoami: null }
+    const body = await res.json() as (Partial<ConsoleWhoami> & { signedIn?: boolean }) | null
+    if (!body || body.signedIn !== true || typeof body.principalId !== 'string' || !Array.isArray(body.permissions)) return { token: null, signedIn: false, whoami: null }
     return { token: null, signedIn: true, whoami: body as ConsoleWhoami }
   } catch {
     return { token: null, signedIn: false, whoami: null }

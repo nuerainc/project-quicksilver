@@ -229,7 +229,7 @@ test('a pasted token counts as signed in without asking the server', async () =>
 })
 
 test('with no token, a signed-in browser session counts as signed in and says who it is', async () => {
-  const who = { principalId: 'entity-ana', kind: 'human', tenantId: 'acme', permissions: ['decision:read'], credential: 'principal' }
+  const who = { signedIn: true, principalId: 'entity-ana', kind: 'human', tenantId: 'acme', permissions: ['decision:read'], credential: 'principal' }
   const access = await resolveConsoleAccess(replying(200, who), accessStorage())
   assert.equal(access.signedIn, true)
   assert.equal(access.token, null)
@@ -240,6 +240,7 @@ test('with neither a token nor a session, or when the server cannot be reached, 
   assert.equal((await resolveConsoleAccess(replying(401), accessStorage())).signedIn, false)
   assert.equal((await resolveConsoleAccess(replying(503), accessStorage())).signedIn, false)
   assert.equal((await resolveConsoleAccess(replying(200, { odd: true }), accessStorage())).signedIn, false)
+  assert.equal((await resolveConsoleAccess(replying(200, { signedIn: false, signInAvailable: true }), accessStorage())).signedIn, false)
   assert.equal((await resolveConsoleAccess(async () => { throw new Error('offline') }, accessStorage())).signedIn, false)
 })
 

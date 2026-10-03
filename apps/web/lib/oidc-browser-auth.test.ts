@@ -148,19 +148,19 @@ test('wrong browser binding cannot consume a valid OIDC state transaction', asyn
   const started = await startFlow(deps, env)
   const state = started.authorization.searchParams.get('state')!
   const wrong = await completeOidcLogin(new Request(`https://app.example.test/api/auth/oidc/callback?code=x&state=${state}`, { headers: { cookie: `${OIDC_LOGIN_COOKIE}=${'x'.repeat(40)}` } }), env, deps)
-  assert.equal(wrong.headers.get('location'), 'https://app.example.test/?auth=failed')
+  assert.equal(wrong.headers.get('location'), 'https://app.example.test/sign-in?auth=failed')
   assert.equal(store.sessions.size, 0)
 
   const valid = await completeOidcLogin(new Request(`https://app.example.test/api/auth/oidc/callback?code=x&state=${state}`, { headers: { cookie: `${OIDC_LOGIN_COOKIE}=${started.bindingValue}` } }), env, deps)
   assert.equal(valid.status, 303, 'the valid browser can complete after an invalid cross-browser attempt')
   const replay = await completeOidcLogin(new Request(`https://app.example.test/api/auth/oidc/callback?code=x&state=${state}`, { headers: { cookie: `${OIDC_LOGIN_COOKIE}=${started.bindingValue}` } }), env, deps)
-  assert.equal(replay.headers.get('location'), 'https://app.example.test/?auth=failed')
+  assert.equal(replay.headers.get('location'), 'https://app.example.test/sign-in?auth=failed')
 })
 
 test('OIDC start refuses insecure configuration and never accepts an external return path', async () => {
   const { deps, env } = await setup()
   const refused = await startOidcLogin(new Request('https://app.example.test/api/auth/oidc/start'), { ...env, OIDC_ISSUER: 'http://idp.example.test' }, deps)
-  assert.equal(refused.headers.get('location'), 'https://app.example.test/?auth=failed')
+  assert.equal(refused.headers.get('location'), 'https://app.example.test/sign-in?auth=failed')
 
   const started = await startOidcLogin(new Request('https://app.example.test/api/auth/oidc/start?returnTo=https%3A%2F%2Fevil.example'), env, deps)
   const state = new URL(started.headers.get('location')!).searchParams.get('state')!
@@ -187,7 +187,7 @@ test('a verified login that is not on the allowlist is refused and logged with i
     // Someone else is on the allowlist: this person is verified but unmapped.
     const other = JSON.stringify([{ issuer: ISSUER, subject: 'someone-else', tenantId: TENANT, principalId: 'person-other', roles: ['viewer'] }])
     const unmapped = await login(other)
-    assert.equal(unmapped.response.headers.get('location'), 'https://app.example.test/?auth=failed')
+    assert.equal(unmapped.response.headers.get('location'), 'https://app.example.test/sign-in?auth=failed')
     assert.equal(unmapped.store.sessions.size, 0, 'no session is created')
     assert.ok(!(unmapped.response.headers.get('set-cookie') ?? '').includes(OIDC_SESSION_COOKIE), 'no session cookie is set')
     const lines = warn.mock.calls.map((c) => c.arguments.map(String).join(' '))
@@ -202,7 +202,7 @@ test('a verified login that is not on the allowlist is refused and logged with i
     // An allowlist that fails to parse is reported as misconfigured, not as an unknown person.
     warn.mock.resetCalls()
     const broken = await login('not json')
-    assert.equal(broken.response.headers.get('location'), 'https://app.example.test/?auth=failed')
+    assert.equal(broken.response.headers.get('location'), 'https://app.example.test/sign-in?auth=failed')
     assert.equal(JSON.parse(warn.mock.calls[0]!.arguments.join(' ').slice(warn.mock.calls[0]!.arguments.join(' ').indexOf('{'))).reason, 'misconfigured')
 
     // A person who is on the allowlist logs nothing.
@@ -235,7 +235,7 @@ test('a login that cannot start names the settings that are wrong, never their v
     assert.deepEqual(oidcConfigProblems({ ...env, OIDC_CLIENT_SECRET: undefined }), ['OIDC_CLIENT_SECRET: missing or blank'])
 
     const refused = await startOidcLogin(new Request('https://app.example.test/api/auth/oidc/start'), bad, deps)
-    assert.equal(refused.headers.get('location'), 'https://app.example.test/?auth=failed')
+    assert.equal(refused.headers.get('location'), 'https://app.example.test/sign-in?auth=failed')
     const lines = error.mock.calls.map((c) => c.arguments.map(String).join(' '))
     assert.equal(lines.length, 1)
     assert.match(lines[0]!, /^\[oidc\] sign-in is not configured /)

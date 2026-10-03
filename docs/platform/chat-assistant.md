@@ -66,6 +66,11 @@ shows it, and when you ask "what needs me?" the assistant answers in a sentence 
   number gets a "+", and the list says it may be incomplete. A source you may not read is skipped.
 - It checks about once a minute and when the tab regains focus; it is not a live feed.
 
+The same list is shown in three places, from one shared copy that the page checks once a minute:
+the "Needs you" row at the top of the navigation (an icon beside the menu button on phones), the
+"Needs your attention" card on the overview, and the empty chat. The count on the bell is only what
+you can act on; a "+" means a source could not be checked, so the number may be low. The bell is
+hidden when you are not signed in.
+
 Not covered yet: executed decisions whose metric is still to be observed, the host's approved
-actions and Genesis items, memory awaiting a supervisor, and the header bell (the same list will
-appear there).
+actions and Genesis items, and memory awaiting a supervisor.

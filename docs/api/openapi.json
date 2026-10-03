@@ -752,6 +752,17 @@
         }
       }
     },
+    "/api/auth/status": {
+      "get": {
+        "operationId": "getAuthStatus",
+        "tags": ["Identity"],
+        "summary": "Is anyone signed in with the organisation account, and what may they do",
+        "description": "Always answers 200, so a visitor who is not signed in is not an error in the browser console (GET /api/auth/session answers 401 for that). Reads only the browser session cookie. Returns no secret.",
+        "responses": {
+          "200": { "$ref": "#/components/responses/AuthStatusResponse" }
+        }
+      }
+    },
     "/api/auth/logout": {
       "post": {
         "operationId": "revokeBrowserSession",
@@ -1168,6 +1179,20 @@
   },
   "components": {
     "schemas": {
+      "AuthStatus": {
+        "type": "object",
+        "required": ["signedIn"],
+        "properties": {
+          "signedIn": { "type": "boolean" },
+          "signInAvailable": { "type": "boolean", "description": "False when sign-in is not configured or the session store is down." },
+          "unavailable": { "type": "boolean" },
+          "principalId": { "type": "string" },
+          "displayName": { "type": "string" },
+          "kind": { "type": "string" },
+          "tenantId": { "type": "string" },
+          "permissions": { "type": "array", "items": { "type": "string" } }
+        }
+      },
       "AttentionAction": {
         "type": "object",
         "required": ["id", "label", "tone"],
@@ -2209,6 +2234,10 @@
       }
     },
     "responses": {
+      "AuthStatusResponse": {
+        "description": "Whether a person is signed in with the organisation account.",
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/AuthStatus" } } }
+      },
       "InboxResponse": { "description": "What needs the signed-in person.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Inbox" } } } },
       "ChatResponse": { "description": "The assistant's answer, with links to pages of the app.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ChatResponse" } } } },
       "DecisionListResponse": { "description": "Recent decisions.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/DecisionList" } } } },
