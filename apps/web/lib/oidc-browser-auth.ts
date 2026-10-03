@@ -307,7 +307,8 @@ export async function readBrowserSession(request: Request, env: OidcBrowserEnv, 
   if (!session || session.revokedAt || Date.parse(session.expiresAt) <= now.getTime()) return null
   const expectedTenant = env.QUICKSILVER_TENANT_ID?.trim() || 'default'
   const identity = mapVerifiedOidcIdentity({ iss: session.identity.issuer, sub: session.identity.subject }, parseOidcIdentityBindings(env.QUICKSILVER_OIDC_USERS), expectedTenant)
-  if (!identity.ok || identity.principal.kind !== 'human' || session.principal.id !== identity.principal.id) return null
+  // A session minted for another tenant is refused even when the same person is mapped here under the same principal id.
+  if (!identity.ok || identity.principal.kind !== 'human' || session.principal.id !== identity.principal.id || session.principal.tenantId !== expectedTenant) return null
   return {
     id: identity.principal.id,
     kind: 'human',
