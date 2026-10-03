@@ -1,7 +1,8 @@
 # Usability plan
 
-Status: plan, not built. Written 2026-10-03 after a code audit of the web app and chat. It has
-not been checked against real users; the first step below is to watch one.
+Status: packages A, B and C are built and merged or in review; D, E and F are not started. Written
+2026-10-03 after a code audit of the web app and chat. It has not been checked against real users;
+the first step below is to watch one.
 
 ## Principles
 
@@ -133,7 +134,14 @@ mobile pass) before it is marked ready. "Rec" refers to the 13 recommendations f
 - **Rec 7**: the near-miss list gets "Try again with this change", which pre-fills the chat.
 - Done when: no page has a control that calls a model, the chat can start every agent action
   that used to live on a page, and there is a single input with no mode.
-- Needs your decision before it starts: whether `/planning` is deleted or kept as a redirect.
+- Decided: `/planning` is a redirect to `/decisions` (`next.config.mjs`), so old links and bookmarks
+  still land somewhere useful.
+- Built: no modes; `offers` cards (plan, specialist, workflow) pressed by the person; the "Create plan"
+  box and the workflow "Run" box are gone; page awareness; Stop, Try again, a conversation kept for
+  the tab; "Try again with this change" on near-misses.
+- Not built, and why: **published catalog agents are not runnable from chat.** A catalog entry is a
+  reviewed definition and the app has no runtime that executes one, so there is nothing to offer.
+  The seven built-in specialists and published workflows are.
 
 ### D. Clearer words and progress (small-medium)  — Rec 8, 9
 

@@ -116,7 +116,7 @@ export function BusinessDashboard() {
         <article className="qs-panel qs-dashboard-panel" aria-labelledby="quick-actions-title">
           <div className="qs-dashboard-section-heading"><div><p className="qs-eyebrow">Move work forward</p><h2 id="quick-actions-title">Quick actions</h2></div></div>
           <div className="qs-dashboard-actions">
-            <Link href="/planning" className="qs-dashboard-action"><span aria-hidden="true">＋</span><span><strong>Plan an initiative</strong><small>Describe a business outcome and review the proposed work.</small></span><b aria-hidden="true">→</b></Link>
+            <button type="button" className="qs-dashboard-action" onClick={() => window.dispatchEvent(new Event('quicksilver:open-chat'))}><span aria-hidden="true">＋</span><span><strong>Plan an initiative</strong><small>Describe an outcome in the chat, then press the plan card to create it.</small></span><b aria-hidden="true">→</b></button>
             <Link href="/workflows" className="qs-dashboard-action"><span aria-hidden="true">◇</span><span><strong>Automate a process</strong><small>Build, validate, and publish a governed workflow.</small></span><b aria-hidden="true">→</b></Link>
             <Link href="/monitoring" className="qs-dashboard-action"><span aria-hidden="true">◷</span><span><strong>Check activity and cost</strong><small>See workflow runs, model calls and alerts.</small></span><b aria-hidden="true">→</b></Link>
             <Link href="/agents" className="qs-dashboard-action"><span aria-hidden="true">◎</span><span><strong>Manage your agents</strong><small>Review the published worker catalog and drafts.</small></span><b aria-hidden="true">→</b></Link>

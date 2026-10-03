@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { test } from 'node:test'
 
 const page = readFileSync(new URL('../components/business-dashboard.tsx', import.meta.url), 'utf8')
-const planningPage = readFileSync(new URL('../app/planning/page.tsx', import.meta.url), 'utf8')
+const nextConfig = readFileSync(new URL('../next.config.mjs', import.meta.url), 'utf8')
 const routeGuard = readFileSync(new URL('./route-guard.ts', import.meta.url), 'utf8')
 
 test('home is an operating dashboard backed by recorded company data', () => {
@@ -20,18 +20,17 @@ test('home is an operating dashboard backed by recorded company data', () => {
   assert.match(page, /multi-tenant hosting remains gated/i)
 })
 
-test('the objective and planning console is preserved at its own route', () => {
-  assert.match(planningPage, /<h1 className="qs-page-heading">Turn intent into governed action\.<\/h1>/)
-  assert.match(planningPage, /id="business-objective"/)
-  assert.match(planningPage, /Create plan/)
-  assert.match(planningPage, /disabled=\{busy \|\| objective\.trim\(\)\.length < 3 \|\| !signedIn\}/)
+test('the old planning route redirects to decisions, because planning now happens in the chat', () => {
+  assert.match(nextConfig, /source: '\/planning', destination: '\/decisions'/)
+  assert.equal(existsSync(new URL('../app/planning', import.meta.url)), false)
 })
 
-test('business dashboard links to each existing workspace and preserved planning console', () => {
-  for (const href of ['/planning', '/decisions', '/workflows', '/monitoring', '/agents']) {
+test('business dashboard links to each workspace, and planning opens the chat', () => {
+  for (const href of ['/decisions', '/workflows', '/monitoring', '/agents']) {
     assert.match(page, new RegExp(`href="${href}"`), `${href} should remain reachable from the dashboard`)
   }
   assert.match(page, /Quick actions/)
+  assert.match(page, /quicksilver:open-chat/)
 })
 
 test('dashboard requires the existing tab-scoped principal and has useful loading/error states', () => {

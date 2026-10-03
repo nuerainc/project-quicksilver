@@ -51,7 +51,7 @@ test('a note is sent only on the action route, and a self-approval note must be 
 test('a changed policy is said aloud, a missing explanation is explained, and the explanation panel is the same one planning shows', () => {
   assert.match(detail, /A policy changed since this was planned/)
   assert.match(detail, /planned before explanations were kept/)
-  assert.match(detail, /<WhyPanel why=\{detail\.why\} defaultOpen \/>/)
+  assert.match(detail, /<WhyPanel why=\{detail\.why\} defaultOpen objective=/)
 })
 
 test('after an action the detail, the list and the shared needs-you list are refreshed', () => {
@@ -76,12 +76,10 @@ test('the detail route returns what an approval covers and whether policy moved,
   assert.match(one, /viewer: \{ id: caller\.principalId, soleOperator:/)
 })
 
-test('the chat says before you type that Plan needs a permission you lack, and the planning box is empty outside demo mode', () => {
+test('the chat says before you type that Plan needs a permission you lack, and the plan card is disabled with the reason', () => {
   const widget = read('../components/agent-chat-widget.tsx')
   assert.match(widget, /const cannotPlan = permissions !== null && !permissions\.includes\('decision:propose'\)/)
-  assert.match(widget, /disabled=\{busy \|\| cannotPlan\}/)
+  assert.match(widget, /blockedReason=\{offer\.kind === 'plan' && cannotPlan/)
   assert.match(widget, /Planning needs decision:propose/)
-  const planning = read('../app/planning/page.tsx')
-  assert.match(planning, /DEMO \? 'Reduce production downtime/)
-  assert.match(planning, /placeholder="For example:/)
+  assert.match(widget, /disabled=\{running \|\| tooShort \|\| !!blockedReason\}/)
 })

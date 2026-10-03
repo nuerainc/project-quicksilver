@@ -41,9 +41,30 @@ Company-model questions go through the Sanity Context tools, as before.
 
 - It cannot read the host's approved actions, Genesis experiments, hosting or media; the web app
   does not talk to the host.
-- It does not stream, and a conversation is kept only in the open panel.
+- It does not stream. A conversation is kept for the tab (it survives closing the panel and a reload) and
+  is gone when the tab closes.
+- Published catalog agents cannot be run from chat: a catalog entry is a reviewed definition, and the
+  app has no runtime that executes one. Only the seven built-in specialists and published workflows
+  can be offered.
 - Whether the Sanity dataset behind the company-model tools includes decision documents is not
   assumed: decisions come from the app tools.
+
+## One chat, with cards for work
+
+There are no Ask, Plan or Work modes. Every turn goes to the assistant. When the person describes
+work, the assistant returns `offers`: up to three cards of kind `plan`, `specialist` or `workflow`.
+The app validates each one (a known specialist, a well-formed workflow id, 3 to 2,000 characters)
+and shows it in full with the text editable. **Nothing happens until the person presses the card's
+button.** The press calls the app's own route (`/api/plan`, `/api/agents/run`, `/api/workflows/run`)
+with the person's credentials and the text they saw, so the audit trail shows a person and a
+misread question costs a click, not a record. There is no offer kind for approving, rejecting,
+executing, publishing or rolling back. A plan card is disabled, with the reason, for a person who
+lacks `decision:propose`.
+
+The chat is told which page is open (a plain page, or `/decisions?id=<id>`) so "explain this
+decision" works. The panel has Stop, Try again and New conversation, and a refused near-miss on a
+decision page has "Try again with this change", which opens the chat with the request filled in.
+`/planning` redirects to `/decisions`.
 
 ## What needs you
 

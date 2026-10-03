@@ -3,7 +3,7 @@
  * reading, as the person asking: every tool it uses is one of the app's own read routes, run with
  * that person's credentials (lib/chat-app-fetch.ts). It cannot approve, execute or change anything.
  *
- * Request body: { message: string, history?: [{ question, answer }] }   (the last six turns are used)
+ * Request body: { message: string, history?: [{ question, answer }], page?: string }   (the last six turns are used)
  * Response:     { answer, links[], confidence, audit, telemetry, nqc }
  */
 
@@ -13,6 +13,7 @@ import { safeErrorName } from '@/lib/safe-log'
 import { APP_TOOL_NAMES, askAssistant, buildAppTools, estimateModelCostUsd } from '@quicksilver/agent'
 import { evaluateNqcRequest } from '@quicksilver/kernel'
 import { appFetchFor } from '@/lib/chat-app-fetch'
+import { PAGE_HINT } from '@/lib/chat-request'
 import { persistEvaluations } from '@/lib/evaluation-store'
 import { guardWebRoute } from '@/lib/route-guard'
 import { persistTraceSpans } from '@/lib/telemetry-store'
@@ -26,7 +27,7 @@ export async function POST(req: Request) {
 
   let body: unknown
   try { body = await req.json() } catch { return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 }) }
-  const { message, history } = (body ?? {}) as { message?: unknown; history?: unknown }
+  const { message, history, page } = (body ?? {}) as { message?: unknown; history?: unknown; page?: unknown }
   if (typeof message !== 'string' || message.trim().length < 2 || message.length > 2_000) {
     return NextResponse.json({ error: 'message must be a string of 2 to 2,000 characters.' }, { status: 400 })
   }
@@ -39,7 +40,7 @@ export async function POST(req: Request) {
   const startedAt = Date.now()
   try {
     const fetchApp = appFetchFor(req)
-    const result = await askAssistant(message, { history: turns, buildAppTools: (callLog) => buildAppTools(fetchApp, callLog), signal: req.signal })
+    const result = await askAssistant(message, { history: turns, buildAppTools: (callLog) => buildAppTools(fetchApp, callLog), signal: req.signal, ...(typeof page === 'string' && PAGE_HINT.test(page) && page.length <= 200 ? { page } : {}) })
     const modelSpanId = randomUUID()
     const governance = evaluateNqcRequest({
       agentId: 'nuera-quicksilver:assistant',
@@ -66,6 +67,7 @@ export async function POST(req: Request) {
       answer: result.answer,
       links: result.links,
       showAttention: result.showAttention,
+      offers: result.offers,
       confidence: result.confidence,
       toolsUsed: [...new Set(result.toolCalls.map((call) => call.name))],
       audit: { persisted: audit.persisted, evaluationRecordIds: audit.ids, ...(audit.error ? { error: audit.error } : {}) },
