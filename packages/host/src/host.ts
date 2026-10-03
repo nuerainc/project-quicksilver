@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs'
 import type { AddressInfo } from 'node:net'
 import { dirname, join } from 'node:path'
 
-import { AccessController, type AccessDecision, type Principal } from '@quicksilver/kernel/identity'
+import { AccessController, type AccessDecision, type Permission, type Principal } from '@quicksilver/kernel/identity'
 import { StaticTokenIdentityProvider, type TokenPrincipalConfig } from '@quicksilver/kernel/identity/tokens'
 import {
   InMemoryWorkflowRunStore,
@@ -25,7 +25,8 @@ import { createHostMetrics, type HostMetrics } from './metrics.ts'
 import { SecretsVault, VaultError } from './vault.ts'
 import { handleIntentRoute, type IntentApiDeps } from './intent-api.ts'
 import { handleShadowRoute, type ShadowApiDeps } from './shadow-api.ts'
-import { handleGenesisRoute, type GenesisApiDeps } from './genesis-api.ts'
+import { handleGenesisRoute, withLock, type GenesisApiDeps } from './genesis-api.ts'
+import { handleHostingRoute, teardownSitesForExperiment, type HostingApiDeps } from './hosting-api.ts'
 import { genesisPaymentWebhookSink } from './genesis-payment-webhook.ts'
 import { COMMERCE_KEY_VAULT_NAME, createStripeCommerceClient, type StripeCommerceClient } from './genesis-commerce.ts'
 import { handleDecisionRoute, type DecisionApiDeps } from './decisions-api.ts'
@@ -69,6 +70,8 @@ export interface HostDependencies {
   shadow?: ShadowApiDeps
   /** Genesis run (M5): records and evaluates only. Routes return 404 when absent. */
   genesis?: GenesisApiDeps
+  /** P-026 experiment hosting. Needs `genesis` too (its review gate and experiments). Routes return 404 when either is absent. */
+  hosting?: HostingApiDeps
   /** Aura decision journal: decisions the provider logs, plus judged shadow verdicts. Routes return 404 when absent. */
   decisions?: DecisionApiDeps
   /**
@@ -77,6 +80,8 @@ export interface HostDependencies {
    */
   tasks?: Omit<TaskServiceDeps, 'tenantId' | 'access' | 'runs' | 'rateLimit' | 'now'> & { clients?: TaskClientRegistry }
 }
+
+const HOSTING_BODY_BYTES = 8 * 1024 * 1024
 
 const CONSOLE_HEADERS = {
   'content-security-policy': "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; img-src 'self'; form-action 'none'; base-uri 'none'; frame-ancestors 'none'",
@@ -542,7 +547,33 @@ export class QuicksilverHost {
         ...(vault ? { vaultNames: async () => (await vault.list(this.hostPrincipal)).filter((s) => !s.disabled).map((s) => s.name) } : {}),
         ...this.deps.genesis,
         ...(commerce ? { commerce } : {}),
+        // When an experiment ends, its hosted sites come down (P-026).
+        ...(this.deps.hosting && !g.onExperimentEnded ? { onExperimentEnded: async (experimentId: string, status: string) => { await teardownSitesForExperiment(this.deps.hosting!, this.config.tenantId, experimentId, `Experiment "${experimentId}" ended (${status}).`, () => new Date(this.deps.now?.() ?? Date.now()), withLock) } } : {}),
         ...(this.deps.now ? { now: this.deps.now } : {}),
+      })
+      if (handled) return handled
+    }
+
+    // Experiment hosting (P-026): a record until a human publishes it; needs the Genesis run's review gate
+    if (parts[1] === 'hosting' && this.deps.hosting && this.deps.genesis) {
+      const genesis = this.deps.genesis
+      const can = (p: Permission) => this.access.authorize(principal, p, { tenantId: this.config.tenantId, kind: 'genesis', id: genesis.config.runId })
+      const needAny = (...ps: Permission[]) => {
+        const ds = ps.map(can)
+        return ds.some((d) => d.allowed) ? undefined : { status: 403, body: { error: ds[0]!.reasons.join(' ') } }
+      }
+      const handled = await handleHostingRoute({
+        method, parts, principal: { id: principal.id, kind: principal.kind }, tenantId: this.config.tenantId, genesis, hosting: this.deps.hosting,
+        needRead: () => needAny('decision:read'),
+        needPropose: () => needAny('intent:provide', 'decision:propose'),
+        humanOnly: (what) => needAny('intent:provide') ?? (principal.kind === 'human' ? undefined : { status: 403, body: { error: `Only a human ${what}.` } }),
+        bodyOf: async () => {
+          // A release is up to 5 MiB of files (a little over 6.6 MiB as base64), so hosting bodies get their own ceiling.
+          const body = await readJson(req, Math.max(this.config.http.maxBodyBytes, HOSTING_BODY_BYTES))
+          return body.ok ? { ok: true as const, value: (body.value ?? {}) as Record<string, unknown> } : { ok: false as const, res: { status: body.status, body: { error: body.error } } }
+        },
+        now: () => new Date(this.deps.now?.() ?? Date.now()),
+        withLock,
       })
       if (handled) return handled
     }
@@ -732,6 +763,7 @@ export class QuicksilverHost {
     if (!feature) return true
     if (feature === 'vault') return !!this.vault
     if (feature === 'tasks') return !!this.tasks
+    if (feature === 'hosting') return !!this.deps.hosting && !!this.deps.genesis
     return !!this.deps[feature]
   }
 

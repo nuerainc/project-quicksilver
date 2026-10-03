@@ -103,7 +103,7 @@ These requirements come from the [product definition](NUERA-QUICKSILVER-PRODUCT.
 | WAES review | The NQC WAES gate binds service reviews to exact content, checks proposer/reviewer separation, and blocks on revise/block/missing/stale results; Genesis exposes a model-backed three-component evaluator that persists append-only reviews | Partial: automated contract and fail-closed paths are tested; live-provider calibration, evidence-quality evaluation and operational evidence remain open (P-045) |
 | Small-budget spend risk | Financial tiers start at $1,000 | Missing; a lower tier scale for Genesis runs |
 | Business agent family | Planner, reviewer and query manifests | Missing; research, offer, content, outreach, sales, fulfillment and finance agents, each defined by a manifest |
-| Platform feature baseline | See the tables above; the pass/fail list is [parity tests](platform/parity-tests.md) (123 requirements: 85 covered, 26 partial, 3 missing, 9 needing operational evidence, as of 2026-10-01) | Partial; P-001–P-123 are required for v1.0.0. Three rows remain missing; nine need operational evidence. P-088 (live connectors) is deliberately sequenced last by product-owner decision. P-122/P-123 are in scope by the product owner's explicit direction. |
+| Platform feature baseline | See the tables above; the pass/fail list is [parity tests](platform/parity-tests.md) (123 requirements: 85 covered, 27 partial, 2 missing, 9 needing operational evidence, as of 2026-10-03) | Partial; P-001–P-123 are required for v1.0.0. Two rows remain missing; nine need operational evidence. P-088 (live connectors) is deliberately sequenced last by product-owner decision. P-122/P-123 are in scope by the product owner's explicit direction. |
 
 ## Regression coverage
 

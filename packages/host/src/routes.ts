@@ -27,7 +27,7 @@ import type { Permission } from '@quicksilver/kernel/identity'
  * - `tasks`: task submission keeps its own per-client bucket (`tasks.rateLimit`).
  */
 
-export type HostRouteFeature = 'intent' | 'shadow' | 'genesis' | 'decisions' | 'tasks' | 'vault'
+export type HostRouteFeature = 'intent' | 'shadow' | 'genesis' | 'decisions' | 'tasks' | 'vault' | 'hosting'
 export type HostRateLimitClass = 'write' | 'model' | 'webhook' | 'tasks'
 
 export type HostRouteAccess =
@@ -110,6 +110,15 @@ export const HOST_ROUTES: readonly HostRoute[] = Object.freeze<HostRoute[]>([
   { method: 'POST', path: '/api/genesis/commerce/proposals', feature: 'genesis', rateLimit: 'write', access: anyOf('intent:provide', 'decision:propose') },
   { method: 'POST', path: '/api/genesis/commerce/proposals/:id/approve', feature: 'genesis', rateLimit: 'write', access: anyOf('intent:provide') },
   { method: 'POST', path: '/api/genesis/commerce/proposals/:id/reject', feature: 'genesis', rateLimit: 'write', access: anyOf('intent:provide') },
+
+  // P-026 experiment hosting: staging is a record; publish, teardown and reconcile are humans-only in the handler. Needs a Genesis run (the review gate) and a hosting adapter.
+  { method: 'GET', path: '/api/hosting/sites', feature: 'hosting', access: anyOf('decision:read') },
+  { method: 'POST', path: '/api/hosting/sites', feature: 'hosting', rateLimit: 'write', access: anyOf('intent:provide', 'decision:propose') },
+  { method: 'GET', path: '/api/hosting/sites/:id', feature: 'hosting', access: anyOf('decision:read') },
+  { method: 'POST', path: '/api/hosting/sites/:id/releases', feature: 'hosting', rateLimit: 'write', access: anyOf('intent:provide', 'decision:propose') },
+  { method: 'POST', path: '/api/hosting/sites/:id/releases/:version/publish', feature: 'hosting', rateLimit: 'write', access: anyOf('intent:provide') },
+  { method: 'POST', path: '/api/hosting/sites/:id/teardown', feature: 'hosting', rateLimit: 'write', access: anyOf('intent:provide') },
+  { method: 'POST', path: '/api/hosting/reconcile', feature: 'hosting', rateLimit: 'write', access: anyOf('intent:provide') },
 
   // ── Runs ──
   { method: 'GET', path: '/api/runs', access: anyOf('run:read') },
