@@ -47,6 +47,7 @@ import type { HostingApiDeps } from './hosting-api.ts'
 import { FileMediaStore, MediaService, MemoryMediaStore, parseMediaPolicy } from './media.ts'
 import { FileActionStore, MemoryActionStore, type ActionPolicy, type ActionStore } from './actions.ts'
 import { dryRunTools, type ToolDefinition } from './tool-executor.ts'
+import { resendNotificationTool, signedWebhookTool } from './tool-adapters.ts'
 import { FileCommerceProposalStore, FilePendingPaymentStore, MemoryCommerceProposalStore, MemoryPendingPaymentStore } from './genesis-store.ts'
 import { SecretsVault, generateMasterKey } from './vault.ts'
 import { taskSetup } from './tasks-setup.ts'
@@ -239,8 +240,10 @@ function buildHosting(config: HostConfig, genesis: GenesisApiDeps | undefined, l
 
 /**
  * P-095 approved actions: on only when QUICKSILVER_ACTIONS_CONFIG names a policy file listing the
- * tools to enable (see deploy/actions/actions.example.json). Every tool that ships is a dry run:
- * approving an action records the decision and a result that says nothing was sent or changed.
+ * tools to enable (see deploy/actions/actions.example.json). A tool is a dry run (approving it records
+ * the decision and a result that says nothing was sent or changed) unless its settings are in the policy
+ * file and its secret is in the environment: `email` makes notification.send really email an allowed
+ * recipient through Resend; `webhook` makes webhook.dispatch really send a signed request to an allowed host.
  * Approval also needs the authorization key (execution.authorizationKeyEnv) to be set.
  */
 function buildActions(config: HostConfig, log: Logger): { store: ActionStore; tools: ToolDefinition[]; policy: Partial<ActionPolicy> & { enabledTools: string[] } } | undefined {
@@ -256,7 +259,27 @@ function buildActions(config: HostConfig, log: Logger): { store: ActionStore; to
     log.error('the actions policy is not valid JSON; the action routes are off', { path })
     return undefined
   }
-  const tools = dryRunTools()
+  let tools = dryRunTools()
+  // A real adapter replaces the dry run for its tool only when its settings are in the policy file AND its secret is in the environment.
+  const swap = (tool: ToolDefinition) => { tools = tools.map((t) => (t.manifest.id === tool.manifest.id ? tool : t)) }
+  const emailCfg = raw.email as { from?: unknown; recipients?: unknown; apiKeyEnv?: unknown } | undefined
+  if (emailCfg) {
+    const key = process.env[typeof emailCfg.apiKeyEnv === 'string' ? emailCfg.apiKeyEnv : 'QUICKSILVER_EMAIL_API_KEY']
+    try {
+      if (!key) throw new Error('the API key variable is not set')
+      swap(resendNotificationTool({ apiKey: key, from: String(emailCfg.from), recipients: Array.isArray(emailCfg.recipients) ? emailCfg.recipients.map(String) : [] }))
+      log.warn('notification.send is LIVE: approving one emails an allowed recipient through Resend')
+    } catch (e) { log.error('notification.send stays a dry run: the email settings are incomplete', { reason: (e as Error).message }) }
+  }
+  const hookCfg = raw.webhook as { allowedHosts?: unknown; secretEnv?: unknown } | undefined
+  if (hookCfg) {
+    const secret = process.env[typeof hookCfg.secretEnv === 'string' ? hookCfg.secretEnv : 'QUICKSILVER_ACTIONS_WEBHOOK_SECRET']
+    try {
+      if (!secret) throw new Error('the signing secret variable is not set')
+      swap(signedWebhookTool({ allowedHosts: Array.isArray(hookCfg.allowedHosts) ? hookCfg.allowedHosts.map(String) : [], signingSecret: secret }))
+      log.warn('webhook.dispatch is LIVE: approving one sends a signed request to an allowed host')
+    } catch (e) { log.error('webhook.dispatch stays a dry run: the webhook settings are incomplete', { reason: (e as Error).message }) }
+  }
   const known = new Set(tools.map((t) => t.manifest.id))
   const enabled = raw.enabledTools
   if (!Array.isArray(enabled) || enabled.some((id) => typeof id !== 'string' || !known.has(id))) {
@@ -268,7 +291,7 @@ function buildActions(config: HostConfig, log: Logger): { store: ActionStore; to
     ? resolve(baseDir, process.env.QUICKSILVER_ACTIONS_DIR)
     : config.store.kind === 'file' ? join(dirname(config.store.path), 'genesis') : undefined
   if (!dir) log.warn('action proposals are kept in memory; use a file store or QUICKSILVER_ACTIONS_DIR to keep them')
-  log.warn('approved actions are on; every tool is a dry run, so approving one sends and changes nothing')
+  log.warn(`approved actions are on; live tools: ${tools.filter((t) => t.live).map((t) => t.manifest.id).join(', ') || 'none (every tool is a dry run)'}`)
   return {
     store: dir ? new FileActionStore(dir, config.tenantId) : new MemoryActionStore(config.tenantId),
     tools,

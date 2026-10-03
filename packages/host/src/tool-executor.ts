@@ -41,6 +41,12 @@ export type ToolRun = (call: ToolCall) => Promise<unknown>
 export interface ToolDefinition {
   manifest: ToolManifest
   run: ToolRun
+  /** True when the adapter really sends or changes something; false (or absent) for a dry run. */
+  live?: boolean
+  /** A digest of the adapter's settings (allowed recipients or hosts). A change makes pending proposals stale. */
+  configDigest?: string
+  /** A reason this input can never run, or undefined. Checked when an action is proposed so nobody approves something that cannot run. */
+  validate?: (input: unknown) => string | undefined
 }
 
 export interface ExpectedGrant {
@@ -88,6 +94,7 @@ export const sha256 = (value: unknown): string => `sha256:${createHash('sha256')
 export class EffectfulToolExecutor {
   readonly registry = new ToolRegistry()
   private readonly runs = new Map<string, ToolRun>()
+  private readonly definitions = new Map<string, ToolDefinition>()
   private readonly used = new Set<string>()
   private readonly signingKey?: AuthorizationSigningKey
   private readonly auditSink?: (record: ToolExecutionAudit) => Promise<void> | void
@@ -101,11 +108,13 @@ export class EffectfulToolExecutor {
     for (const tool of options.tools) {
       this.registry.register(tool.manifest)
       this.runs.set(tool.manifest.id, tool.run)
+      this.definitions.set(tool.manifest.id, tool)
     }
   }
 
   has(toolId: string): boolean { return this.runs.has(toolId) && this.registry.get(toolId) !== undefined }
   manifest(toolId: string): Readonly<ToolManifest> | undefined { return this.registry.get(toolId)?.manifest }
+  definition(toolId: string): ToolDefinition | undefined { return this.definitions.get(toolId) }
   toolIds(): string[] { return this.registry.list().map((t) => t.manifest.id) }
   auditLog(): readonly ToolExecutionAudit[] { return [...this.audit] }
 

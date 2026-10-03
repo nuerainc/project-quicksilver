@@ -2,5 +2,14 @@
   "enabledTools": ["notification.send"],
   "proposalTtlMs": 86400000,
   "approvalTtlMs": 900000,
-  "maxInputBytes": 16384
+  "maxInputBytes": 16384,
+  "email": {
+    "from": "quicksilver@your-domain.example",
+    "recipients": ["founder@your-domain.example"],
+    "apiKeyEnv": "QUICKSILVER_EMAIL_API_KEY"
+  },
+  "webhook": {
+    "allowedHosts": ["hooks.your-domain.example"],
+    "secretEnv": "QUICKSILVER_ACTIONS_WEBHOOK_SECRET"
+  }
 }
