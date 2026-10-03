@@ -103,6 +103,10 @@ typically holds `intent-provider` and `supervisor`.
 
 ## Not covered yet
 
-A console control to start sign-in, evidence that the session store persists
-across a deploy, and a recorded live callback test: P-108 stays partial until
-those exist.
+A console control to start sign-in, and evidence that sessions survive a later
+deploy: P-108 stays partial until those exist.
+
+A live Google sign-in passed on the production site on 2026-10-03: an account
+that was not on the allowlist was refused and logged by issuer and subject, and
+after its row was added it signed in and `/api/auth/session` returned its
+principal, tenant and role.
