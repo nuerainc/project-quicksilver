@@ -105,6 +105,8 @@ export type { EvaluationRecord, EvaluationRecordInput, EvaluationSource } from '
 export { governMemoryWrite, writeGovernedMemory } from './nqc/memory.ts'
 export type { GovernedMemoryEntry, MemoryGovernanceDecision, MemoryKind } from './nqc/memory.ts'
 export { selectRoute, updateModelPerformance } from './nqc/routing.ts'
+export { MemoryStore, FileMemoryStore } from './nqc/memory-store.ts'
+export type { MemoryActor, MemoryStoreEvent, MemoryWriteContext, MemoryWriteResult, RecalledMemory, StoredMemory } from './nqc/memory-store.ts'
 export type { ModelPerformanceProfile, RoutingRequest, RoutingDecision, RoutingOutcome } from './nqc/routing.ts'
 
 export * from './tools/registry.ts'

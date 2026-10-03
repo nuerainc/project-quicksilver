@@ -1,5 +1,6 @@
 import {
   evaluateNqcRequest,
+  type MemoryStore,
   type EvaluationTaskType,
   type EvaluatorToolCall,
   type ImpactLevel,
@@ -16,6 +17,11 @@ export interface NueraAgentRequest<Input = unknown> {
   context?: string[]
   impactLevel?: ImpactLevel
   routing?: RoutingRequest
+  /**
+   * Where governed lessons from this run are kept. Optional: without it nothing is stored.
+   * The store runs every write through the memory governor; it is never read by authorization.
+   */
+  memory?: MemoryStore
   signal?: AbortSignal
 }
 
@@ -48,6 +54,8 @@ export interface GovernedNueraAgentResult<Output = unknown> extends NueraAgentRe
   agentId: string
   agentVersion: number
   evaluation: NqcEvaluationResponse
+  /** What happened to each memory the evaluation proposed. Empty when no store was supplied. */
+  memoryWrites: Array<{ id: string; stored: boolean; reasons: string[] }>
   /** Only ALLOW is eligible for automatic continuation; ESCALATE is not approval. */
   mayContinueAutomatically: boolean
 }
@@ -89,11 +97,31 @@ export async function executeGovernedAgent<Input, Output>(
     routing: request.routing,
   })
 
+  // Lessons the evaluation proposed are kept only through the store, which re-runs the
+  // governor. A store failure must not fail the agent's work, so it is reported, not thrown.
+  const memoryWrites: GovernedNueraAgentResult['memoryWrites'] = []
+  if (request.memory) {
+    for (const update of evaluation.memoryUpdates) {
+      const safe = update.governance.safeEntry
+      if (!safe) {
+        memoryWrites.push({ id: 'unknown', stored: false, reasons: update.governance.reasons })
+        continue
+      }
+      try {
+        const written = request.memory.write(safe, { proposedBy: { id: agent.id, kind: 'agent' } })
+        memoryWrites.push({ id: safe.id, stored: written.stored || written.unchanged, reasons: written.decision.reasons })
+      } catch (error) {
+        memoryWrites.push({ id: safe.id, stored: false, reasons: [`The memory store failed: ${(error as Error).message.slice(0, 200)}`] })
+      }
+    }
+  }
+
   return {
     ...result,
     agentId: agent.id,
     agentVersion: agent.version,
     evaluation,
+    memoryWrites,
     mayContinueAutomatically: evaluation.safetyDecision === 'ALLOW',
   }
 }
