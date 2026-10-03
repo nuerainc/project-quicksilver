@@ -502,12 +502,12 @@ the provider's own hand-over.
 | Status | Count |
 |---|---|
 | covered | 85 |
-| partial | 28 |
-| missing | 1 |
+| partial | 29 |
+| missing | 0 |
 | needs operational evidence | 9 |
 | **Total** | **123** |
 
-As of 2026-10-01, the matrix has 85 covered, 28 partial, 1 missing, and 9
+As of 2026-10-01, the matrix has 85 covered, 29 partial, 0 missing, and 9
 requirements that need operational evidence. P-026 moved from missing to
 partial (2026-10-03): static experiment pages can be staged as immutable
 releases, published by a human behind the review gate, and torn down with their
@@ -540,7 +540,7 @@ pre-1.0 OpenAPI contract and route/method drift test, but stable 1.0.0
 semantics remain unfinished. P-119's agent draft/review/publish API is present;
 its former “API absent” gap is corrected, while the local Go toolchain and CI
 evidence for the current working tree remain outstanding.
-P-088 remains missing: live business connectors. P-025 (media) is partial:
+P-088 moved from missing to partial (2026-10-03): read-only live Stripe, HubSpot and QuickBooks connectors exist and are tested against a fake API; no real-account run is recorded. P-025 (media) is partial:
 the contract and controls exist, with no real provider.
 P-026 (experiment hosting) is partial: the contract, stores and a file adapter
 exist, with no real deploy target. P-027 (commerce) is partial: incoming Stripe payments are
