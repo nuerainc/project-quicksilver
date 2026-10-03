@@ -5,6 +5,7 @@
  *   npm run onboard -- answer <intentId> <variableId> "<your answer>"
  *   npm run onboard -- dismiss <intentId> <variableId>      (a question not worth asking)
  *   npm run onboard -- connect <intentId> <ledger.csv>
+ *   npm run onboard -- connect-live <intentId> stripe|hubspot|quickbooks [--since YYYY-MM-DD]
  *   npm run onboard -- backtest <intentId>
  *   npm run onboard -- recommend <intentId> <department> "<what to do>" [--kernel execute-autonomously|request-approval|reject] [--risk 0-5]
  *   npm run onboard -- judge <intentId> <recommendationId> accepted|modified|rejected ["note"]
@@ -68,6 +69,8 @@ import { decisionsAsExamples, FileDecisionStore, FilePendingStore, newDecisionId
 import { availableTransitions, nextAutomaticTransition, type Facts } from '@quicksilver/kernel/process'
 import { validatePlaybook, type PlaybookDefinition } from '@quicksilver/kernel/playbooks'
 import { fileRankerStore } from './ranker-store.ts'
+import { connectLive, LIVE_PROVIDERS, type LiveProvider } from './live-connect.ts'
+import { LiveConnectorError } from '@quicksilver/aura'
 import { judge, recommend, recordOutcome, shadowFacts, shadowReport, type Outcome, type ShadowLog, type Verdict } from '@quicksilver/kernel/playbooks/shadow'
 import { labConnectorPatterns, readLabBoundaries } from './lab-boundaries.ts'
 import { CLI_VALUE_FLAGS, parseCommandArgs } from './cli-args.ts'
@@ -147,6 +150,39 @@ switch (cmd) {
     await writeJsonFile(join(workDir(id), 'transactions.json'), { source: reading.source, transactions: reading.transactions })
     await writeJsonFile(join(workDir(id), 'connectors.json'), { connected: [reading.source] })
     console.log(`Connected ${reading.source}: ${reading.transactions.length} transactions.`)
+    for (const o of reading.observations) console.log(`  ${o.label}: ${o.value}${o.unit ? ` ${o.unit}` : ''}`)
+    for (const r of result.refused) console.log(`  refused ${r.variableId}: ${r.reasons.join(' ')}`)
+    break
+  }
+  case 'connect-live': {
+    const [id, provider] = positional
+    if (!id || !provider || !(LIVE_PROVIDERS as readonly string[]).includes(provider)) fail(`Usage: connect-live <intentId> ${LIVE_PROVIDERS.join('|')} [--since YYYY-MM-DD]`)
+    const graph = await graphOrFail(id)
+    const tokenPath = join(dir, 'connectors', 'quickbooks-refresh-token.json')
+    let reading
+    try {
+      reading = await connectLive(provider as LiveProvider, {
+        env: process.env,
+        fetcher: (url, init) => fetch(url, init),
+        refreshTokens: {
+          load: async () => (await readJsonFile<{ token?: string }>(tokenPath, {})).token,
+          save: (token) => writeJsonFile(tokenPath, { token, savedAt: new Date().toISOString() }),
+        },
+        ...(flag('--since') ? { since: flag('--since')! } : {}),
+      })
+    } catch (e) {
+      if (e instanceof LiveConnectorError) fail(e.message)
+      throw e
+    }
+    for (const w of reading.warnings) console.log(`  ! ${w}`)
+    const result = observeInto(graph, reading)
+    await graphs.put(result.graph)
+    // Only a ledger feeds the revenue backtest, the same as `connect`.
+    if (reading.kind === 'ledger') await writeJsonFile(join(workDir(id), 'transactions.json'), { source: reading.source, transactions: reading.transactions })
+    const connectedPath = join(workDir(id), 'connectors.json')
+    const connected = await readJsonFile<{ connected: string[] }>(connectedPath, { connected: [] })
+    await writeJsonFile(connectedPath, { connected: [...new Set([...connected.connected, reading.source])] })
+    console.log(`Connected ${reading.source}: ${reading.observations.length} observations, ${reading.transactions.length} transactions. Read only; nothing was changed in ${provider}.`)
     for (const o of reading.observations) console.log(`  ${o.label}: ${o.value}${o.unit ? ` ${o.unit}` : ''}`)
     for (const r of result.refused) console.log(`  refused ${r.variableId}: ${r.reasons.join(' ')}`)
     break
