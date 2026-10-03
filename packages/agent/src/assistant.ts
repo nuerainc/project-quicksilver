@@ -1,6 +1,7 @@
 import { generateText, Output, stepCountIs } from 'ai'
 import { z } from 'zod'
 
+import { BUSINESS_AGENT_DEFINITIONS } from './business-agents.ts'
 import { assertAgentDispatch } from './governance.ts'
 import { isAllowedAppLink } from './app-tools.ts'
 import { getMode, isLlmConfigured, resolveId } from './models.ts'
@@ -17,12 +18,37 @@ export const AssistantResultSchema = z.object({
   /** Show the live "needs you" list, with its buttons, under the answer. The list is built by the app from records, never from this text. */
   showAttention: z.boolean(),
   confidence: z.number().min(0).max(1),
+  /** Work the person asked for, offered as a card. Nothing runs until they press the card's button. */
+  offers: z.array(z.object({ kind: z.enum(['plan', 'specialist', 'workflow']), target: z.string().max(128), text: z.string().max(2_000) })).max(3),
 })
 export type AssistantResult = z.infer<typeof AssistantResultSchema>
 
+export type AssistantOffer =
+  | { kind: 'plan'; objective: string }
+  | { kind: 'specialist'; agentKey: string; objective: string }
+  | { kind: 'workflow'; workflowId: string; input: string }
+
+const WORKFLOW_ID = /^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/
+
+/** Keeps only offers the app's own routes would accept; the model's text is shown to the person, never run. */
+export function cleanOffers(raw: AssistantResult['offers'] | undefined): AssistantOffer[] {
+  const out: AssistantOffer[] = []
+  for (const offer of raw ?? []) {
+    const text = offer.text.trim()
+    if (text.length < 3 || text.length > 2_000) continue
+    if (offer.kind === 'plan') out.push({ kind: 'plan', objective: text })
+    else if (offer.kind === 'specialist') {
+      const agentKey = offer.target.trim().toLowerCase()
+      if (agentKey === 'auto' || agentKey in BUSINESS_AGENT_DEFINITIONS) out.push({ kind: 'specialist', agentKey, objective: text })
+    } else if (offer.kind === 'workflow' && WORKFLOW_ID.test(offer.target.trim())) out.push({ kind: 'workflow', workflowId: offer.target.trim(), input: text })
+  }
+  return out.slice(0, 3)
+}
+
 export interface AssistantTurn { question: string; answer: string }
 
-export interface AssistantOutput extends AssistantResult {
+export interface AssistantOutput extends Omit<AssistantResult, 'offers'> {
+  offers: AssistantOffer[]
   toolCalls: EvaluatorToolCall[]
   modelId: string
   usage: ModelTokenUsage
@@ -35,7 +61,7 @@ export interface AssistantOutput extends AssistantResult {
  */
 export async function askAssistant(
   question: string,
-  options: { signal?: AbortSignal; history?: AssistantTurn[]; buildAppTools: (callLog: EvaluatorToolCall[]) => Record<string, unknown> },
+  options: { signal?: AbortSignal; history?: AssistantTurn[]; page?: string; buildAppTools: (callLog: EvaluatorToolCall[]) => Record<string, unknown> },
 ): Promise<AssistantOutput> {
   assertAgentDispatch('nuera-quicksilver:assistant', 'reasoning', 'low')
   if (!isLlmConfigured()) throw new Error('No LLM configured for the chat assistant.')
@@ -56,7 +82,7 @@ export async function askAssistant(
       return generateText({
         model,
         system: ASSISTANT_SYSTEM_PROMPT,
-        prompt: `${context}Question: ${question}`,
+        prompt: `${context}${options.page ? `The person has this page open (for "this" and "here"): ${options.page}\n\n` : ''}Question: ${question}`,
         abortSignal: options.signal,
         tools: tools as unknown as Parameters<typeof generateText>[0]['tools'],
         experimental_output: Output.object({ schema: AssistantResultSchema }),
@@ -71,6 +97,7 @@ export async function askAssistant(
       showAttention: parsed.showAttention === true,
       links: parsed.links.filter((link) => isAllowedAppLink(link.href)).slice(0, 6),
       confidence: parsed.confidence,
+      offers: cleanOffers(parsed.offers),
       toolCalls, modelId: selectedModelId, usage: normalizeModelTokenUsage(result.totalUsage),
     }
   } finally {

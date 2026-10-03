@@ -4,32 +4,37 @@ import Link from 'next/link'
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
 
 import { authFailureMessage, consoleHeaders, resolveConsoleAccess } from '@/lib/console-auth'
-import { chatRequest, type ChatMode } from '@/lib/chat-request'
-import { businessAgentContext } from '@/lib/business-agent-context'
-import type { BusinessAgentKey } from '@quicksilver/agent'
-import type { BusinessAgentChoice } from '@/lib/business-agent-request'
+import { chatTurnRequest, offerRequest, pageHint } from '@/lib/chat-request'
+import { loadChat, saveChat } from '@/lib/chat-store'
+import type { AssistantOffer, BusinessAgentKey } from '@quicksilver/agent'
 import { usePathname } from 'next/navigation'
 import { signInPageHref } from '@/lib/session-control'
 import { AttentionList } from '@/components/attention-list'
+import { inboxStore } from '@/components/use-inbox'
 import styles from './agent-chat-widget.module.css'
 
 type QueryResponse = {
   answer: string
   links: Array<{ label: string; href: string }>
   showAttention?: boolean
+  offers?: AssistantOffer[]
   confidence: number
   toolsUsed?: string[]
   audit?: { persisted: boolean; evaluationRecordIds: string[] }
   nqc?: { reasoningScore: number; hallucinationRisk: string; brittleness: string; safetyDecision: string; issues: string[] }
 }
 
+type WorkflowRunResponse = { status: string; error?: string; publishedWorkflow?: { version: number }; steps: Array<{ nodeId: string; status: string; detail?: string }> }
+
+/** What came of pressing an offer card, kept beside the card so the conversation reads in order. */
+type OfferResult = { plan?: PlanChatResponse; agent?: BusinessAgentResponse; workflow?: WorkflowRunResponse }
+
 type ChatMessage = {
   id: string
   question: string
-  mode: ChatMode
   response?: QueryResponse
-  plan?: PlanChatResponse
-  agent?: BusinessAgentResponse
+  /** Results of offer cards pressed on this message, by offer index. */
+  offerResults?: Record<number, OfferResult>
 }
 
 type BusinessAgentResponse = {
@@ -43,14 +48,6 @@ type BusinessAgentResponse = {
   actionPolicy: 'proposal-only'
   nqc?: { safetyDecision: string; reasoningScore: number; issues: string[] }
 }
-
-const BUSINESS_AGENTS: Array<{ key: BusinessAgentChoice; label: string }> = [
-  { key: 'auto', label: 'Auto select' },
-  { key: 'research', label: 'Research' }, { key: 'offer', label: 'Offer design' },
-  { key: 'content', label: 'Content' }, { key: 'outreach', label: 'Outreach' },
-  { key: 'sales', label: 'Sales' }, { key: 'fulfillment', label: 'Fulfillment' },
-  { key: 'finance', label: 'Finance' },
-]
 
 type PlanChatResponse = {
   decomposition: { objective: string; constraints: string[]; successMetrics: string[]; candidateWorkstreams: string[] }
@@ -71,17 +68,22 @@ export function AgentChatWidget() {
   const [expanded, setExpanded] = useState(false)
   const [tokenPresent, setTokenPresent] = useState(false)
   const [question, setQuestion] = useState('')
-  const [mode, setMode] = useState<ChatMode>('ask')
-  // What the signed-in person may do, so a mode they cannot use says so before they type.
+  // What the signed-in person may do, so a card they cannot use says so before they press it.
   const [permissions, setPermissions] = useState<string[] | null>(null)
   const cannotPlan = permissions !== null && !permissions.includes('decision:propose')
-  const [agentKey, setAgentKey] = useState<BusinessAgentChoice>('auto')
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const triggerRef = useRef<HTMLButtonElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const threadRef = useRef<HTMLDivElement>(null)
+  const abortRef = useRef<AbortController | null>(null)
+  const lastAsked = useRef<string | null>(null)
+  const restored = useRef(false)
+
+  // The conversation lasts for this tab: closing the panel or reloading keeps it.
+  useEffect(() => { setMessages(loadChat<ChatMessage>()); restored.current = true }, [])
+  useEffect(() => { if (restored.current) saveChat(messages) }, [messages])
 
   useEffect(() => {
     if (open) {
@@ -91,7 +93,12 @@ export function AgentChatWidget() {
   }, [open])
 
   useEffect(() => {
-    const openChat = () => { setOpen(true); setExpanded(true) }
+    // Other pages open the chat with a sentence already in the box ("Try again with this change").
+    const openChat = (event: Event) => {
+      setOpen(true); setExpanded(true)
+      const prefill = (event as CustomEvent<{ prefill?: string } | undefined>).detail?.prefill
+      if (typeof prefill === 'string' && prefill.trim()) setQuestion(prefill.slice(0, 2_000))
+    }
     window.addEventListener('quicksilver:open-chat', openChat)
     return () => window.removeEventListener('quicksilver:open-chat', openChat)
   }, [])
@@ -114,7 +121,7 @@ export function AgentChatWidget() {
       return
     }
     if (expanded && event.key === 'Tab') {
-      const focusable = event.currentTarget.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), a[href]')
+      const focusable = event.currentTarget.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), textarea:not(:disabled), a[href]')
       if (!focusable.length) return
       const first = focusable[0]
       const last = focusable[focusable.length - 1]
@@ -123,63 +130,74 @@ export function AgentChatWidget() {
     }
   }
 
-  async function ask(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    const text = question.trim()
+  function stop() { abortRef.current?.abort() }
+
+  async function send(text: string) {
     if (!text || busy) return
     const access = await resolveConsoleAccess()
     if (!access.signedIn) {
       setTokenPresent(false)
-      setError(mode === 'plan'
-        ? 'Sign in with a principal allowed to propose decisions before asking Quicksilver to plan work.'
-        : 'Sign in with a principal that has decision:read to use the business chat.')
+      setError('Sign in with a principal that has decision:read to use the business chat.')
       return
     }
-
     const id = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`
-    const submittedMode = mode
-    setMessages((current) => [...current, { id, question: text, mode: submittedMode }])
+    lastAsked.current = text
+    setMessages((current) => [...current, { id, question: text }])
     setQuestion('')
     setError(null)
     setBusy(true)
+    const controller = new AbortController()
+    abortRef.current = controller
     try {
-      const context = submittedMode === 'agent'
-        ? businessAgentContext(messages.map((message) => ({
-            question: message.question,
-            ...(message.agent ? { summary: message.agent.summary, safetyDecision: message.agent.nqc?.safetyDecision } : {}),
-            ...(message.plan ? { summary: message.plan.reasoning } : {}),
-            ...(message.response ? { summary: message.response.answer } : {}),
-          })))
-        : []
       const history = messages.flatMap((message) => message.response ? [{ question: message.question, answer: message.response.answer }] : [])
-      const chat = chatRequest(submittedMode, text, agentKey, context, history)
-      const path = chat.path
-      const response = await fetch(path, {
+      const chat = chatTurnRequest(text, history, pageHint(pathname, window.location.search))
+      const response = await fetch(chat.path, {
         method: 'POST',
-        headers: consoleHeaders(path, access.token, { 'content-type': 'application/json' }),
+        headers: consoleHeaders(chat.path, access.token, { 'content-type': 'application/json' }),
         body: JSON.stringify(chat.body),
         cache: 'no-store',
+        signal: controller.signal,
       })
       const payload = await response.json().catch(() => ({}))
       if (!response.ok) {
         if (response.status === 401) setTokenPresent(false)
-        const route = submittedMode === 'plan' ? 'plan' : submittedMode === 'agent' ? 'agents/run' : 'chat'
-        const message = authFailureMessage(response.status, route, payload.error, payload.retryAfterSeconds)
-          ?? payload.error
-          ?? payload.detail
-          ?? 'Quicksilver could not answer that question.'
-        throw new Error(message)
+        throw new Error(authFailureMessage(response.status, 'chat', payload.error, payload.retryAfterSeconds) ?? payload.error ?? payload.detail ?? 'Quicksilver could not answer that question.')
       }
-      setMessages((current) => current.map((item) => item.id !== id ? item : submittedMode === 'plan'
-        ? { ...item, plan: payload as PlanChatResponse }
-        : submittedMode === 'agent'
-          ? { ...item, agent: payload as BusinessAgentResponse }
-          : { ...item, response: payload as QueryResponse }))
+      setMessages((current) => current.map((item) => item.id === id ? { ...item, response: payload as QueryResponse } : item))
     } catch (cause) {
-      setError((cause as Error).message || 'Quicksilver could not answer that question.')
+      // A stopped turn leaves no half answer: the question is removed so it can be asked again.
+      if ((cause as Error).name === 'AbortError') {
+        setMessages((current) => current.filter((item) => item.id !== id))
+        setQuestion(text)
+        setError('Stopped. Your question is back in the box.')
+      } else setError((cause as Error).message || 'Quicksilver could not answer that question.')
     } finally {
+      abortRef.current = null
       setBusy(false)
     }
+  }
+
+  function ask(event: FormEvent<HTMLFormElement>) { event.preventDefault(); void send(question.trim()) }
+
+  /** Pressing a card is the person's act: the app's own route runs as them, with the text they saw and may have edited. */
+  async function runOffer(messageId: string, index: number, offer: AssistantOffer, text: string): Promise<string | null> {
+    const access = await resolveConsoleAccess()
+    if (!access.signedIn) { setTokenPresent(false); return 'Sign in again to continue.' }
+    const request = offerRequest(offer, text)
+    try {
+      const response = await fetch(request.path, {
+        method: 'POST',
+        headers: consoleHeaders(request.path, access.token, { 'content-type': 'application/json' }),
+        body: JSON.stringify(request.body),
+        cache: 'no-store',
+      })
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok) return authFailureMessage(response.status, offer.kind === 'plan' ? 'plan' : offer.kind === 'specialist' ? 'agents/run' : 'workflows/run', payload.error, payload.retryAfterSeconds) ?? payload.error ?? payload.detail ?? 'That did not work.'
+      const result: OfferResult = offer.kind === 'plan' ? { plan: payload as PlanChatResponse } : offer.kind === 'specialist' ? { agent: payload as BusinessAgentResponse } : { workflow: payload as WorkflowRunResponse }
+      setMessages((current) => current.map((item) => item.id === messageId ? { ...item, offerResults: { ...item.offerResults, [index]: result } } : item))
+      if (offer.kind === 'plan') inboxStore().refresh()
+      return null
+    } catch { return 'Could not reach the server.' }
   }
 
   return (
@@ -192,19 +210,16 @@ export function AgentChatWidget() {
               <span className={styles.avatar} aria-hidden="true">NQ</span>
               <div>
                 <h2 id="qs-chat-title">Chat with Quicksilver</h2>
-                <p>Ask a question, explore a workspace, or describe work to plan</p>
+                <p>Ask anything, or describe work you want done</p>
               </div>
             </div>
+            {messages.length > 0 && <button type="button" className={styles.expand} onClick={() => { setMessages([]); setError(null) }} aria-label="Start a new conversation" title="Start a new conversation">+</button>}
             <button type="button" className={styles.expand} onClick={() => setExpanded((current) => !current)} aria-label={expanded ? 'Restore chat widget' : 'Expand chat to workspace'} title={expanded ? 'Restore chat widget' : 'Expand chat to workspace'}>{expanded ? '↙' : '↗'}</button>
             <button type="button" className={styles.close} onClick={close} aria-label="Close Quicksilver chat">×</button>
           </header>
 
           <div className={styles.safetyNote}>
-            {mode === 'ask'
-              ? 'Ask reads the app and your company data as you. It can explain and link, and it never approves or changes anything.'
-              : mode === 'plan'
-                ? 'Plan mode creates evaluated proposals for review. It never approves or executes actions.'
-                : 'A business specialist researches and proposes work. It never approves or performs outside actions.'}
+            Quicksilver reads the app and your company data as you. It never approves or changes anything: when you ask for work it offers a card, and nothing happens until you press the card&rsquo;s button.
           </div>
 
           <div className={styles.chatWorkspace}>
@@ -213,18 +228,10 @@ export function AgentChatWidget() {
               <div className={styles.welcome}>
                 {tokenPresent && <AttentionList onNavigate={() => setExpanded(false)} />}
                 <span aria-hidden="true">✦</span>
-                <h3>{mode === 'ask' ? 'What would you like to know?' : mode === 'plan' ? 'What outcome should the business pursue?' : agentKey === 'auto' ? 'Put Quicksilver to work' : `Work with the ${BUSINESS_AGENTS.find((agent) => agent.key === agentKey)?.label ?? 'business'} agent`}</h3>
-                <p>{mode === 'ask'
-                  ? 'Ask what needs your approval, why a decision was refused, how workflows and spend are doing, what you can do, or who and what is in the company.'
-                  : mode === 'plan'
-                    ? 'Describe a goal in plain language. Quicksilver will propose actions, evaluate them, and save decisions for review.'
-                    : 'Give a specialist a task in your own words. You’ll get recommendations, evidence gaps, and questions to resolve.'}</p>
-                <div className={styles.suggestions} aria-label={mode === 'ask' ? 'Example questions' : 'Example objectives'}>
-                  {(mode === 'ask'
-                    ? ['What is waiting for my approval?', 'Why was the last plan refused, and what would change that?', 'How are my workflows doing?', 'What am I allowed to do here?']
-                    : mode === 'plan'
-                      ? ['Reduce operating costs without lowering service quality.', 'Improve on-time delivery over the next quarter.']
-                      : ['Find evidence behind our current sales slowdown.', 'Draft a plan to reduce fulfillment delays.']).map((example) => (
+                <h3>What would you like to know or get done?</h3>
+                <p>Ask what needs your approval, why a decision was refused, or how spend and workflows are doing. Describe an outcome and Quicksilver will offer to plan it or ask a specialist.</p>
+                <div className={styles.suggestions} aria-label="Examples">
+                  {['What is waiting for my approval?', 'Why was the last plan refused, and what would change that?', 'Reduce operating costs without lowering service quality.', 'Find evidence behind our current sales slowdown.'].map((example) => (
                     <button key={example} type="button" onClick={() => setQuestion(example)}>{example}</button>
                   ))}
                 </div>
@@ -234,13 +241,17 @@ export function AgentChatWidget() {
                 <article className={styles.exchange} key={message.id}>
                   <p className={styles.userMessage}>{message.question}</p>
                   {message.response && <QueryAnswer result={message.response} onNavigate={() => setExpanded(false)} />}
-                  {message.plan && <PlanAnswer result={message.plan} />}
-                  {message.agent && <BusinessAgentAnswer result={message.agent} />}
+                  {message.response?.offers?.map((offer, index) => {
+                    const done = message.offerResults?.[index]
+                    return done
+                      ? <OfferOutcome key={index} result={done} />
+                      : <OfferCard key={index} offer={offer} blockedReason={offer.kind === 'plan' && cannotPlan ? 'Planning needs decision:propose, which your account does not have.' : null} onRun={(text) => runOffer(message.id, index, offer, text)} />
+                  })}
                 </article>
               ))
             )}
-            {busy && <p className={styles.thinking} role="status">{mode === 'ask' ? 'Looking through the app and company data…' : mode === 'plan' ? 'Preparing a plan for review…' : 'The specialist is working…'}</p>}
-            {error && <p className={styles.error} role="alert">{error}</p>}
+            {busy && <p className={styles.thinking} role="status">Looking through the app and company data…</p>}
+            {error && <p className={styles.error} role="alert">{error}{lastAsked.current && !busy && !error.startsWith('Stopped') && <> <button type="button" className={styles.retry} onClick={() => void send(lastAsked.current ?? '')}>Try again</button></>}</p>}
           </div>
           {expanded && (
             <aside className={styles.contextRail} aria-label="Business workspaces">
@@ -251,10 +262,9 @@ export function AgentChatWidget() {
                 {[
                   ['/','Overview','Company health and priorities'],
                   ['/decisions','Decisions','Review proposals and approvals'],
-                  ['/planning','Planning','Set outcomes and business context'],
-                  ['/workflows','Workflows','Build and operate automations'],
+                  ['/workflows','Workflows','Build and publish automations'],
                   ['/entities','Company data','Manage business records'],
-                  ['/agents','Agents','Explore agent capabilities'],
+                  ['/agents','Agents','Review the agent catalog'],
                   ['/monitoring','Monitoring','Runs, activity, and alerts'],
                   ['/monitoring/traces','Traces & alerts','Model calls, cost, and alerts'],
                 ].map(([href, label, description]) => (
@@ -270,25 +280,20 @@ export function AgentChatWidget() {
           <footer className={styles.footer}>
             {tokenPresent ? (
               <form className={styles.form} onSubmit={ask}>
-                <div className={styles.modeSwitch} role="group" aria-label="Chat mode">
-                  <button type="button" aria-pressed={mode === 'ask'} disabled={busy} onClick={() => setMode('ask')}>Ask</button>
-                  <button type="button" aria-pressed={mode === 'plan'} disabled={busy || cannotPlan} aria-describedby={cannotPlan ? 'qs-plan-why' : undefined} onClick={() => setMode('plan')}>Plan</button>
-                  <button type="button" aria-pressed={mode === 'agent'} disabled={busy} onClick={() => setMode('agent')}>Work</button>
-                </div>
-                {cannotPlan && <span id="qs-plan-why" className={styles.agentRouting}>Planning needs decision:propose, which your account does not have.</span>}
-                {mode === 'agent' && <label className={styles.agentSelectLabel}>Specialist<select className={styles.agentSelect} aria-label="Choose business specialist" value={agentKey} disabled={busy} onChange={(event) => setAgentKey(event.currentTarget.value as BusinessAgentChoice)}>{BUSINESS_AGENTS.map((agent) => <option key={agent.key} value={agent.key}>{agent.label}</option>)}</select></label>}
-                <label className={styles.srOnly} htmlFor="qs-chat-question">{mode === 'plan' || mode === 'agent' ? 'Describe work for Quicksilver' : 'Ask a company question'}</label>
+                <label className={styles.srOnly} htmlFor="qs-chat-question">Ask a question or describe work for Quicksilver</label>
                 <input
                   id="qs-chat-question"
                   ref={inputRef}
                   value={question}
                   onChange={(event) => setQuestion(event.currentTarget.value)}
                   maxLength={2000}
-                  placeholder={mode === 'plan' ? 'Describe an outcome to work toward…' : mode === 'agent' ? 'Describe what the specialist should work on…' : 'Ask Quicksilver…'}
+                  placeholder="Ask, or describe what you want done…"
                   autoComplete="off"
                   disabled={busy}
                 />
-                <button type="submit" disabled={busy || !question.trim()} aria-label="Send question">{busy ? '…' : 'Send'}</button>
+                {busy
+                  ? <button type="button" onClick={stop} aria-label="Stop answering">Stop</button>
+                  : <button type="submit" disabled={!question.trim()} aria-label="Send question">Send</button>}
               </form>
             ) : (
               <div className={styles.signInPrompt}>
@@ -296,7 +301,7 @@ export function AgentChatWidget() {
                 <Link href={signInPageHref(pathname)} onClick={() => setOpen(false)}>Sign in</Link>
               </div>
             )}
-            <p className={styles.footerHint}>{mode === 'ask' ? 'Ask · read-only · NQC-evaluated' : mode === 'plan' ? 'Plan · proposals require review and approval' : 'Work · specialist proposals only · external actions stay gated'}</p>
+            <p className={styles.footerHint}>Read-only · NQC-evaluated · work is offered as a card you press</p>
           </footer>
         </section>
       )}
@@ -316,6 +321,48 @@ export function AgentChatWidget() {
         {!open && <span className={styles.launcherSpark} aria-hidden="true">✦</span>}
       </button>
     </>
+  )
+}
+
+const OFFER_COPY: Record<AssistantOffer['kind'], { title: (offer: AssistantOffer) => string; button: string; note: string }> = {
+  plan: { title: () => 'Create this plan?', button: 'Create plan', note: 'Quicksilver drafts evaluated proposals and saves them as decisions. Nothing is approved or run.' },
+  specialist: { title: (offer) => `Ask the ${offer.kind === 'specialist' && offer.agentKey !== 'auto' ? offer.agentKey : 'best-fit'} specialist?`, button: 'Ask specialist', note: 'The specialist researches and proposes. It cannot act outside the app.' },
+  workflow: { title: (offer) => `Run workflow ${offer.kind === 'workflow' ? offer.workflowId : ''}?`, button: 'Run workflow', note: 'Runs the active published version, read-only, as you.' },
+}
+
+/** A model-suggested action, shown in full and editable. It is only a suggestion until the person presses the button. */
+function OfferCard({ offer, blockedReason, onRun }: { offer: AssistantOffer; blockedReason: string | null; onRun: (text: string) => Promise<string | null> }) {
+  const initial = offer.kind === 'workflow' ? offer.input : offer.objective
+  const [text, setText] = useState(initial)
+  const [running, setRunning] = useState(false)
+  const [problem, setProblem] = useState<string | null>(null)
+  const copy = OFFER_COPY[offer.kind]
+  const tooShort = text.trim().length < 3
+  return (
+    <div className={styles.offer}>
+      <p className={styles.offerTitle}><strong>{copy.title(offer)}</strong></p>
+      <label className={styles.srOnly} htmlFor={`offer-${initial.slice(0, 12)}`}>Edit before you press the button</label>
+      <textarea id={`offer-${initial.slice(0, 12)}`} className={styles.offerText} value={text} maxLength={2000} rows={3} disabled={running} onChange={(event) => setText(event.currentTarget.value)} />
+      <p className={styles.agentRouting}>{copy.note}</p>
+      {blockedReason && <p className={styles.agentRouting}>{blockedReason}</p>}
+      {problem && <p className={styles.error} role="alert">{problem}</p>}
+      <button type="button" className={styles.offerButton} disabled={running || tooShort || !!blockedReason} onClick={async () => { setRunning(true); setProblem(null); const failed = await onRun(text.trim()); setRunning(false); if (failed) setProblem(failed) }}>{running ? 'Working…' : copy.button}</button>
+    </div>
+  )
+}
+
+function OfferOutcome({ result }: { result: OfferResult }) {
+  if (result.plan) return <PlanAnswer result={result.plan} />
+  if (result.agent) return <BusinessAgentAnswer result={result.agent} />
+  const run = result.workflow
+  if (!run) return null
+  return (
+    <div className={styles.answer}>
+      <p><strong>Workflow run</strong> · {run.status}{run.publishedWorkflow ? ` · published v${run.publishedWorkflow.version}` : ''}</p>
+      {run.error && <p className={styles.error}>{run.error}</p>}
+      <ul className={styles.planActions}>{run.steps.map((step) => <li key={step.nodeId}><strong>{step.nodeId}</strong><span>{step.status}</span>{step.detail && <small>{step.detail}</small>}</li>)}</ul>
+      <Link className={styles.reviewPlan} href="/monitoring">See it in monitoring <span aria-hidden="true">→</span></Link>
+    </div>
   )
 }
 

@@ -1,3 +1,5 @@
+'use client'
+
 import type { DecisionWhy } from '@quicksilver/kernel'
 
 const BAND_TEXT: Record<DecisionWhy['risk']['band'], string> = {
@@ -13,7 +15,7 @@ const GUARD_MARK: Record<string, string> = { applies: '●', superseded: '↷', 
  * fired, the policy revision in force, and what would have changed the answer.
  * Everything shown is the kernel's own output (see `explainWhy`).
  */
-export function WhyPanel({ why, escalationReasons = [], defaultOpen = false }: { why: DecisionWhy; escalationReasons?: string[]; defaultOpen?: boolean }) {
+export function WhyPanel({ why, escalationReasons = [], defaultOpen = false, objective }: { why: DecisionWhy; escalationReasons?: string[]; defaultOpen?: boolean; /** What was asked for, so a near-miss can be sent back to the chat as a new request. */ objective?: string }) {
   const { risk } = why
   const improving = why.whatWouldChangeIt
   return (
@@ -101,6 +103,15 @@ export function WhyPanel({ why, escalationReasons = [], defaultOpen = false }: {
                       ? `The kernel then says ${c.outcome.recommendation} at risk ${c.outcome.riskLevel}.`
                       : 'Required; the kernel cannot try this on its own.'}
                   </span>
+                  {objective && (
+                    <button
+                      type="button"
+                      className="ml-2 min-h-11 rounded border border-quicksilver-border px-3 text-quicksilver-signal underline"
+                      onClick={() => window.dispatchEvent(new CustomEvent('quicksilver:open-chat', { detail: { prefill: `Plan this again with one change. Original request: ${objective}. Change: ${c.change}`.slice(0, 2_000) } }))}
+                    >
+                      Try again with this change
+                    </button>
+                  )}
                 </li>
               ))}
             </ul>

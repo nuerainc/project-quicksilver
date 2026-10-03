@@ -1252,12 +1252,13 @@
               "required": ["question", "answer"],
               "properties": { "question": { "type": "string" }, "answer": { "type": "string" } }
             }
-          }
+          },
+          "page": { "type": "string", "maxLength": 200, "pattern": "^/", "description": "The page of the app the person has open, so \"this\" and \"here\" make sense: a plain page, or /decisions?id=<id>. Anything else is ignored." }
         }
       },
       "ChatResponse": {
         "type": "object",
-        "required": ["answer", "links", "showAttention", "confidence", "toolsUsed"],
+        "required": ["answer", "links", "showAttention", "offers", "confidence", "toolsUsed"],
         "properties": {
           "answer": { "type": "string" },
           "links": {
@@ -1266,6 +1267,18 @@
             "items": { "type": "object", "required": ["label", "href"], "properties": { "label": { "type": "string" }, "href": { "type": "string", "pattern": "^/" } } }
           },
           "showAttention": { "type": "boolean", "description": "Show the live needs-you list under the answer. The list is built by the app from records, not from the answer text." },
+          "offers": {
+            "type": "array",
+            "maxItems": 3,
+            "description": "Work the person asked for, offered as cards. Nothing runs until the person presses a card, which calls the named route as them with the text they saw. The assistant has no approve, reject, execute or publish offer.",
+            "items": {
+              "oneOf": [
+                { "type": "object", "required": ["kind", "objective"], "properties": { "kind": { "const": "plan" }, "objective": { "type": "string", "minLength": 3, "maxLength": 2000 } } },
+                { "type": "object", "required": ["kind", "agentKey", "objective"], "properties": { "kind": { "const": "specialist" }, "agentKey": { "type": "string", "enum": ["auto", "research", "offer", "content", "outreach", "sales", "fulfillment", "finance"] }, "objective": { "type": "string", "minLength": 3, "maxLength": 2000 } } },
+                { "type": "object", "required": ["kind", "workflowId", "input"], "properties": { "kind": { "const": "workflow" }, "workflowId": { "type": "string", "maxLength": 128 }, "input": { "type": "string", "minLength": 3, "maxLength": 2000 } } }
+              ]
+            }
+          },
           "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
           "toolsUsed": { "type": "array", "items": { "type": "string" } },
           "audit": { "type": "object", "properties": { "persisted": { "type": "boolean" }, "evaluationRecordIds": { "type": "array", "items": { "type": "string" } }, "error": { "type": "string" } } },

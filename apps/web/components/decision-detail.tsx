@@ -149,6 +149,15 @@ export function DecisionDetail({ id, access, onChanged }: { id: string; access: 
 
       {detail.selectedAction && <section className={styles.section} aria-label="What it would do"><h3>What it would do</h3><p>{detail.selectedAction}</p></section>}
 
+      {detail.approvalFingerprint && (
+        <details className={styles.section}>
+          <summary>Approval basis</summary>
+          <p>Approving covers exactly this action. If it or the policy changes first, the approval is refused instead of covering something you did not see.</p>
+          <p>Action fingerprint</p>
+          <code className="break-all">{detail.approvalFingerprint}</code>
+        </details>
+      )}
+
       {options.length > 0 && (
         <section className={styles.actionBar} aria-label="Actions">
           <div className={styles.actionButtons}>
@@ -179,7 +188,7 @@ export function DecisionDetail({ id, access, onChanged }: { id: string; access: 
       )}
       {options.length === 0 && outcome && <p className={styles.outcome} role="status">{outcome}</p>}
 
-      {detail.why ? <WhyPanel why={detail.why} defaultOpen /> : (
+      {detail.why ? <WhyPanel why={detail.why} defaultOpen objective={detail.question || detail.selectedAction || undefined} /> : (
         <p className={styles.fine}>No stored explanation: this was planned before explanations were kept. The policy checks and reviewer notes below are what was recorded.</p>
       )}
 

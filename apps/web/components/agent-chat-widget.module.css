@@ -161,3 +161,11 @@
   flex-wrap: wrap;
   gap: 0.5rem;
 }
+
+.offer { display: grid; gap: 0.5rem; margin-top: 0.6rem; border: 1px solid #2f5a63; border-radius: 0.8rem; background: #0f2530; padding: 0.75rem; }
+.offerTitle { margin: 0; font-size: 0.82rem; }
+.offerText { width: 100%; min-height: 4.2rem; resize: vertical; border: 1px solid #354a60; border-radius: 0.6rem; background: #111e30; padding: 0.55rem 0.65rem; color: #e7eef7; font: 400 0.8rem/1.4 var(--font-sans); }
+.offerButton, .retry { min-height: 2.75rem; border: 1px solid #3f8f86; border-radius: 0.6rem; background: #1d5a56; padding: 0.5rem 0.9rem; color: #eafaf6; font: 650 0.8rem/1 var(--font-sans); cursor: pointer; }
+.offerButton:disabled { cursor: not-allowed; opacity: 0.55; }
+.retry { min-height: 2.25rem; padding: 0.3rem 0.7rem; margin-left: 0.3rem; }
+.offerButton:focus-visible, .retry:focus-visible, .offerText:focus-visible { outline: 3px solid #a8e4ff; outline-offset: 2px; }

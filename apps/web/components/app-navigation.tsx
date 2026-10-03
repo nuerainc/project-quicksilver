@@ -13,7 +13,6 @@ const SHELL_GROUP_ORDER = ['Operate', 'Build', 'Govern', 'Observe'] as const
 const SHELL_ROUTE_GROUP: Record<string, (typeof SHELL_GROUP_ORDER)[number]> = {
   '/': 'Operate',
   '/decisions': 'Operate',
-  '/planning': 'Operate',
   '/workflows': 'Build',
   '/agents': 'Govern',
   '/entities': 'Govern',
@@ -24,7 +23,6 @@ const APP_DESTINATIONS = APP_NAVIGATION_GROUPS.flatMap(({ links }) => links)
 const NAV_ICONS: Record<string, string> = {
   '/': '⌂',
   '/decisions': '✓',
-  '/planning': '✳',
   '/workflows': '◇',
   '/monitoring': '◷',
   '/monitoring/traces': '≋',

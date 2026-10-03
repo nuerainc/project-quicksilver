@@ -7,11 +7,11 @@ import { APP_NAVIGATION_GROUPS, APP_NAVIGATION_DESTINATIONS, activeNavigationRou
 const css = readFileSync(new URL('../app/globals.css', import.meta.url), 'utf8')
 const layout = readFileSync(new URL('../app/layout.tsx', import.meta.url), 'utf8')
 const shell = readFileSync(new URL('../components/app-navigation.tsx', import.meta.url), 'utf8')
-const consolePage = readFileSync(new URL('../app/planning/page.tsx', import.meta.url), 'utf8')
+const consolePage = readFileSync(new URL('../components/decision-detail.tsx', import.meta.url), 'utf8')
 
 test('primary destinations are grouped by user task and have unique reachable routes', () => {
   assert.deepEqual(APP_NAVIGATION_GROUPS.map(({ label }) => label), ['Operate', 'Govern'])
-  assert.deepEqual(APP_NAVIGATION_DESTINATIONS.map(({ href }) => href), ['/', '/decisions', '/planning', '/workflows', '/monitoring', '/monitoring/traces', '/entities', '/agents'])
+  assert.deepEqual(APP_NAVIGATION_DESTINATIONS.map(({ href }) => href), ['/', '/decisions', '/workflows', '/monitoring', '/monitoring/traces', '/entities', '/agents'])
   assert.equal(new Set(APP_NAVIGATION_DESTINATIONS.map(({ href }) => href)).size, APP_NAVIGATION_DESTINATIONS.length)
   assert.equal(activeNavigationRoute('/workflows/review', '/workflows'), true)
   assert.equal(activeNavigationRoute('/agents', '/workflows'), false)
@@ -82,9 +82,8 @@ test('the shell adds a collapsible desktop dock and a thumb-friendly mobile quic
 })
 
 test('dense decision review details stay collapsed until needed, while approval basis is inspectable', () => {
-  assert.match(consolePage, /<details className="mb-4 rounded border border-quicksilver-border px-3 py-2 text-sm">\s*<summary[^>]*>\s*Approval basis/s)
+  assert.match(consolePage, /<details className=\{styles\.section\}>\s*<summary>Approval basis<\/summary>/s)
   assert.match(consolePage, /Action fingerprint/)
-  assert.match(consolePage, /break-all[^>]*>\{d\.approvalFingerprint/)
-  assert.match(consolePage, /onAct\(docId, 'approve', undefined, d\.approvalFingerprint\)/)
-  assert.match(consolePage, /expectedActionFingerprint\s*\?\s*\{\s*expectedActionFingerprint\s*\}/)
+  assert.match(consolePage, /break-all[^>]*>\{detail\.approvalFingerprint\}/)
+  assert.match(consolePage, /approvalFingerprint: detail\.approvalFingerprint/)
 })

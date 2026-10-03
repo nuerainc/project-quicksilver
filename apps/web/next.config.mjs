@@ -23,6 +23,10 @@ for (const name of ['.env', '.env.local']) {
 const nextConfig = {
   reactStrictMode: true,
   transpilePackages: ['@quicksilver/kernel', '@quicksilver/agent'],
+  // Planning moved into the chat. Old links and bookmarks go to the decisions they created.
+  async redirects() {
+    return [{ source: '/planning', destination: '/decisions', permanent: false }]
+  },
   experimental: {
     // Server actions need this in some configs.
     serverActions: { bodySizeLimit: '2mb' },
