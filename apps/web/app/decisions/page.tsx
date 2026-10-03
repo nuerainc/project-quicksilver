@@ -1,307 +1,164 @@
-/**
- * /decisions — the Decision Log.
- *
- * Sanity's own Studio already stores every `decision` document Quicksilver
- * has ever created, and `sanity-plugin-workflow` tracks a parallel state
- * machine per decision. Neither is meant for a non-technical reviewer: the
- * Studio is a content editor, and the workflow plugin's own board never
- * reliably reflects decisions created via the API rather than by hand in
- * the Studio UI (see BUILD-LOG.md, "Begin Workflow" investigation).
- *
- * This page is a read-only, front-of-house view of the same underlying
- * `decision` documents Quicksilver already writes -- no schema change, no
- * new write path, no dependency on the workflow plugin. It exists purely so
- * a reviewer (or the CEO) can see the full history of what the system has
- * proposed, approved, rejected, and executed, across every session, without
- * opening the Studio at all.
- *
- * Server Component: fetches directly from Sanity at request time (no
- * client-side fetch, no loading state to manage) and is deliberately
- * excluded from static generation (see `dynamic` below) since the decision
- * log is, by definition, always changing.
- */
+'use client'
 
 import Link from 'next/link'
-import { getSanityClient } from '@/lib/sanity-client'
+import { Suspense, useCallback, useEffect, useState } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 
-export const dynamic = 'force-dynamic'
+import { DecisionDetail } from '@/components/decision-detail'
+import styles from '@/components/decisions.module.css'
+import { authFailureMessage, consoleHeaders, resolveConsoleAccess, type ConsoleAccess } from '@/lib/console-auth'
+import { signInPageHref } from '@/lib/session-control'
 
-type PolicyCheckRow = {
-  result: 'applies' | 'superseded' | 'conflicts' | 'inapplicable' | null
-  reason: string | null
-  policyName: string | null
+interface Row { id: string; title: string; action: string | null; status: string; riskLevel: number | null; requiredApproval: boolean; requestedBy: string | null; createdAt: string | null; kind: string | null }
+interface ListBody { observedAt: string; hasMore: boolean; counts: Record<string, number>; decisions: Row[] }
+
+const TABS = [
+  { key: 'needs', label: 'Needs a decision', statuses: ['awaiting-approval', 'proposed', 'rollback-proposed'] },
+  { key: 'run', label: 'Ready to run', statuses: ['approved'] },
+  { key: 'done', label: 'Done', statuses: ['executed', 'rolled-back'] },
+  { key: 'stopped', label: 'Refused or failed', statuses: ['rejected', 'failed'] },
+  { key: 'all', label: 'All', statuses: [] as string[] },
+] as const
+type TabKey = (typeof TABS)[number]['key']
+
+const TONE: Record<string, string> = { 'awaiting-approval': 'wait', proposed: 'wait', 'rollback-proposed': 'wait', approved: 'good', executed: 'good', 'rolled-back': 'good', rejected: 'bad', failed: 'bad' }
+const PAGE = 25
+
+function ago(iso: string | null): string {
+  if (!iso || Number.isNaN(Date.parse(iso))) return 'Date not recorded'
+  const minutes = Math.max(0, Math.round((Date.now() - Date.parse(iso)) / 60_000))
+  if (minutes < 2) return 'just now'
+  if (minutes < 90) return `${minutes} min ago`
+  if (minutes < 2_160) return `${Math.round(minutes / 60)} h ago`
+  return `${Math.round(minutes / 1_440)} days ago`
 }
 
-type ReviewerNotes = {
-  valid: boolean | null
-  policyConflicts: string[] | null
-  missingEvidence: string[] | null
-  riskConcerns: string[] | null
-  suggestions: string[] | null
-} | null
-
-type DecisionRow = {
-  _id: string
-  question: string | null
-  selectedAction: string | null
-  reasoningSummary: string | null
-  riskLevel: number | null
-  requiredApproval: boolean | null
-  status: string | null
-  createdAt: string | null
-  executedAt: string | null
-  approvedByName: string | null
-  policyChecks: PolicyCheckRow[] | null
-  evidenceTitles: string[] | null
-  reviewerNotes: ReviewerNotes
-  kind: string | null
-  faultInjection: string | null
-  processName: string | null
-  processVersion: number | null
-  processHistory: ProcessHistoryRow[] | null
+export default function DecisionsPage() {
+  return <Suspense fallback={<main className="app-main"><p role="status">Loading decisions…</p></main>}><Decisions /></Suspense>
 }
 
-type ProcessHistoryRow = {
-  transitionId: string | null
-  from: string | null
-  to: string | null
-  actorId: string | null
-  actorType: string | null
-  at: string | null
-}
+function Decisions() {
+  const router = useRouter()
+  const params = useSearchParams()
+  const tab = (TABS.find((t) => t.key === params.get('tab'))?.key ?? 'needs') as TabKey
+  const selected = params.get('id')
+  const [access, setAccess] = useState<ConsoleAccess | null>(null)
+  const [rows, setRows] = useState<Row[]>([])
+  const [counts, setCounts] = useState<Record<string, number>>({})
+  const [hasMore, setHasMore] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [checkedAt, setCheckedAt] = useState<string | null>(null)
 
-const DECISIONS_QUERY = `*[_type == "decision"] | order(coalesce(createdAt, _createdAt) desc) {
-  _id,
-  question,
-  selectedAction,
-  reasoningSummary,
-  riskLevel,
-  requiredApproval,
-  status,
-  createdAt,
-  executedAt,
-  "approvedByName": approvedBy->name,
-  "policyChecks": policyChecks[]{
-    result,
-    reason,
-    "policyName": policy->name
-  },
-  "evidenceTitles": evidence[]->title,
-  reviewerNotes,
-  kind,
-  faultInjection,
-  "processName": process.definition->name,
-  "processVersion": process.version,
-  processHistory[]{ transitionId, from, to, actorId, actorType, at }
-}`
+  useEffect(() => { void resolveConsoleAccess(undefined, undefined, { withWhoami: true }).then(setAccess) }, [])
 
-const STATUS_TONE: Record<string, string> = {
-  proposed: 'border-quicksilver-border text-quicksilver-accent',
-  'awaiting-approval': 'border-yellow-300/60 text-yellow-300',
-  approved: 'border-quicksilver-quicksilver/60 text-quicksilver-signal',
-  executed: 'border-green-400/60 text-green-400',
-  failed: 'border-red-400/60 text-red-400',
-  rejected: 'border-red-400/60 text-red-400',
-  'rollback-proposed': 'border-yellow-300/60 text-yellow-300',
-  'rolled-back': 'border-orange-400/60 text-orange-400',
-}
+  const load = useCallback(async (more = false) => {
+    if (!access?.signedIn) return
+    setLoading(true)
+    const statuses = TABS.find((t) => t.key === tab)!.statuses
+    const query = new URLSearchParams({ limit: String(PAGE), ...(statuses.length ? { status: statuses.join(',') } : {}) })
+    if (more && rows.length) query.set('before', rows[rows.length - 1]!.createdAt ?? '')
+    const path = `/api/decisions?${query}`
+    try {
+      const response = await fetch(path, { headers: consoleHeaders(path, access.token), cache: 'no-store' })
+      const body = await response.json().catch(() => ({}))
+      if (!response.ok) { setError(authFailureMessage(response.status, 'decisions', body.error) ?? body.error ?? 'Could not load decisions.'); return }
+      const list = body as ListBody
+      setRows((current) => (more ? [...current, ...list.decisions] : list.decisions))
+      setCounts(list.counts)
+      setHasMore(list.hasMore)
+      setCheckedAt(list.observedAt)
+      setError(null)
+    } catch {
+      setError('Could not reach the server.')
+    } finally {
+      setLoading(false)
+    }
+    // rows is read only to find the page boundary
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [access, tab])
 
-function statusTone(status: string | null): string {
-  return STATUS_TONE[status ?? ''] ?? 'border-quicksilver-border text-quicksilver-accent'
-}
+  useEffect(() => { void load(false) }, [load])
 
-function formatDate(iso: string | null): string {
-  if (!iso) return '—'
-  try {
-    return new Date(iso).toLocaleString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: 'numeric',
-      minute: '2-digit',
-    })
-  } catch {
-    return iso
+  const go = (next: { tab?: TabKey; id?: string | null }) => {
+    const query = new URLSearchParams()
+    const t = next.tab ?? tab
+    if (t !== 'needs') query.set('tab', t)
+    const id = next.id === undefined ? selected : next.id
+    if (id) query.set('id', id)
+    router.push(`/decisions${query.size ? `?${query}` : ''}`)
   }
-}
 
-async function loadDecisions(): Promise<{ decisions: DecisionRow[] | null; error: string | null }> {
-  if (!process.env.NEXT_PUBLIC_SANITY_PROJECT_ID) {
-    return { decisions: null, error: 'Sanity project ID not configured.' }
+  const tabCount = (key: TabKey) => {
+    const statuses = TABS.find((t) => t.key === key)!.statuses
+    return statuses.length ? statuses.reduce((total, status) => total + (counts[status] ?? 0), 0) : Object.values(counts).reduce((a, b) => a + b, 0)
   }
-  try {
-    const client = getSanityClient('read')
-    const decisions = await client.fetch<DecisionRow[]>(DECISIONS_QUERY)
-    return { decisions, error: null }
-  } catch (err) {
-    return { decisions: null, error: (err as Error).message }
-  }
-}
-
-export default async function DecisionLogPage() {
-  const { decisions, error } = await loadDecisions()
-  const awaiting = decisions?.filter((d) => d.status === 'awaiting-approval').length ?? 0
-  const executed = decisions?.filter((d) => d.status === 'executed').length ?? 0
-  const conflicts = decisions?.reduce((count, d) => count + (d.policyChecks ?? []).filter((check) => check.result === 'conflicts').length, 0) ?? 0
 
   return (
-    <main className="app-main">
+    <main className="app-main space-y-6">
       <header className="qs-page-heading">
-        <p className="qs-eyebrow">Govern · Audit trail</p>
-        <h1>Decision log</h1>
-        <p className="qs-page-heading__summary">
-          A read-only record of what Quicksilver proposed, approved, rejected, and executed. Entries are shown newest first from the kernel&apos;s decision records.
-        </p>
+        <p className="qs-eyebrow">Operate · Decisions</p>
+        <h1>Decisions</h1>
+        <p className="qs-page-heading__summary">What Quicksilver proposed, what is waiting for you, and what happened. Open a decision to read why, then approve, reject or run it.</p>
       </header>
 
-      {error && (
-        <div className="qs-panel qs-inline-alert" role="alert">
-          <strong>Decision history is unavailable.</strong>
-          <p>{error}</p>
-        </div>
-      )}
-
-      {!error && decisions && decisions.length === 0 && (
-        <section className="qs-panel qs-empty-state" aria-labelledby="empty-decisions-title">
-          <span className="qs-empty-state__icon" aria-hidden="true">✓</span>
-          <h2 id="empty-decisions-title">No decisions yet</h2>
-          <p>Start with a business objective. Quicksilver will prepare a plan for review before any action is taken.</p>
-          <Link href="/" className="qs-action-primary">Create a plan</Link>
+      {access && !access.signedIn ? (
+        <section className="qs-panel" aria-labelledby="decisions-signin">
+          <h2 id="decisions-signin" className="text-lg font-semibold">Sign in to see decisions</h2>
+          <p>Decisions are private to your organisation.</p>
+          <p><Link className="qs-action-primary" href={signInPageHref('/decisions')}>Sign in</Link></p>
         </section>
-      )}
-
-      {!error && decisions && decisions.length > 0 && (
+      ) : (
         <>
-          <section className="qs-stat-grid" aria-label="Decision summary">
-            <article className="qs-stat-card"><span>On record</span><strong>{decisions.length}</strong></article>
-            <article className="qs-stat-card"><span>Awaiting approval</span><strong>{awaiting}</strong></article>
-            <article className="qs-stat-card"><span>Executed</span><strong>{executed}</strong></article>
-            <article className="qs-stat-card"><span>Policy conflicts</span><strong>{conflicts}</strong></article>
-          </section>
-          <section className="qs-decision-list" aria-label="Decision history">
-            {decisions.map((d) => (
-              <DecisionLogRow key={d._id} d={d} />
-            ))}
-          </section>
+          <nav aria-label="Decision groups">
+            <ul className={styles.tabs}>
+              {TABS.map((t) => (
+                <li key={t.key}>
+                  <button type="button" className={styles.tab} aria-current={tab === t.key ? 'page' : undefined} onClick={() => go({ tab: t.key, id: null })}>
+                    {t.label}<span className={styles.count}>{access ? tabCount(t.key) : '…'}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </nav>
+
+          <div className={styles.layout} data-detail={selected ? 'true' : 'false'}>
+            <section className={styles.listPane} aria-label="Decision list">
+              {error && <p className={styles.error} role="alert">{error} <button type="button" className={styles.more} onClick={() => void load(false)}>Try again</button></p>}
+              {!error && !loading && rows.length === 0 && (
+                <p className={styles.empty}>{tab === 'needs' ? 'Nothing is waiting for a decision. Ask Quicksilver to plan something in the chat and it will show up here for review.' : 'No decisions in this group.'}</p>
+              )}
+              <ul className={styles.list}>
+                {rows.map((row) => (
+                  <li key={row.id}>
+                    <button type="button" className={styles.row} aria-current={selected === row.id ? 'true' : undefined} onClick={() => go({ id: row.id })}>
+                      <p className={styles.rowTitle}>{row.title}</p>
+                      <span className={styles.rowMeta}>
+                        <span className={styles.status} data-tone={TONE[row.status] ?? 'wait'}>{row.status.replaceAll('-', ' ')}</span>
+                        <span>{row.riskLevel === null ? (row.kind === 'rollback' ? 'Rollback' : 'Risk not rated') : `Risk ${row.riskLevel} of 5`}</span>
+                        <span>{ago(row.createdAt)}</span>
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+              <p className={styles.fine} role="status">{loading ? 'Loading…' : checkedAt ? `Checked ${ago(checkedAt)}.` : ''}</p>
+              {hasMore && <button type="button" className={styles.more} disabled={loading} onClick={() => void load(true)}>Show older decisions</button>}
+            </section>
+
+            <section className={styles.detailPane} aria-label="Decision detail">
+              {selected && access?.signedIn ? (
+                <>
+                  <button type="button" className={styles.back} onClick={() => go({ id: null })}>← All decisions</button>
+                  <DecisionDetail id={selected} access={access} onChanged={() => void load(false)} />
+                </>
+              ) : (
+                <p className={styles.empty}>Choose a decision to see why it was proposed, what it covers and what you can do with it.</p>
+              )}
+            </section>
+          </div>
         </>
       )}
     </main>
-  )
-}
-
-function DecisionLogRow({ d }: { d: DecisionRow }) {
-  const flaggedPolicies = (d.policyChecks ?? []).filter((c) => c.result === 'conflicts')
-  const reviewerFlagCount = d.reviewerNotes
-    ? (d.reviewerNotes.policyConflicts?.length ?? 0) +
-      (d.reviewerNotes.missingEvidence?.length ?? 0) +
-      (d.reviewerNotes.riskConcerns?.length ?? 0)
-    : 0
-
-  return (
-    <article className="qs-data-card">
-      <header className="qs-data-card__header">
-        <div className="qs-data-card__title">
-          <time className="qs-data-card__date" dateTime={d.createdAt ?? undefined}>{formatDate(d.createdAt)}</time>
-          <h2>{d.selectedAction || d.question || d._id}</h2>
-        </div>
-        <span className={`qs-status-badge ${statusTone(d.status)}`}>
-          {d.status ?? 'Unknown'} <span aria-hidden="true">·</span> {d.riskLevel == null ? (d.kind === 'rollback' ? 'Rollback' : 'Risk not rated') : `Risk ${d.riskLevel}/5`}
-        </span>
-      </header>
-
-      <dl className="qs-decision-facts">
-        <Reference label="Human approval" value={d.requiredApproval ? 'Required' : 'Not required'} />
-        <Reference label="Approved by" value={d.approvedByName ?? '—'} />
-        <Reference label="Executed" value={formatDate(d.executedAt)} />
-        <Reference label="Policy conflicts" value={flaggedPolicies.length > 0 ? String(flaggedPolicies.length) : 'None'} />
-      </dl>
-
-      {(d.processHistory?.length ?? 0) > 0 && (
-        <div className="qs-nested-card">
-          <h3 className="font-mono text-[11px] uppercase tracking-widest text-quicksilver-accent">
-            Process: {d.processName ?? 'unknown'}{d.processVersion ? ` v${d.processVersion}` : ''}
-            {d.faultInjection && (
-              <span className="ml-2 normal-case tracking-normal text-yellow-300">
-                · execution outcome forced by the e2e test ({d.faultInjection})
-              </span>
-            )}
-          </h3>
-          <ol className="mt-1 space-y-0.5">
-            {d.processHistory!.map((h, i) => (
-              <li key={i} className="font-mono text-xs text-quicksilver-signal">
-                {h.from} → {h.to}{' '}
-                <span className="text-quicksilver-accent">
-                  ({h.transitionId} · {h.actorType === 'human' ? 'human' : h.actorId} · {formatDate(h.at)})
-                </span>
-              </li>
-            ))}
-          </ol>
-        </div>
-      )}
-
-      {(d.reasoningSummary || flaggedPolicies.length > 0 || reviewerFlagCount > 0 || (d.evidenceTitles?.length ?? 0) > 0) && (
-        <details className="qs-decision-details">
-          <summary>Inspect reasoning, review, and evidence</summary>
-          <div className="qs-decision-details__body">
-          {d.reasoningSummary && (
-            <p className="whitespace-pre-wrap text-sm leading-relaxed text-quicksilver-accent">
-              {d.reasoningSummary}
-            </p>
-          )}
-          {flaggedPolicies.length > 0 && (
-            <div className="qs-detail-section">
-              <h3 className="font-mono text-[11px] uppercase tracking-widest text-quicksilver-accent">
-                Policy conflicts
-              </h3>
-              <ul className="mt-1 space-y-1">
-                {flaggedPolicies.map((c, i) => (
-                  <li key={i} className="font-mono text-xs text-red-400">
-                    • {c.policyName ?? 'unnamed policy'}: {c.reason ?? 'no reason recorded'}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-          {reviewerFlagCount > 0 && d.reviewerNotes && (
-            <div className="qs-detail-section qs-detail-section--review">
-              <h3 className="font-mono text-[11px] uppercase tracking-widest text-quicksilver-accent">
-                Independent review ({reviewerFlagCount} flag{reviewerFlagCount === 1 ? '' : 's'})
-              </h3>
-              {[...(d.reviewerNotes.policyConflicts ?? []), ...(d.reviewerNotes.missingEvidence ?? []), ...(d.reviewerNotes.riskConcerns ?? [])].map(
-                (note, i) => (
-                  <p key={i} className="mt-1 font-mono text-xs text-yellow-300">
-                    ⚠ {note}
-                  </p>
-                ),
-              )}
-            </div>
-          )}
-          {(d.evidenceTitles?.length ?? 0) > 0 && (
-            <div className="qs-detail-section">
-              <h3 className="font-mono text-[11px] uppercase tracking-widest text-quicksilver-accent">
-                Supporting evidence
-              </h3>
-              <ul className="mt-1 space-y-1">
-                {d.evidenceTitles!.map((title, i) => (
-                  <li key={i} className="font-mono text-xs text-quicksilver-accent">
-                    • {title}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-          </div>
-        </details>
-      )}
-    </article>
-  )
-}
-
-function Reference({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <dt className="font-mono text-[10px] uppercase tracking-widest text-quicksilver-accent">{label}</dt>
-      <dd className="text-xs text-quicksilver-signal">{value}</dd>
-    </div>
   )
 }
