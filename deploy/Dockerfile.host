@@ -5,7 +5,9 @@ FROM node:22-slim
 WORKDIR /app
 # Secrets never enter the image: .dockerignore excludes .env files and local data.
 COPY . .
-RUN npm ci --no-audit --no-fund \
+# Only the host workspace and what it depends on (kernel, aura, agent). Installing the whole workspace would also bring in
+# the Sanity Studio and web app trees, whose advisories are not the host's (threat model, section 7, B-10).
+RUN npm ci --workspace=@quicksilver/host --no-audit --no-fund \
   && npm cache clean --force \
   && mkdir -p /data && chown node:node /data
 ENV NODE_ENV=production
