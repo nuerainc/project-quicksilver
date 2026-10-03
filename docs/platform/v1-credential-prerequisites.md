@@ -20,9 +20,9 @@ values, so this document does not claim that any credential is present.
 
 | Priority | Credential or access | Used for | Requirements / notes |
 |---|---|---|---|
-| 5 | Render project/deployment access; `QUICKSILVER_VAULT_KEY`; encrypted persistent-disk and backup configuration | Always-on host and durable run store; P-014, P-023, P-081, P-089, P-096, P-110 | The repo's Render blueprint is not deployed. Render injects `DATABASE_URL` from the managed database; it is not a value Monte needs to acquire separately. Keep the host single-tenant for the initial founder pilot. Use separate production secrets; don't import local `.env` wholesale. |
+| 5 | Azure subscription/resource-group access (App Service + Azure Database for PostgreSQL Flexible Server, using the founder's Azure free credits); `QUICKSILVER_VAULT_KEY`; encrypted persistent-disk and backup configuration | Always-on host and durable run store; P-014, P-023, P-081, P-089, P-096, P-110 | **Chosen path is Azure, not Render** (see [always-on hosting](always-on-hosting.md)); an Azure deploy template equivalent to `deploy/render.yaml` has not been written yet. Azure Database for PostgreSQL supplies its own connection string; it is not a value Monte needs to construct separately. Keep the host single-tenant for the initial founder pilot. Use separate production secrets; don't import local `.env` wholesale. |
 | 6 | Host principals (`QUICKSILVER_PRINCIPALS`) with per-person hashed bearer credentials, plus `QUICKSILVER_TENANT_ID`; interim `NQC_SUPERVISOR_TOKEN`/`NQC_SUPERVISOR_ID` only if necessary | Authenticated host operations and live tests; P-014, P-081, P-121 | Prefer per-person principals with least privilege; the shared supervisor token is transitional. Never send tokens in request bodies. |
-| 7 | Vercel/Render deployment access, HTTPS domain/DNS configuration and public host URL | Public health checks and always-on hosting; P-014 | These are provider-account access and configuration, not API credentials to paste into Quicksilver. The repo proposes Vercel for the web app and Render/Postgres for the persistent host. |
+| 7 | Vercel deployment access; Azure subscription/resource-group access for the App Service host; HTTPS domain/DNS configuration and public host URL | Public health checks and always-on hosting; P-014 | These are provider-account access and configuration, not API credentials to paste into Quicksilver. The chosen topology is Vercel for the web app and Azure App Service + Azure Database for PostgreSQL for the persistent host. |
 | 8 | Generated least-privilege task client token (`QUICKSILVER_TASK_TOKEN`); remote `QUICKSILVER_HOST_URL` must be HTTPS | Quicksilver Tasks MCP clients; P-028 | Generate a distinct client token through `npm run tasks -- client add <name>`. The URL is configuration, not a credential. |
 | 9 | Founder-approved company entity, bank/payment account, invoices/receipts and pilot evidence | Genesis, Onboard and Operate operational acceptance; P-081, P-089, P-096 | Credentials alone do not satisfy these rows; dated pilot evidence and dollar-level reconciliation are required. Never use restricted patent or regulated data for this pilot. |
 | 10 | Browser E2E base URL (`QUICKSILVER_E2E_BASE_URL`), distinct proposer token (`QUICKSILVER_E2E_REQUESTER_TOKEN`) and human supervisor token (`QUICKSILVER_SUPERVISOR_TOKEN`) | Live Sanity-backed decision-loop run; P-121 | Use test principals scoped to the dedicated tenant and distinct requester/approver identities where possible. The script can fall back to using the supervisor as requester, which invokes sole-operator exception logic. The test needs a safe disposable decision/scenario and documented cleanup/rollback. Fault-injection scenario B needs a separate non-production deployment with `QUICKSILVER_PROCESS_ENGINE=on` and `QUICKSILVER_ALLOW_FAULT_INJECTION=on`; never enable fault injection in production. |
@@ -54,8 +54,12 @@ share a bank login or an unrestricted account owner key.
    remains single-tenant while SSO is being implemented.
 3. Confirm which model provider may process founder-owned pilot data and
    document its retention/no-training terms.
-4. Confirm whether the Vercel web app plus Render host/Postgres deployment
-   remains the desired topology and which custom domain to use.
+4. ~~Confirm whether the Vercel web app plus Render host/Postgres deployment
+   remains the desired topology~~ — **decided: Azure.** The host runs on
+   Azure App Service (Web App for Containers) with Azure Database for
+   PostgreSQL Flexible Server, using the founder's Azure free credits; Vercel
+   stays for the web app. Still open: which custom domain to use, and writing
+   the Azure deploy template (the `render.yaml` equivalent).
 
 These decisions block operational configuration; they do not block the
 continued implementation and automated testing of provider-agnostic code.
