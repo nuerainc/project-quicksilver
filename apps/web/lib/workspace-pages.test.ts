@@ -30,7 +30,7 @@ test('agent workspace keeps its governance actions and gives each section a clea
 
 test('monitoring workspace keeps metadata-only behavior and responsive filters, cards, and table', () => {
   assert.match(monitoringPage, /const API_PATH = '\/api\/monitoring\/workflows'/)
-  assert.match(monitoringPage, /readConsoleToken\(\)/)
+  assert.match(monitoringPage, /resolveConsoleAccess\(\)/)
   assert.match(monitoringPage, /metadata only/i)
   assert.match(monitoringPage, /Workflow monitoring/)
   assert.match(monitoringPage, /Recent workflow metrics/)

@@ -2,13 +2,13 @@
 
 import Link from 'next/link'
 import { useCallback, useEffect, useState } from 'react'
-import { authFailureMessage, consoleHeaders, readConsoleToken, type ConsoleRoute } from '@/lib/console-auth'
+import { authFailureMessage, consoleHeaders, resolveConsoleAccess, type ConsoleAccess, type ConsoleRoute } from '@/lib/console-auth'
 import type { BusinessOverview, FinanceOverview } from '@/lib/business-dashboard'
 
 type WorkflowRun = { runId: string; workflowId: string; status: 'succeeded' | 'blocked' | 'failed'; completedAt: number; durationMs: number }
 type WorkflowResponse = { executions: WorkflowRun[]; observedAt: number; sampleLimit: number }
 
-async function getJson<T>(path: string, route: ConsoleRoute, token: string): Promise<T> {
+async function getJson<T>(path: string, route: ConsoleRoute, token: string | null): Promise<T> {
   const response = await fetch(path, { headers: consoleHeaders(path, token), cache: 'no-store' })
   const payload = await response.json().catch(() => ({}))
   if (!response.ok) {
@@ -31,7 +31,8 @@ function when(value: string | number | null | undefined) {
 }
 
 export function BusinessDashboard() {
-  const [token, setToken] = useState<string | null>(null)
+  const [access, setAccess] = useState<ConsoleAccess | null>(null)
+  const signedIn = Boolean(access?.signedIn)
   const [overview, setOverview] = useState<BusinessOverview | null>(null)
   const [finance, setFinance] = useState<FinanceOverview | null>(null)
   const [workflowData, setWorkflowData] = useState<WorkflowResponse | null>(null)
@@ -40,8 +41,8 @@ export function BusinessDashboard() {
   const [financeError, setFinanceError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
 
-  const refresh = useCallback(async (credential = token) => {
-    if (!credential) {
+  const refresh = useCallback(async (current: ConsoleAccess | null = access) => {
+    if (!current?.signedIn) {
       setOverview(null)
       setFinance(null)
       setWorkflowData(null)
@@ -49,9 +50,9 @@ export function BusinessDashboard() {
     }
     setLoading(true)
     const [business, financial, workflows] = await Promise.allSettled([
-      getJson<BusinessOverview>('/api/dashboard/overview', 'dashboard/overview', credential),
-      getJson<FinanceOverview>('/api/dashboard/finance', 'dashboard/finance', credential),
-      getJson<WorkflowResponse>('/api/monitoring/workflows', 'monitoring/workflows', credential),
+      getJson<BusinessOverview>('/api/dashboard/overview', 'dashboard/overview', current.token),
+      getJson<FinanceOverview>('/api/dashboard/finance', 'dashboard/finance', current.token),
+      getJson<WorkflowResponse>('/api/monitoring/workflows', 'monitoring/workflows', current.token),
     ])
     if (business.status === 'fulfilled') { setOverview(business.value); setOverviewError(null) }
     else { setOverview(null); setOverviewError(business.reason instanceof Error ? business.reason.message : 'Business records are unavailable.') }
@@ -60,10 +61,10 @@ export function BusinessDashboard() {
     if (workflows.status === 'fulfilled') { setWorkflowData(workflows.value); setWorkflowError(null) }
     else { setWorkflowData(null); setWorkflowError(workflows.reason instanceof Error ? workflows.reason.message : 'Workflow activity is unavailable.') }
     setLoading(false)
-  }, [token])
+  }, [access])
 
-  useEffect(() => { setToken(readConsoleToken()) }, [])
-  useEffect(() => { if (token) void refresh(token) }, [refresh, token])
+  useEffect(() => { void resolveConsoleAccess().then(setAccess) }, [])
+  useEffect(() => { if (access?.signedIn) void refresh(access) }, [refresh, access])
 
   const hasSomeData = Boolean(overview || workflowData)
   const runs = workflowData?.executions ?? []
@@ -83,34 +84,34 @@ export function BusinessDashboard() {
         </div>
         <div className="qs-dashboard-heading__actions">
           {workflowData?.observedAt && <span className="qs-dashboard-updated">Updated {when(workflowData.observedAt)}</span>}
-          <button type="button" className="qs-action-secondary" onClick={() => void refresh()} disabled={!token || loading}>
+          <button type="button" className="qs-action-secondary" onClick={() => void refresh()} disabled={!signedIn || loading}>
             {loading ? 'Refreshing…' : 'Refresh overview'}
           </button>
         </div>
       </header>
 
-      {!token && <section className="qs-dashboard-signin" aria-labelledby="dashboard-signin-title">
+      {access !== null && !signedIn && <section className="qs-dashboard-signin" aria-labelledby="dashboard-signin-title">
         <div><p className="qs-eyebrow">Sign in to load your business data</p><h2 id="dashboard-signin-title">Your operating picture is private to your principal.</h2><p>Use the planning workspace to sign in. This overview reads existing decision, workflow, metric, experiment, and ledger records; it does not create activity or estimate missing values.</p></div>
         <Link className="qs-action-primary" href="/planning#console-token">Open sign-in</Link>
       </section>}
 
-      {token && (overviewError || workflowError) && <div className="qs-dashboard-errors">
+      {signedIn && (overviewError || workflowError) && <div className="qs-dashboard-errors">
         {overviewError && <p role="alert"><strong>Business records:</strong> {overviewError}</p>}
         {workflowError && <p role="alert"><strong>Workflow activity:</strong> {workflowError}</p>}
       </div>}
-      {token && financeError && <p role="status" className="qs-dashboard-finance-access">Money ledger is hidden: {financeError}</p>}
+      {signedIn && financeError && <p role="status" className="qs-dashboard-finance-access">Money ledger is hidden: {financeError}</p>}
 
       <section aria-label="Business status summary" className="qs-dashboard-stat-grid">
-        <article className="qs-dashboard-stat qs-dashboard-stat--attention"><span>Decisions needing review</span><strong>{overview ? pending : '—'}</strong><small>{overview ? `${overview.decisionCounts.total} total recorded` : token ? 'Waiting for decision data' : 'Sign in to view'}</small></article>
-        <article className="qs-dashboard-stat"><span>Experiments running</span><strong>{overview ? activeExperiments.length : '—'}</strong><small>{overview ? `${overview.experiments.length} recent experiment records` : token ? 'Waiting for experiment data' : 'Sign in to view'}</small></article>
-        <article className="qs-dashboard-stat"><span>Workflow success · recent sample</span><strong>{successRate === null ? '—' : `${successRate}%`}</strong><small>{workflowData ? `${runs.length} of up to ${workflowData.sampleLimit} recent runs` : token ? 'Waiting for workflow data' : 'Sign in to view'}</small></article>
-        <article className="qs-dashboard-stat"><span>Business measures</span><strong>{overview?.metrics.length ?? '—'}</strong><small>{overview ? 'Latest recorded metric documents' : token ? 'Waiting for metric data' : 'Sign in to view'}</small></article>
+        <article className="qs-dashboard-stat qs-dashboard-stat--attention"><span>Decisions needing review</span><strong>{overview ? pending : '—'}</strong><small>{overview ? `${overview.decisionCounts.total} total recorded` : signedIn ? 'Waiting for decision data' : 'Sign in to view'}</small></article>
+        <article className="qs-dashboard-stat"><span>Experiments running</span><strong>{overview ? activeExperiments.length : '—'}</strong><small>{overview ? `${overview.experiments.length} recent experiment records` : signedIn ? 'Waiting for experiment data' : 'Sign in to view'}</small></article>
+        <article className="qs-dashboard-stat"><span>Workflow success · recent sample</span><strong>{successRate === null ? '—' : `${successRate}%`}</strong><small>{workflowData ? `${runs.length} of up to ${workflowData.sampleLimit} recent runs` : signedIn ? 'Waiting for workflow data' : 'Sign in to view'}</small></article>
+        <article className="qs-dashboard-stat"><span>Business measures</span><strong>{overview?.metrics.length ?? '—'}</strong><small>{overview ? 'Latest recorded metric documents' : signedIn ? 'Waiting for metric data' : 'Sign in to view'}</small></article>
       </section>
 
       <section className="qs-dashboard-main-grid">
         <article className="qs-panel qs-dashboard-panel" aria-labelledby="needs-attention-title">
           <div className="qs-dashboard-section-heading"><div><p className="qs-eyebrow">Priority queue</p><h2 id="needs-attention-title">Needs your attention</h2></div><Link href="/decisions">Review decisions <span aria-hidden="true">→</span></Link></div>
-          {!token ? <DashboardEmpty>Sign in to check for approvals and blocked work.</DashboardEmpty>
+          {!signedIn ? <DashboardEmpty>Sign in to check for approvals and blocked work.</DashboardEmpty>
             : !hasSomeData && loading ? <DashboardEmpty>Loading current business records…</DashboardEmpty>
             : pending > 0 ? <div className="qs-dashboard-callout qs-dashboard-callout--attention"><span className="qs-dashboard-indicator" aria-hidden="true"/><div><strong>{pending} decision{pending === 1 ? '' : 's'} waiting for an authorized review</strong><p>High-impact work remains under human oversight. Open the decision log to inspect risk and evidence before choosing.</p></div><Link href="/decisions" aria-label="Review decisions waiting for approval">Review</Link></div>
             : <DashboardEmpty>{overview ? 'No decisions are currently waiting for approval.' : 'Decision data is not available for this account.'}</DashboardEmpty>}
@@ -130,24 +131,24 @@ export function BusinessDashboard() {
       <section className="qs-dashboard-main-grid qs-dashboard-main-grid--lower">
         <article className="qs-panel qs-dashboard-panel" aria-labelledby="business-measures-title">
           <div className="qs-dashboard-section-heading"><div><p className="qs-eyebrow">Observed company state</p><h2 id="business-measures-title">Business measures</h2></div></div>
-          {!overview?.metrics.length ? <DashboardEmpty>{token ? 'No operating metrics have been recorded yet. Values are never filled with sample or estimated data.' : 'Sign in to view recorded company measures.'}</DashboardEmpty> : <div className="qs-dashboard-metrics">{overview.metrics.map((metric) => <div className="qs-dashboard-metric" key={metric.id}><div><strong>{metric.name}</strong><small>{metric.baseline === null ? 'Baseline not recorded' : `Baseline ${metric.baseline}${metric.unit ? ` ${metric.unit}` : ''} · ${metric.direction === 'higher-better' ? 'higher is better' : metric.direction === 'lower-better' ? 'lower is better' : 'direction not set'}`}</small></div><b>{metric.value}{metric.unit ? ` ${metric.unit}` : ''}</b></div>)}</div>}
+          {!overview?.metrics.length ? <DashboardEmpty>{signedIn ? 'No operating metrics have been recorded yet. Values are never filled with sample or estimated data.' : 'Sign in to view recorded company measures.'}</DashboardEmpty> : <div className="qs-dashboard-metrics">{overview.metrics.map((metric) => <div className="qs-dashboard-metric" key={metric.id}><div><strong>{metric.name}</strong><small>{metric.baseline === null ? 'Baseline not recorded' : `Baseline ${metric.baseline}${metric.unit ? ` ${metric.unit}` : ''} · ${metric.direction === 'higher-better' ? 'higher is better' : metric.direction === 'lower-better' ? 'lower is better' : 'direction not set'}`}</small></div><b>{metric.value}{metric.unit ? ` ${metric.unit}` : ''}</b></div>)}</div>}
         </article>
 
         <article className="qs-panel qs-dashboard-panel" aria-labelledby="experiment-title">
           <div className="qs-dashboard-section-heading"><div><p className="qs-eyebrow">Genesis and business trials</p><h2 id="experiment-title">Experiments</h2></div><span className="qs-dashboard-count">{activeExperiments.length} running</span></div>
-          {!overview?.experiments.length ? <DashboardEmpty>{token ? 'No experiment records are available yet.' : 'Sign in to view experiments.'}</DashboardEmpty> : <ul className="qs-dashboard-list">{overview.experiments.map((experiment) => <li key={experiment.id}><span className={`qs-dashboard-status qs-dashboard-status--${experiment.status}`}>{experiment.status}</span><div><strong>{experiment.hypothesis}</strong><small>{experiment.budgetUsd === null ? 'Budget not recorded' : `${currency(experiment.budgetUsd)} budget`} · ends {when(experiment.endsAt)}</small></div></li>)}</ul>}
+          {!overview?.experiments.length ? <DashboardEmpty>{signedIn ? 'No experiment records are available yet.' : 'Sign in to view experiments.'}</DashboardEmpty> : <ul className="qs-dashboard-list">{overview.experiments.map((experiment) => <li key={experiment.id}><span className={`qs-dashboard-status qs-dashboard-status--${experiment.status}`}>{experiment.status}</span><div><strong>{experiment.hypothesis}</strong><small>{experiment.budgetUsd === null ? 'Budget not recorded' : `${currency(experiment.budgetUsd)} budget`} · ends {when(experiment.endsAt)}</small></div></li>)}</ul>}
         </article>
       </section>
 
       <section className="qs-dashboard-main-grid qs-dashboard-main-grid--lower">
         <article className="qs-panel qs-dashboard-panel" aria-labelledby="recent-decisions-title">
           <div className="qs-dashboard-section-heading"><div><p className="qs-eyebrow">Governed activity</p><h2 id="recent-decisions-title">Recent decisions</h2></div><Link href="/decisions">Decision log <span aria-hidden="true">→</span></Link></div>
-          {!overview?.recentDecisions.length ? <DashboardEmpty>{token ? 'No decision records are available yet.' : 'Sign in to view recent decisions.'}</DashboardEmpty> : <ul className="qs-dashboard-list">{overview.recentDecisions.map((decision) => <li key={decision.id}><span className={`qs-dashboard-status qs-dashboard-status--${decision.status}`}>{decision.status.replaceAll('-', ' ')}</span><div><strong>{decision.title}</strong><small>{when(decision.createdAt)} · {decision.riskLevel === null ? 'Risk not recorded' : `risk ${decision.riskLevel}/5`}{decision.requiredApproval ? ' · approval required' : ''}{decision.safetyDecision ? ` · NQC ${decision.safetyDecision}` : ''}</small></div></li>)}</ul>}
+          {!overview?.recentDecisions.length ? <DashboardEmpty>{signedIn ? 'No decision records are available yet.' : 'Sign in to view recent decisions.'}</DashboardEmpty> : <ul className="qs-dashboard-list">{overview.recentDecisions.map((decision) => <li key={decision.id}><span className={`qs-dashboard-status qs-dashboard-status--${decision.status}`}>{decision.status.replaceAll('-', ' ')}</span><div><strong>{decision.title}</strong><small>{when(decision.createdAt)} · {decision.riskLevel === null ? 'Risk not recorded' : `risk ${decision.riskLevel}/5`}{decision.requiredApproval ? ' · approval required' : ''}{decision.safetyDecision ? ` · NQC ${decision.safetyDecision}` : ''}</small></div></li>)}</ul>}
         </article>
 
         <article className="qs-panel qs-dashboard-panel" aria-labelledby="ledger-title">
           <div className="qs-dashboard-section-heading"><div><p className="qs-eyebrow">Recorded financial activity</p><h2 id="ledger-title">Money ledger</h2></div></div>
-          {!finance || finance.ledger.entryCount === 0 ? <DashboardEmpty>{finance ? 'No ledger entries are recorded. This is not a bank balance, live payments feed, or reconciled cash position.' : token ? 'Ledger totals require a principal with finance access.' : 'Sign in to view recorded ledger totals.'}</DashboardEmpty> : <><div className="qs-ledger-net"><span>Net recorded</span><strong>{currency(finance.ledger.revenueUsd + finance.ledger.refundsUsd - finance.ledger.spendUsd - finance.ledger.computeUsd)}</strong></div><dl className="qs-ledger-breakdown"><div><dt>Revenue</dt><dd>{currency(finance.ledger.revenueUsd)}</dd></div><div><dt>Spend</dt><dd>{currency(finance.ledger.spendUsd)}</dd></div><div><dt>Compute</dt><dd>{currency(finance.ledger.computeUsd)}</dd></div><div><dt>Refunds</dt><dd>{currency(finance.ledger.refundsUsd)}</dd></div></dl><p className="qs-dashboard-disclaimer">{finance.ledger.entryCount} recorded entries · Ledger data only; processor and bank reconciliation are not connected.</p></>}
+          {!finance || finance.ledger.entryCount === 0 ? <DashboardEmpty>{finance ? 'No ledger entries are recorded. This is not a bank balance, live payments feed, or reconciled cash position.' : signedIn ? 'Ledger totals require a principal with finance access.' : 'Sign in to view recorded ledger totals.'}</DashboardEmpty> : <><div className="qs-ledger-net"><span>Net recorded</span><strong>{currency(finance.ledger.revenueUsd + finance.ledger.refundsUsd - finance.ledger.spendUsd - finance.ledger.computeUsd)}</strong></div><dl className="qs-ledger-breakdown"><div><dt>Revenue</dt><dd>{currency(finance.ledger.revenueUsd)}</dd></div><div><dt>Spend</dt><dd>{currency(finance.ledger.spendUsd)}</dd></div><div><dt>Compute</dt><dd>{currency(finance.ledger.computeUsd)}</dd></div><div><dt>Refunds</dt><dd>{currency(finance.ledger.refundsUsd)}</dd></div></dl><p className="qs-dashboard-disclaimer">{finance.ledger.entryCount} recorded entries · Ledger data only; processor and bank reconciliation are not connected.</p></>}
         </article>
       </section>
 

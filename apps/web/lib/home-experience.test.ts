@@ -24,7 +24,7 @@ test('the objective and planning console is preserved at its own route', () => {
   assert.match(planningPage, /<h1 className="qs-page-heading">Turn intent into governed action\.<\/h1>/)
   assert.match(planningPage, /id="business-objective"/)
   assert.match(planningPage, /Create plan/)
-  assert.match(planningPage, /disabled=\{busy \|\| objective\.trim\(\)\.length < 3 \|\| !token\}/)
+  assert.match(planningPage, /disabled=\{busy \|\| objective\.trim\(\)\.length < 3 \|\| !signedIn\}/)
 })
 
 test('business dashboard links to each existing workspace and preserved planning console', () => {
@@ -35,7 +35,7 @@ test('business dashboard links to each existing workspace and preserved planning
 })
 
 test('dashboard requires the existing tab-scoped principal and has useful loading/error states', () => {
-  assert.match(page, /readConsoleToken\(\)/)
+  assert.match(page, /resolveConsoleAccess\(\)/)
   assert.match(page, /Sign in to load your business data/)
   assert.match(page, /role="alert"/)
   assert.match(page, /Loading current business records/)

@@ -10,12 +10,28 @@
  */
 
 import { NextResponse } from 'next/server'
-import { checkWhoami } from '@/lib/nqc-approval'
+import { checkWhoami, checkWhoamiPrincipal } from '@/lib/nqc-approval'
+import { readBrowserSession } from '@/lib/oidc-browser-auth'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 export async function GET(req: Request) {
-  const result = checkWhoami(req.headers.get('authorization'), process.env)
+  const headers = { 'cache-control': 'no-store' }
+  const authorization = req.headers.get('authorization')
+  // A pasted token wins. Without one, a signed-in browser session answers the same question.
+  if (authorization === null) {
+    try {
+      const session = await readBrowserSession(req, process.env)
+      if (session) {
+        const result = checkWhoamiPrincipal({ id: session.id, kind: session.kind, tenantId: session.tenantId, roles: session.roles, ...(session.displayName ? { displayName: session.displayName } : {}) }, process.env)
+        return NextResponse.json(result.body, { status: result.status, headers })
+      }
+    } catch (error) {
+      console.error('[oidc] session lookup failed', error instanceof Error ? error.name : 'UnknownError')
+      return NextResponse.json({ error: 'Browser session storage is unavailable.' }, { status: 503, headers })
+    }
+  }
+  const result = checkWhoami(authorization, process.env)
   return NextResponse.json(result.body, { status: result.status, headers: { 'cache-control': 'no-store' } })
 }
