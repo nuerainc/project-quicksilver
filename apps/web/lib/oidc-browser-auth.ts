@@ -236,7 +236,12 @@ export async function completeOidcLogin(request: Request, env: OidcBrowserEnv, d
       nonce: transaction.nonce,
     }, { fetcher, now })
     const identity = mapVerifiedOidcIdentity(claims, parseOidcIdentityBindings(env.QUICKSILVER_OIDC_USERS), env.QUICKSILVER_TENANT_ID?.trim() || 'default')
-    if (!identity.ok) throw new Error('OIDC identity is not mapped to an authorized tenant principal.')
+    if (!identity.ok) {
+      // The ID token is verified, so name who it was: an owner adds exactly this issuer and subject to the allowlist
+      // (QUICKSILVER_OIDC_USERS). Only these two values and the reason are logged, never the token or any other claim.
+      console.warn('[oidc] login refused: identity is not on the allowlist', JSON.stringify({ reason: identity.reason, issuer: claims.iss, subject: claims.sub.slice(0, 512) }))
+      throw new Error('OIDC identity is not mapped to an authorized tenant principal.')
+    }
 
     const sessionToken = randomToken(32, random)
     await store.createSession({
