@@ -49,7 +49,7 @@ test('a note is sent only on the action route, and a self-approval note must be 
 })
 
 test('a changed policy is said aloud, a missing explanation is explained, and the explanation panel is the same one planning shows', () => {
-  assert.match(detail, /A policy changed since this was planned/)
+  assert.match(detail, /A <Term term=\"policy snapshot\">policy<\/Term> changed since this was planned/)
   assert.match(detail, /planned before explanations were kept/)
   assert.match(detail, /<WhyPanel why=\{detail\.why\} defaultOpen objective=/)
 })

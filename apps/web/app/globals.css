@@ -542,3 +542,13 @@ body:has(.app-topbar) > #main-content { min-height: 100dvh; margin-inline-start:
   .app-sidebar-collapse { width: 2.75rem; min-height: 2.75rem; }
   .qs-dashboard-section-heading a { min-height: 2.75rem; }
 }
+
+.qs-term { position: relative; display: inline; }
+.qs-term__button { min-height: 1.5rem; border: 0; background: transparent; padding: 0; color: inherit; font: inherit; text-decoration: underline dotted; text-underline-offset: 0.2em; cursor: help; }
+.qs-term__button:focus-visible { outline: 3px solid #a8e4ff; outline-offset: 2px; }
+.qs-term__note { display: block; margin: 0.35rem 0; max-width: 34rem; border: 1px solid #354a60; border-radius: 0.5rem; background: #111e30; padding: 0.55rem 0.7rem; color: #dbe6f1; font-size: 0.8rem; line-height: 1.45; }
+.qs-risk { display: inline-block; border: 1px solid currentColor; border-radius: 999px; padding: 0.05rem 0.55rem; font-size: 0.75rem; font-weight: 600; }
+.qs-risk[data-tone="low"] { color: #7ddfb1; }
+.qs-risk[data-tone="mid"] { color: #f2cf74; }
+.qs-risk[data-tone="high"] { color: #ff9a8f; }
+.qs-risk[data-tone="unknown"] { color: #aebfd0; }

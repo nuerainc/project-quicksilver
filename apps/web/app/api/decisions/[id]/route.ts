@@ -2,27 +2,12 @@ import { NextResponse } from 'next/server'
 import { guardWebRoute } from '@/lib/route-guard'
 import { publicationRefusal } from '@/lib/workflow-publication-http'
 import { getSanityClient } from '@/lib/sanity-client'
+import { DECISION_DETAIL_QUERY } from '@/lib/decision-audit'
 import { currentPolicySnapshotVersion, decisionActionFingerprint, soleOperatorId } from '@/lib/nqc-approval'
 
 export const dynamic = 'force-dynamic'
 
 const ID = /^[A-Za-z0-9._:-]{1,200}$/
-
-const DETAIL_QUERY = `*[_type == "decision" && _id == $id][0]{
-  _id, question, selectedAction, reasoningSummary, constraints, riskLevel, requiredApproval, status, safetyDecision,
-  requestedBy, proposedBy, createdAt, executedAt, policySnapshotVersion, policyResolutions, kind, observedDeviation,
-  "actorId": candidateActions[0].actor._ref,
-  "policyIds": policyChecks[].policy._ref,
-  "approvedByName": approvedBy->name,
-  "policyChecks": policyChecks[]{ result, reason, "policyName": policy->name },
-  "evidenceTitles": evidence[]->title,
-  evaluation{ reasoningScore, hallucinationRisk, brittleness, failedToolCount, issues, corrections, modelId, evaluatedAt },
-  reviewerNotes,
-  why,
-  "processName": process.definition->name,
-  "processVersion": process.version,
-  processHistory[]{ transitionId, from, to, actorId, actorType, at }
-}`
 
 /**
  * GET /api/decisions/:id — one decision in full, including the kernel's explanation of why
@@ -36,7 +21,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   const { id } = await params
   if (!ID.test(id)) return NextResponse.json({ error: 'That is not a decision id.' }, { status: 400 })
   try {
-    const doc = await getSanityClient('read').fetch<Record<string, unknown> | null>(DETAIL_QUERY, { id })
+    const doc = await getSanityClient('read').fetch<Record<string, unknown> | null>(DECISION_DETAIL_QUERY, { id })
     if (!doc) return NextResponse.json({ error: 'Decision not found.' }, { status: 404, headers: { 'cache-control': 'no-store' } })
     const { _id, policyIds, ...rest } = doc as Record<string, unknown> & { _id: string; policyIds?: string[] | null; selectedAction?: string | null; policySnapshotVersion?: string | null; riskLevel?: number | null; requiredApproval?: boolean | null; status?: string | null }
     // What an approval covers, and whether the policies it was planned under have since changed:

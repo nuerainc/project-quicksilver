@@ -77,7 +77,7 @@ function SessionControl({ pathname, mobile = false }: { pathname: string; mobile
   if (state.status === 'signed-out') return <a className={`${className} app-session__button`} href={signInPageHref(pathname)}>Sign in</a>
   return (
     <form className={className} method="post" action="/api/auth/logout">
-      <span className="app-session__name" title={state.roles.join(', ')}>{state.name}</span>
+      <Link href="/profile" className="app-session__name" title={`${state.roles.join(', ')} · your account`}>{state.name}</Link>
       <button type="submit" className="app-session__button">Sign out</button>
     </form>
   )

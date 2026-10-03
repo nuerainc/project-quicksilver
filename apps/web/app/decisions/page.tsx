@@ -8,6 +8,7 @@ import { DecisionDetail } from '@/components/decision-detail'
 import styles from '@/components/decisions.module.css'
 import { authFailureMessage, consoleHeaders, resolveConsoleAccess, type ConsoleAccess } from '@/lib/console-auth'
 import { signInPageHref } from '@/lib/session-control'
+import { riskLabel, riskTone } from '@/lib/risk-words'
 
 interface Row { id: string; title: string; action: string | null; status: string; riskLevel: number | null; requiredApproval: boolean; requestedBy: string | null; createdAt: string | null; kind: string | null }
 interface ListBody { observedAt: string; hasMore: boolean; counts: Record<string, number>; decisions: Row[] }
@@ -135,7 +136,7 @@ function Decisions() {
                       <p className={styles.rowTitle}>{row.title}</p>
                       <span className={styles.rowMeta}>
                         <span className={styles.status} data-tone={TONE[row.status] ?? 'wait'}>{row.status.replaceAll('-', ' ')}</span>
-                        <span>{row.riskLevel === null ? (row.kind === 'rollback' ? 'Rollback' : 'Risk not rated') : `Risk ${row.riskLevel} of 5`}</span>
+                        <span className="qs-risk" data-tone={riskTone(row.riskLevel)}>{row.riskLevel === null && row.kind === 'rollback' ? 'Rollback' : `Risk: ${riskLabel(row.riskLevel)}`}</span>
                         <span>{ago(row.createdAt)}</span>
                       </span>
                     </button>
