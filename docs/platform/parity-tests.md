@@ -338,7 +338,7 @@ the security, observability and developer-experience groups below.
 | P-116 | The Python SDK and `qs` CLI do the same without dependencies. | automated test | `packages/sdk-python/tests/test_client.py` covers URL policy, typed validation/preview/run results, malformed contracts, HTTP errors, invalid request data, and all three CLI commands; `python -m unittest discover -s packages/sdk-python/tests -v`; `pyproject.toml` has no runtime dependencies | covered | |
 | P-117 | The operator CLIs (host, onboard, genesis, operate, tasks, whatif) use the same rules as the API. | automated test | `cli-args.test.ts` covers production flag profiles; `onboard-cli.test.ts` checks CLI-created and CLI-answered intent through the authenticated HTTP API; `genesis-cli.test.ts` checks review writes and reads both ways across CLI and HTTP using `FileGenesisStore`; existing `operate.test.ts`, `whatif.test.ts`, and `tasks.test.ts` exercise real CLI paths and domain services | partial | All five CLI entry points now share the parser. Onboard and Genesis share persisted data with their HTTP APIs; Tasks uses shared `TaskService`, and `tasks list --limit` now matches the API default/bounds. Operate/What-if behavior is covered through CLI tests but not yet compared directly against matching HTTP operations, and authorization/validation parity for every CLI/API path remains to be demonstrated. Host route auth is separately covered by P-097/P-098 |
 | P-118 | The API has a declared, versioned, stable contract. | automated test, manual check | `docs/api/openapi.json` (OpenAPI 3.1, version 0.4.0); `apps/web/lib/app-routes.test.ts` asserts route/method drift, operation IDs, write request bodies, and local reference resolution; workflow graph, validation, simulation, and run schemas | partial | Concrete workflow contract coverage was added. Most agent, publication, decision, planning, query, and monitoring operations still use generic placeholder schemas; complete error catalogs, idempotency and revision conflict semantics, pagination guarantees, SDK compatibility, and a stable 1.0.0 promise remain unspecified |
-| P-119 | A Go SDK and an agent creation API exist. | Go SDK CI build/vet/test; agent API regression tests | Go workflow client implements validation, safe preview and read-only run; `client_test.go` covers URL policy, HTTP contracts, safe modes, NQC evaluation validation, errors/size limits and cancellation. The authenticated agent draft API is `apps/web/app/api/agents/drafts/route.ts`, backed by the tested catalog lifecycle in `agent-catalog-store.test.ts` and contract tests | partial | Both capabilities now exist; the earlier “agent creation API absent” note was stale. Current Go SDK changes still need `go test`, `go vet` and `go build` evidence: this Windows environment has no Go executable, and the GitHub Actions result for this uncommitted snapshot is not yet available. |
+| P-119 | A Go SDK and an agent creation API exist. | Go SDK CI build/vet/test; agent API regression tests | Go workflow client implements validation, safe preview and read-only run; `client_test.go` covers URL policy, HTTP contracts, safe modes, NQC evaluation validation, errors/size limits and cancellation. The authenticated agent draft API is `apps/web/app/api/agents/drafts/route.ts`, backed by the tested catalog lifecycle in `agent-catalog-store.test.ts` and contract tests | covered | Both capabilities exist. Evidence recorded 2026-10-03 on Linux with go1.24.7, in `packages/sdk-go` at the then-current `main`: `go vet ./...`, `go build ./...` and `go test ./...` each exited 0 (the CI workflow runs the same three commands). |
 | P-120 | The workflow editor's graph map has a layout regression test. | automated test | `apps/web/lib/workflow-layout.test.ts` "lays out branches and merges deterministically without overlap", "handles an empty draft with finite minimum canvas dimensions"; included in `npm run seed:test` | covered | The editor imports the same tested layout function from `apps/web/lib/workflow-layout.ts` |
 | P-121 | The live decision loop (plan, approve, execute, observe, roll back) passes against `f87t11g1`. | operational evidence | `apps/studio/scripts/e2e-live.ts` (`npm run e2e:live`), `apps/studio/scripts/smoke-test.ts` | needs operational evidence | Scripts exist; record a dated pass with each release candidate |
 
@@ -501,13 +501,13 @@ the provider's own hand-over.
 
 | Status | Count |
 |---|---|
-| covered | 85 |
-| partial | 29 |
+| covered | 86 |
+| partial | 28 |
 | missing | 0 |
 | needs operational evidence | 9 |
 | **Total** | **123** |
 
-As of 2026-10-01, the matrix has 85 covered, 29 partial, 0 missing, and 9
+As of 2026-10-01, the matrix has 86 covered, 28 partial, 0 missing, and 9
 requirements that need operational evidence. P-026 moved from missing to
 partial (2026-10-03): static experiment pages can be staged as immutable
 releases, published by a human behind the review gate, and torn down with their
