@@ -97,6 +97,14 @@ export interface AuthorizationExplanation {
   guardEvaluations: Array<{ policyId: string; result: PolicyCheck['result']; reasonCode?: PolicyCheck['reasonCode']; reason: string }>
 }
 
+/** The risk ceilings in force: explicit values, else the environment, else the defaults. */
+export function resolveThresholds(thresholds: AuthorizeArgs['thresholds'] = {}): { autoMax: RiskLevel; review: RiskLevel } {
+  return {
+    autoMax: thresholds.autoMax ?? readRiskThreshold('QUICKSILVER_RISK_AUTO_MAX', DEFAULT_RISK_AUTO_MAX),
+    review: thresholds.review ?? readRiskThreshold('QUICKSILVER_RISK_REVIEW_THRESHOLD', DEFAULT_RISK_REVIEW),
+  }
+}
+
 export function authorize(args: AuthorizeArgs): AuthorizeResult {
   const {
     action,
@@ -109,8 +117,7 @@ export function authorize(args: AuthorizeArgs): AuthorizeResult {
     thresholds = {},
   } = args
 
-  const autoMax = thresholds.autoMax ?? readRiskThreshold('QUICKSILVER_RISK_AUTO_MAX', DEFAULT_RISK_AUTO_MAX)
-  const review = thresholds.review ?? readRiskThreshold('QUICKSILVER_RISK_REVIEW_THRESHOLD', DEFAULT_RISK_REVIEW)
+  const { autoMax, review } = resolveThresholds(thresholds)
 
   const capability = capabilities.find((c) => c.id === action.capabilityId)
   const graph = buildCapabilityGraph(capabilities)

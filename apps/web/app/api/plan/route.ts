@@ -29,6 +29,8 @@
  *       {
  *         action: ProposedAction,
  *         decision: AuthorizeResult | null,   // kernel output; null if actor/capability didn't resolve
+ *         why: DecisionWhy | null,            // risk arithmetic, guards, policy revision, what would change the answer
+ *         escalationReasons: string[],        // evaluator reasons that tightened an allow into human review
  *         review: ReviewResult | null,        // independent reviewer's notes; advisory only, null if not resolved
  *         decisionDocId: string | null,       // Sanity _id of the persisted decision; null if not persisted
  *         resolvedReferences: {
@@ -69,7 +71,10 @@ import {
   policyFromSanity,
   policyScopesToFetch,
   snapshotPolicyIds,
+  explainWhy,
+  type AuthorizeArgs,
   type AuthorizeResult,
+  type DecisionWhy,
   type Facts,
   type CapabilityRef,
   type EntityRef,
@@ -326,6 +331,8 @@ export async function POST(req: Request) {
         let review: ReviewResult | null = null
         let reviewModel: { modelId: string; usage?: { inputTokens: number | null; outputTokens: number | null; totalTokens: number | null }; startedAt: number; durationMs: number } | null = null
         let doc: ReturnType<typeof buildDecisionDoc> | null = null
+        let why: DecisionWhy | null = null
+        let escalationReasons: string[] = []
 
         if (refs.actor && refs.capability) {
           // Construct a kernel-compatible ProposedAction. The planner returns
@@ -342,7 +349,7 @@ export async function POST(req: Request) {
             operationalImpact: action.operationalImpact as RiskLevel,
             uncertainty: action.uncertainty as RiskLevel,
           }
-          const perAction = evaluateAndAuthorize({
+          const kernelArgs: AuthorizeArgs = {
             action: kernelAction,
             actor: refs.actor,
             capabilities: refs.capabilities,
@@ -351,7 +358,12 @@ export async function POST(req: Request) {
             // Strict separation of duties at plan time: the sole-operator
             // override needs a written justification, which only the approval
             // step collects, so conflicting capabilities are refused here.
-          }, {
+          }
+          // The kernel's own reasoning, laid out for a person (risk arithmetic,
+          // guards, policy revision, and what would change the answer). It is
+          // computed from the kernel alone, before any evaluator tightening.
+          why = explainWhy(kernelArgs)
+          const perAction = evaluateAndAuthorize(kernelArgs, {
             // Evaluate only the user-facing proposed action and source metadata;
             // private model reasoning traces are intentionally not collected.
             agentOutput: kernelAction.description,
@@ -372,6 +384,7 @@ export async function POST(req: Request) {
           decision = governed.decision
           evaluation = governed.evaluation
           safetyDecision = governed.safetyDecision
+          escalationReasons = governed.escalationReasons
 
           // Independent review — advisory only. The kernel above has already
           // authorized/rejected the action; the reviewer never changes that
@@ -420,7 +433,7 @@ export async function POST(req: Request) {
           })
         }
 
-        return { action: action as ProposedAction, decision, evaluation, safetyDecision, review, reviewModel, refs, doc }
+        return { action: action as ProposedAction, decision, why, escalationReasons, evaluation, safetyDecision, review, reviewModel, refs, doc }
       }),
     )
 
@@ -479,6 +492,8 @@ export async function POST(req: Request) {
     const decisions = results.map((r) => ({
       action: r.action,
       decision: r.decision,
+      why: r.why,
+      escalationReasons: r.escalationReasons,
       evaluation: r.evaluation,
       safetyDecision: r.safetyDecision,
       review: r.review,

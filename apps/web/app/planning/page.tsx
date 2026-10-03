@@ -14,6 +14,8 @@ import {
   type SoleOperatorPrompt,
 } from '@/lib/console-auth'
 import { DEMO_PRINCIPALS } from '@/lib/demo-mode'
+import { WhyPanel } from '@/components/why-panel'
+import type { DecisionWhy } from '@quicksilver/kernel'
 
 /** Inlined at build: the public demo (Sanity Challenge edition) offers one-click demo sign-in. */
 const DEMO = (process.env.NEXT_PUBLIC_QUICKSILVER_DEMO_MODE ?? '').trim().toLowerCase() === 'on'
@@ -78,6 +80,8 @@ type DecisionResponse = {
     uncertainty: number
   }
   decision: DecisionDecision | null
+  why?: DecisionWhy | null
+  escalationReasons?: string[]
   review: ReviewResult | null
   decisionDocId: string | null
   approvalFingerprint: string | null
@@ -1062,6 +1066,8 @@ function DecisionCard({
               ))}
             </ul>
           )}
+
+          {d.why && <WhyPanel why={d.why} escalationReasons={d.escalationReasons} />}
 
           {/* Independent reviewer panel — advisory only. The kernel above is what
               actually authorizes or blocks; this is a second opinion for the
