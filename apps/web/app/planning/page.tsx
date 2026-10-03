@@ -134,8 +134,9 @@ type Observation = {
 }
 
 export default function HomePage() {
+  // Only the public demo, which runs on a synthetic company, starts with an example objective.
   const [objective, setObjective] = useState(
-    'Reduce production downtime by 20% over the next 30 days without increasing OPEX.',
+    DEMO ? 'Reduce production downtime by 20% over the next 30 days without increasing OPEX.' : '',
   )
   const [plan, setPlan] = useState<PlanResponse | null>(null)
   const [busy, setBusy] = useState(false)
@@ -443,6 +444,7 @@ export default function HomePage() {
             className="qs-field qs-field--textarea"
             rows={4}
             value={objective}
+            placeholder="For example: raise repeat orders by 10% this quarter without raising spend."
             onChange={(e) => setObjective(e.target.value)}
             aria-describedby="objective-help"
           />

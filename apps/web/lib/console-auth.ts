@@ -56,9 +56,25 @@ type AccessFetch = (input: string, init?: { headers?: Record<string, string>; ca
  * signed in" and the page shows its sign-in prompt. The question goes to `/api/auth/status`, which
  * answers 200 for a visitor who is not signed in, so that is not an error in the console.
  */
-export async function resolveConsoleAccess(fetcher: AccessFetch = (input, init) => fetch(input, init), storage?: () => TokenStorage | undefined): Promise<ConsoleAccess> {
+export async function resolveConsoleAccess(
+  fetcher: AccessFetch = (input, init) => fetch(input, init),
+  storage?: () => TokenStorage | undefined,
+  options: { withWhoami?: boolean } = {},
+): Promise<ConsoleAccess> {
   const token = storage ? readConsoleToken(storage) : readConsoleToken()
-  if (token) return { token, signedIn: true, whoami: null }
+  if (token) {
+    if (!options.withWhoami) return { token, signedIn: true, whoami: null }
+    // Pages that show or hide controls by permission ask who this is, once.
+    try {
+      const res = await fetcher('/api/whoami', { headers: consoleHeaders('/api/whoami', token), cache: 'no-store' })
+      if (res.status === 401) return { token: null, signedIn: false, whoami: null }
+      const body = res.status === 200 ? await res.json() as Partial<ConsoleWhoami> | null : null
+      const known = body && typeof body.principalId === 'string' && Array.isArray(body.permissions)
+      return { token, signedIn: true, whoami: known ? body as ConsoleWhoami : null }
+    } catch {
+      return { token, signedIn: true, whoami: null }
+    }
+  }
   try {
     const res = await fetcher('/api/auth/status', { cache: 'no-store', credentials: 'same-origin' })
     if (res.status !== 200) return { token: null, signedIn: false, whoami: null }

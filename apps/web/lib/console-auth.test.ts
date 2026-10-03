@@ -254,3 +254,16 @@ test('whoami for a browser session lists the permissions its roles give, and non
   const other = checkWhoamiPrincipal({ id: 'entity-zed', kind: 'human', tenantId: 'globex', roles: ['supervisor'] }, env)
   assert.ok(other.ok && other.body.permissions.length === 0)
 })
+
+test('a page that needs permissions asks who a pasted token belongs to; a rejected token is not signed in; a failed lookup keeps the token', async () => {
+  const who = { principalId: 'entity-ana', kind: 'human', tenantId: 'acme', permissions: ['decision:read', 'decision:approve'], credential: 'principal' }
+  const seen: string[] = []
+  const ok = await resolveConsoleAccess(async (url, init) => { seen.push(`${url} ${init?.headers?.authorization ?? ''}`); return { status: 200, json: async () => who } }, accessStorage('tok'), { withWhoami: true })
+  assert.equal(ok.signedIn, true)
+  assert.equal(ok.whoami?.principalId, 'entity-ana')
+  assert.deepEqual(seen, ['/api/whoami Bearer tok'])
+  const rejected = await resolveConsoleAccess(replying(401), accessStorage('bad'), { withWhoami: true })
+  assert.deepEqual(rejected, { token: null, signedIn: false, whoami: null })
+  const offline = await resolveConsoleAccess(async () => { throw new Error('offline') }, accessStorage('tok'), { withWhoami: true })
+  assert.deepEqual(offline, { token: 'tok', signedIn: true, whoami: null })
+})

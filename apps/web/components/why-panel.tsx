@@ -13,11 +13,11 @@ const GUARD_MARK: Record<string, string> = { applies: '●', superseded: '↷', 
  * fired, the policy revision in force, and what would have changed the answer.
  * Everything shown is the kernel's own output (see `explainWhy`).
  */
-export function WhyPanel({ why, escalationReasons = [] }: { why: DecisionWhy; escalationReasons?: string[] }) {
+export function WhyPanel({ why, escalationReasons = [], defaultOpen = false }: { why: DecisionWhy; escalationReasons?: string[]; defaultOpen?: boolean }) {
   const { risk } = why
   const improving = why.whatWouldChangeIt
   return (
-    <details open={why.recommendation === 'reject'} className="rounded border border-quicksilver-border bg-quicksilver-bg p-3" data-testid="why-panel">
+    <details open={defaultOpen || why.recommendation === 'reject'} className="rounded border border-quicksilver-border bg-quicksilver-bg p-3" data-testid="why-panel">
       <summary className="flex min-h-11 cursor-pointer items-center font-mono text-xs uppercase tracking-widest text-quicksilver-accent">
         Why this decision
       </summary>

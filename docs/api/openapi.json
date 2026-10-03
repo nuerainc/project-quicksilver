@@ -314,7 +314,8 @@
         "tags": ["Decisions"],
         "parameters": [
           { "$ref": "#/components/parameters/DecisionStatus" },
-          { "$ref": "#/components/parameters/DecisionLimit" }
+          { "$ref": "#/components/parameters/DecisionLimit" },
+          { "$ref": "#/components/parameters/DecisionBefore" }
         ],
         "responses": {
           "400": { "$ref": "#/components/responses/ErrorResponse" },
@@ -1284,13 +1285,19 @@
           "requiredApproval": { "type": "boolean" },
           "safetyDecision": { "type": ["string", "null"] },
           "requestedBy": { "type": ["string", "null"] },
+          "kind": { "type": ["string", "null"] },
           "createdAt": { "type": ["string", "null"], "format": "date-time" }
         }
       },
       "DecisionList": {
         "type": "object",
-        "required": ["observedAt", "decisions"],
-        "properties": { "observedAt": { "type": "string", "format": "date-time" }, "decisions": { "type": "array", "items": { "$ref": "#/components/schemas/DecisionSummary" } } }
+        "required": ["observedAt", "decisions", "hasMore", "counts"],
+        "properties": {
+          "observedAt": { "type": "string", "format": "date-time" },
+          "hasMore": { "type": "boolean" },
+          "counts": { "type": "object", "description": "How many decisions have each status, across all decisions.", "additionalProperties": { "type": "integer" } },
+          "decisions": { "type": "array", "items": { "$ref": "#/components/schemas/DecisionSummary" } }
+        }
       },
       "DecisionWhy": {
         "type": "object",
@@ -1341,7 +1348,12 @@
           "evidenceTitles": { "type": ["array", "null"], "items": { "type": ["string", "null"] } },
           "reviewerNotes": { "type": ["object", "null"] },
           "why": { "oneOf": [{ "$ref": "#/components/schemas/DecisionWhy" }, { "type": "null" }], "description": "Absent for decisions planned before the explanation was recorded." },
-          "processHistory": { "type": ["array", "null"], "items": { "type": "object" } }
+          "processHistory": { "type": ["array", "null"], "items": { "type": "object" } },
+          "actorId": { "type": ["string", "null"], "description": "The entity that would carry the action out. It cannot approve it." },
+          "observedDeviation": { "description": "Set when an observation found the metric moving the wrong way." },
+          "approvalFingerprint": { "type": ["string", "null"], "pattern": "^sha256:[a-f0-9]{64}$", "description": "What an approval covers: the action, its risk and the policy version. Sent back with an approve." },
+          "policyChanged": { "type": "boolean", "description": "True when a pending decision's policies changed since it was planned, so it cannot be approved as it is." },
+          "viewer": { "type": "object", "required": ["id", "soleOperator"], "properties": { "id": { "type": "string" }, "soleOperator": { "type": "boolean", "description": "True when the viewer is the configured sole operator and may approve their own request with a written reason." } } }
         }
       },
       "Error": {
@@ -2372,7 +2384,8 @@
       }
     },
     "parameters": {
-      "DecisionStatus": { "name": "status", "in": "query", "required": false, "schema": { "type": "string", "enum": ["proposed", "awaiting-approval", "approved", "executed", "failed", "rejected", "rollback-proposed", "rolled-back"] } },
+      "DecisionStatus": { "name": "status", "in": "query", "required": false, "description": "Up to four statuses, comma separated.", "schema": { "type": "string", "pattern": "^(proposed|awaiting-approval|approved|executed|failed|rejected|rollback-proposed|rolled-back)(,(proposed|awaiting-approval|approved|executed|failed|rejected|rollback-proposed|rolled-back)){0,3}$" } },
+      "DecisionBefore": { "name": "before", "in": "query", "required": false, "description": "The createdAt of the last decision already shown, to load the next page.", "schema": { "type": "string", "format": "date-time" } },
       "DecisionLimit": { "name": "limit", "in": "query", "required": false, "schema": { "type": "integer", "minimum": 1, "maximum": 50, "default": 25 } },
       "DecisionId": {
         "schema": {

@@ -72,6 +72,9 @@ export function AgentChatWidget() {
   const [tokenPresent, setTokenPresent] = useState(false)
   const [question, setQuestion] = useState('')
   const [mode, setMode] = useState<ChatMode>('ask')
+  // What the signed-in person may do, so a mode they cannot use says so before they type.
+  const [permissions, setPermissions] = useState<string[] | null>(null)
+  const cannotPlan = permissions !== null && !permissions.includes('decision:propose')
   const [agentKey, setAgentKey] = useState<BusinessAgentChoice>('auto')
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [busy, setBusy] = useState(false)
@@ -82,7 +85,7 @@ export function AgentChatWidget() {
 
   useEffect(() => {
     if (open) {
-      void resolveConsoleAccess().then((access) => setTokenPresent(access.signedIn))
+      void resolveConsoleAccess(undefined, undefined, { withWhoami: true }).then((access) => { setTokenPresent(access.signedIn); setPermissions(access.whoami?.permissions ?? null) })
       inputRef.current?.focus()
     }
   }, [open])
@@ -269,9 +272,10 @@ export function AgentChatWidget() {
               <form className={styles.form} onSubmit={ask}>
                 <div className={styles.modeSwitch} role="group" aria-label="Chat mode">
                   <button type="button" aria-pressed={mode === 'ask'} disabled={busy} onClick={() => setMode('ask')}>Ask</button>
-                  <button type="button" aria-pressed={mode === 'plan'} disabled={busy} onClick={() => setMode('plan')}>Plan</button>
+                  <button type="button" aria-pressed={mode === 'plan'} disabled={busy || cannotPlan} aria-describedby={cannotPlan ? 'qs-plan-why' : undefined} onClick={() => setMode('plan')}>Plan</button>
                   <button type="button" aria-pressed={mode === 'agent'} disabled={busy} onClick={() => setMode('agent')}>Work</button>
                 </div>
+                {cannotPlan && <span id="qs-plan-why" className={styles.agentRouting}>Planning needs decision:propose, which your account does not have.</span>}
                 {mode === 'agent' && <label className={styles.agentSelectLabel}>Specialist<select className={styles.agentSelect} aria-label="Choose business specialist" value={agentKey} disabled={busy} onChange={(event) => setAgentKey(event.currentTarget.value as BusinessAgentChoice)}>{BUSINESS_AGENTS.map((agent) => <option key={agent.key} value={agent.key}>{agent.label}</option>)}</select></label>}
                 <label className={styles.srOnly} htmlFor="qs-chat-question">{mode === 'plan' || mode === 'agent' ? 'Describe work for Quicksilver' : 'Ask a company question'}</label>
                 <input
