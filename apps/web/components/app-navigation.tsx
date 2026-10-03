@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { usePathname } from 'next/navigation'
 import { APP_NAVIGATION_GROUPS, activeNavigationRoute } from '@/lib/app-navigation'
+import { loadSessionState, signInHref, type SessionState } from '@/lib/session-control'
 
 // Group only destinations that exist today. This gives the shell a task-phase IA
 // without implying that the unfinished platform modules are already available.
@@ -57,6 +58,27 @@ function NavigationGroups({ pathname, mobile = false, collapsed = false, onNavig
         </section>
       ))}
     </>
+  )
+}
+
+function SessionControl({ pathname, mobile = false }: { pathname: string; mobile?: boolean }) {
+  const [state, setState] = useState<SessionState>({ status: 'loading' })
+
+  useEffect(() => {
+    const controller = new AbortController()
+    void loadSessionState((url, init) => fetch(url, init), controller.signal).then((next) => { if (!controller.signal.aborted) setState(next) })
+    return () => controller.abort()
+  }, [pathname])
+
+  const className = mobile ? 'app-session app-session--mobile' : 'app-session'
+  if (state.status === 'loading') return null
+  if (state.status === 'unavailable') return <p className={className} role="status">Sign-in unavailable</p>
+  if (state.status === 'signed-out') return <a className={`${className} app-session__button`} href={signInHref(pathname)}>Sign in</a>
+  return (
+    <form className={className} method="post" action="/api/auth/logout">
+      <span className="app-session__name" title={state.roles.join(', ')}>{state.name}</span>
+      <button type="submit" className="app-session__button">Sign out</button>
+    </form>
   )
 }
 
@@ -149,6 +171,7 @@ export function AppNavigation() {
         <button type="button" className="app-command-trigger" onClick={() => setLauncherOpen(true)} aria-haspopup="dialog" aria-label="Quick navigate">
           <span className="app-command-icon" aria-hidden="true">⌕</span><span>Quick navigate</span><kbd>Ctrl / ⌘ K</kbd>
         </button>
+        <SessionControl pathname={pathname} />
         <details ref={mobileMenuRef} className="app-mobile-menu">
           <summary className="app-mobile-menu__summary" aria-label={`Open navigation. Current page: ${currentLabel}`}>
             <span className="app-mobile-menu__icon" aria-hidden="true"><span /><span /></span>
@@ -161,6 +184,7 @@ export function AppNavigation() {
             <button type="button" className="app-command-trigger app-command-trigger--mobile" onClick={() => setLauncherOpen(true)} aria-haspopup="dialog">
               <span className="app-command-icon" aria-hidden="true">⌕</span><span>Quick navigate</span><kbd>Ctrl / ⌘ K</kbd>
             </button>
+            <SessionControl pathname={pathname} mobile />
           </nav>
         </details>
       </div>
