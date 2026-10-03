@@ -27,6 +27,7 @@ import { handleIntentRoute, type IntentApiDeps } from './intent-api.ts'
 import { handleShadowRoute, type ShadowApiDeps } from './shadow-api.ts'
 import { handleGenesisRoute, type GenesisApiDeps } from './genesis-api.ts'
 import { genesisPaymentWebhookSink } from './genesis-payment-webhook.ts'
+import { COMMERCE_KEY_VAULT_NAME, createStripeCommerceClient, type StripeCommerceClient } from './genesis-commerce.ts'
 import { handleDecisionRoute, type DecisionApiDeps } from './decisions-api.ts'
 import { handleTaskRoute } from './tasks-api.ts'
 import { TaskError, TaskService, type TaskRunBackend, type TaskServiceDeps } from './tasks.ts'
@@ -336,6 +337,13 @@ export class QuicksilverHost {
     return values
   }
 
+  /** P-027 commerce actions: the Stripe client for the run's mode, from the vault secret (or QUICKSILVER_GENESIS_STRIPE_API_KEY without a vault). */
+  private async commerceClient(mode: 'off' | 'test' | undefined): Promise<StripeCommerceClient> {
+    if (mode !== 'test') throw new Error('Commerce actions are off.')
+    const [apiKey] = await this.resolveSecret(this.vault ? `vault:${COMMERCE_KEY_VAULT_NAME}` : 'env:QUICKSILVER_GENESIS_STRIPE_API_KEY')
+    return createStripeCommerceClient({ apiKey: apiKey!, mode })
+  }
+
   /** P-027: a verified Stripe delivery into the Genesis ledger (pending or recorded). Never calls Stripe. */
   private genesisPaymentWebhook(d: VerifiedWebhookDelivery): Promise<WebhookSinkOutcome> {
     const g = this.deps.genesis!
@@ -524,12 +532,16 @@ export class QuicksilverHost {
     // Genesis run (M5): records and evaluates; never moves money
     if (parts[1] === 'genesis' && this.deps.genesis) {
       const vault = this.vault
+      const g = this.deps.genesis
+      // Commerce actions read the Stripe key only when an approval needs it, never at startup.
+      const commerce = g.commerce && !g.commerce.client ? { ...g.commerce, client: () => this.commerceClient(g.config.commerceMode) } : g.commerce
       const handled = await handleGenesisRoute({
         method, parts, principal, tenantId: this.config.tenantId, access: this.access,
         readBody: () => readJson(req, this.config.http.maxBodyBytes),
       }, {
         ...(vault ? { vaultNames: async () => (await vault.list(this.hostPrincipal)).filter((s) => !s.disabled).map((s) => s.name) } : {}),
         ...this.deps.genesis,
+        ...(commerce ? { commerce } : {}),
         ...(this.deps.now ? { now: this.deps.now } : {}),
       })
       if (handled) return handled

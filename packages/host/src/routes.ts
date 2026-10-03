@@ -105,6 +105,11 @@ export const HOST_ROUTES: readonly HostRoute[] = Object.freeze<HostRoute[]>([
   { method: 'GET', path: '/api/genesis/pending-payments', feature: 'genesis', access: anyOf('decision:read') },
   { method: 'POST', path: '/api/genesis/pending-payments/:id/confirm', feature: 'genesis', rateLimit: 'write', access: anyOf('intent:provide') },
   { method: 'POST', path: '/api/genesis/pending-payments/:id/reject', feature: 'genesis', rateLimit: 'write', access: anyOf('intent:provide') },
+  // P-027 commerce actions: proposals anyone allowed to propose may add; approve/reject are humans-only in the handler. Off unless the run config sets commerceMode.
+  { method: 'GET', path: '/api/genesis/commerce', feature: 'genesis', access: anyOf('decision:read') },
+  { method: 'POST', path: '/api/genesis/commerce/proposals', feature: 'genesis', rateLimit: 'write', access: anyOf('intent:provide', 'decision:propose') },
+  { method: 'POST', path: '/api/genesis/commerce/proposals/:id/approve', feature: 'genesis', rateLimit: 'write', access: anyOf('intent:provide') },
+  { method: 'POST', path: '/api/genesis/commerce/proposals/:id/reject', feature: 'genesis', rateLimit: 'write', access: anyOf('intent:provide') },
 
   // ── Runs ──
   { method: 'GET', path: '/api/runs', access: anyOf('run:read') },

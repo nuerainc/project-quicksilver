@@ -23,6 +23,7 @@ import {
 import { decideSpend, genesisBlockers, genesisFacts, validateGenesisConfig, type GenesisRunConfig } from '@quicksilver/kernel/playbooks/genesis'
 
 import { checkReviewAppend, createManualReview, createWaesServiceReview, MANUAL_REVIEW_LABEL, parseContentReviewInput, parseWaesServiceInput, reviewSummary, sortReviews, type ContentReviewRecord, type WaesServiceAssessment, type WaesServiceInput } from './genesis-reviews.ts'
+import { handleCommerceRoute, type CommerceDeps } from './genesis-commerce.ts'
 import { DEFAULT_GENESIS_TENANT, FileContentReviewStore, PENDING_PAYMENT_ID, PendingPaymentError, type PendingPaymentStore } from './genesis-store.ts'
 
 /**
@@ -83,6 +84,8 @@ export interface GenesisApiDeps {
   runWaes?: (input: WaesServiceInput) => Promise<WaesServiceAssessment>
   /** P-027: payments a verified payment webhook reported, waiting for a human. The pending-payment routes return 404 when absent. */
   pending?: PendingPaymentStore
+  /** P-027 commerce actions: proposals for a human to approve into Stripe product, price and payment-link creation. The routes return 404 when absent. */
+  commerce?: CommerceDeps
 }
 
 export interface GenesisApiContext {
@@ -335,6 +338,20 @@ export async function handleGenesisRoute(ctx: GenesisApiContext, deps: GenesisAp
   }
 
   if (configErrors.length) return { status: 409, body: { error: 'The run config is invalid; fix it before recording anything.', reasons: configErrors } }
+
+  // /api/genesis/commerce/*  (P-027 commerce actions; off unless the run config sets commerceMode)
+  if (parts[2] === 'commerce') {
+    if (!deps.commerce) return { status: 404, body: { error: 'Commerce actions are not configured on this host.' } }
+    return handleCommerceRoute({
+      method, parts, principal: { id: principal.id, kind: principal.kind }, config, store, commerce: deps.commerce,
+      needRead: () => needAny('decision:read'),
+      needPropose: () => needAny('intent:provide', 'decision:propose'),
+      humanOnly,
+      bodyOf,
+      now,
+      withLock,
+    })
+  }
 
   // POST /api/genesis/pending-payments/:id/(confirm|reject)
   if (parts.length === 5 && parts[2] === 'pending-payments' && (parts[4] === 'confirm' || parts[4] === 'reject') && method === 'POST') {

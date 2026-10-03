@@ -47,6 +47,14 @@ export interface GenesisRunConfig {
    * the webhook service. Either way nothing is charged, paid or executed.
    */
   autoRecordPaymentWebhooks?: boolean
+  /**
+   * P-027 (commerce actions): whether this run may ask Stripe to create
+   * products, prices and payment links. 'off' (default) disables the routes
+   * entirely. 'test' accepts a Stripe test-mode key only; there is no live
+   * mode in v1. Every action still needs a passing WAES review of its
+   * customer-facing text and a human's approval, and none of them moves money.
+   */
+  commerceMode?: 'off' | 'test'
   prerequisites: {
     /** Set only by the founder, once an entity path is approved. */
     entityApproved: boolean
@@ -65,6 +73,7 @@ export function validateGenesisConfig(c: GenesisRunConfig): string[] {
   if (c.digitalOnly !== true) errors.push('Genesis runs are digital-only.')
   if (c.waesRequired !== true) errors.push('waesRequired must be true.')
   if (c.waesManualReviewAllowed !== undefined && typeof c.waesManualReviewAllowed !== 'boolean') errors.push('waesManualReviewAllowed must be true or false.')
+  if (c.commerceMode !== undefined && c.commerceMode !== 'off' && c.commerceMode !== 'test') errors.push('commerceMode must be "off" or "test" (there is no live mode yet).')
   if (c.autoRecordPaymentWebhooks !== undefined && typeof c.autoRecordPaymentWebhooks !== 'boolean') errors.push('autoRecordPaymentWebhooks must be true or false.')
   if (!c.allowedCategories?.length) errors.push('allowedCategories must list at least one category.')
   const overlap = (c.allowedCategories ?? []).filter((x) => (c.prohibitedCategories ?? []).includes(x))
