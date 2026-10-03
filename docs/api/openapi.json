@@ -368,8 +368,14 @@
           "503": {
             "$ref": "#/components/responses/ErrorResponse"
           },
+          "404": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "500": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
           "2XX": {
-            "$ref": "#/components/responses/JsonResponse"
+            "$ref": "#/components/responses/DecisionActionResultResponse"
           }
         },
         "requestBody": {
@@ -404,8 +410,17 @@
           "503": {
             "$ref": "#/components/responses/ErrorResponse"
           },
+          "404": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "409": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "500": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
           "2XX": {
-            "$ref": "#/components/responses/JsonResponse"
+            "$ref": "#/components/responses/DecisionExecutionResultResponse"
           }
         },
         "requestBody": {
@@ -440,8 +455,14 @@
           "503": {
             "$ref": "#/components/responses/ErrorResponse"
           },
+          "404": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "500": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
           "2XX": {
-            "$ref": "#/components/responses/JsonResponse"
+            "$ref": "#/components/responses/DecisionObservationResponse"
           }
         },
         "requestBody": {
@@ -476,8 +497,17 @@
           "503": {
             "$ref": "#/components/responses/ErrorResponse"
           },
+          "404": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "409": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "500": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
           "2XX": {
-            "$ref": "#/components/responses/JsonResponse"
+            "$ref": "#/components/responses/DecisionResumeResultResponse"
           }
         },
         "requestBody": {
@@ -512,8 +542,17 @@
           "503": {
             "$ref": "#/components/responses/ErrorResponse"
           },
+          "404": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "409": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "500": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
           "2XX": {
-            "$ref": "#/components/responses/JsonResponse"
+            "$ref": "#/components/responses/DecisionRollbackResultResponse"
           }
         },
         "requestBody": {
@@ -545,8 +584,11 @@
           "503": {
             "$ref": "#/components/responses/ErrorResponse"
           },
+          "500": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
           "2XX": {
-            "$ref": "#/components/responses/JsonResponse"
+            "$ref": "#/components/responses/WorkflowMonitoringResponse"
           }
         }
       }
@@ -583,8 +625,11 @@
           "503": {
             "$ref": "#/components/responses/ErrorResponse"
           },
+          "500": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
           "2XX": {
-            "$ref": "#/components/responses/JsonResponse"
+            "$ref": "#/components/responses/TelemetryTracesResponse"
           }
         }
       }
@@ -641,7 +686,7 @@
           "401": { "$ref": "#/components/responses/ErrorResponse" },
           "403": { "$ref": "#/components/responses/ErrorResponse" },
           "503": { "$ref": "#/components/responses/ErrorResponse" },
-          "2XX": { "$ref": "#/components/responses/JsonResponse" }
+          "2XX": { "$ref": "#/components/responses/CompanyEntityDirectoryResponse" }
         }
       }
     },
@@ -664,8 +709,14 @@
           "503": {
             "$ref": "#/components/responses/ErrorResponse"
           },
+          "429": {
+            "$ref": "#/components/responses/RateLimitResponse"
+          },
+          "500": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
           "2XX": {
-            "$ref": "#/components/responses/JsonResponse"
+            "$ref": "#/components/responses/PlanResponse"
           }
         },
         "requestBody": {
@@ -695,8 +746,11 @@
           "503": {
             "$ref": "#/components/responses/ErrorResponse"
           },
+          "500": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
           "2XX": {
-            "$ref": "#/components/responses/JsonResponse"
+            "$ref": "#/components/responses/QueryResponse"
           }
         },
         "requestBody": {
@@ -747,7 +801,7 @@
         "tags": ["Identity"],
         "summary": "Read the current server-backed browser session",
         "responses": {
-          "200": { "$ref": "#/components/responses/JsonResponse" },
+          "200": { "$ref": "#/components/responses/BrowserSessionResponse" },
           "401": { "$ref": "#/components/responses/ErrorResponse" },
           "503": { "$ref": "#/components/responses/ErrorResponse" }
         }
@@ -820,8 +874,17 @@
           "503": {
             "$ref": "#/components/responses/ErrorResponse"
           },
+          "404": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "409": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "500": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
           "2XX": {
-            "$ref": "#/components/responses/JsonResponse"
+            "$ref": "#/components/responses/WorkflowVersionDiffResponse"
           }
         },
         "parameters": [
@@ -871,8 +934,17 @@
           "503": {
             "$ref": "#/components/responses/ErrorResponse"
           },
+          "409": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "413": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "500": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
           "2XX": {
-            "$ref": "#/components/responses/JsonResponse"
+            "$ref": "#/components/responses/PublishedWorkflowVersionResponse"
           }
         },
         "requestBody": {
@@ -902,8 +974,20 @@
           "503": {
             "$ref": "#/components/responses/ErrorResponse"
           },
+          "404": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "409": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "413": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "500": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
           "2XX": {
-            "$ref": "#/components/responses/JsonResponse"
+            "$ref": "#/components/responses/PublishedWorkflowVersionResponse"
           }
         },
         "requestBody": {
@@ -930,8 +1014,11 @@
           "503": {
             "$ref": "#/components/responses/ErrorResponse"
           },
+          "500": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
           "2XX": {
-            "$ref": "#/components/responses/JsonResponse"
+            "$ref": "#/components/responses/WorkflowExecutionsResponse"
           }
         },
         "parameters": [
@@ -971,8 +1058,14 @@
           "503": {
             "$ref": "#/components/responses/ErrorResponse"
           },
+          "409": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "500": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
           "2XX": {
-            "$ref": "#/components/responses/JsonResponse"
+            "$ref": "#/components/responses/WorkflowPublicationsResponse"
           }
         },
         "parameters": [
@@ -1004,8 +1097,20 @@
           "503": {
             "$ref": "#/components/responses/ErrorResponse"
           },
+          "404": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "409": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "413": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "500": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
           "2XX": {
-            "$ref": "#/components/responses/JsonResponse"
+            "$ref": "#/components/responses/PublishedWorkflowVersionResponse"
           }
         },
         "requestBody": {
@@ -1035,8 +1140,20 @@
           "503": {
             "$ref": "#/components/responses/ErrorResponse"
           },
+          "404": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "409": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "413": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "500": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
           "2XX": {
-            "$ref": "#/components/responses/JsonResponse"
+            "$ref": "#/components/responses/PublishedWorkflowVersionResponse"
           }
         },
         "requestBody": {
@@ -1066,8 +1183,20 @@
           "503": {
             "$ref": "#/components/responses/ErrorResponse"
           },
+          "404": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "409": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "413": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
+          "500": {
+            "$ref": "#/components/responses/ErrorResponse"
+          },
           "2XX": {
-            "$ref": "#/components/responses/JsonResponse"
+            "$ref": "#/components/responses/PublishedWorkflowVersionResponse"
           }
         },
         "requestBody": {
@@ -1453,10 +1582,496 @@
         "description": "Common error fields where emitted; validation issues are present on some 400 responses. Fields are not guaranteed across all routes.",
         "additionalProperties": true
       },
-      "JsonObject": {
+      "DecisionProcess": {
         "type": "object",
-        "description": "Route-specific shape not exhaustively captured yet.",
-        "additionalProperties": true
+        "required": ["engine"],
+        "description": "What the Decision Lifecycle process engine did. engine is on when it ran (definition and state fields are present), off or missing when it did not run, and invalid when the stored definition failed validation (errors lists why). In a refused transition (409) it carries from, to and reasons instead.",
+        "properties": {
+          "engine": { "type": "string", "enum": ["on", "off", "missing", "invalid"] },
+          "definitionId": { "type": "string" },
+          "definitionName": { "type": "string" },
+          "version": { "type": "integer" },
+          "revision": { "type": ["string", "null"] },
+          "transitionId": { "type": ["string", "null"] },
+          "state": { "type": "string" },
+          "stateLabel": { "type": "string" },
+          "terminal": { "type": "boolean" },
+          "next": { "type": "array", "items": { "type": "object", "required": ["id", "label", "to", "requiresHuman", "automatic", "guardPassed"], "properties": { "id": { "type": "string" }, "label": { "type": "string" }, "to": { "type": "string" }, "requiresHuman": { "type": "boolean" }, "automatic": { "type": "boolean" }, "guardPassed": { "type": "boolean" } } } },
+          "errors": { "type": "array", "items": { "type": "string" } },
+          "from": { "type": "string" },
+          "to": { "type": ["string", "null"] },
+          "reasons": { "type": "array", "items": { "type": "string" } }
+        }
+      },
+      "DecisionActionResult": {
+        "type": "object",
+        "required": ["id", "status", "supervisorId", "approvalId", "approvalFingerprint", "at"],
+        "properties": {
+          "id": { "type": "string" },
+          "status": { "type": "string", "description": "The decision status after the action: approved, rejected, or awaiting-approval (request-evidence)." },
+          "supervisorId": { "type": "string", "description": "The authenticated principal that acted, never a body field." },
+          "approvalId": { "type": ["string", "null"], "description": "Set only for an approve." },
+          "approvalFingerprint": { "type": ["string", "null"], "description": "Set only for an approve." },
+          "comment": { "type": "string", "description": "Echo of the request comment; omitted when none was sent." },
+          "at": { "type": "string", "format": "date-time" },
+          "process": { "$ref": "#/components/schemas/DecisionProcess", "description": "Present only when the process engine ran the transition." }
+        }
+      },
+      "DecisionExecutionResult": {
+        "type": "object",
+        "required": ["decisionId", "status", "outcome", "at"],
+        "properties": {
+          "decisionId": { "type": "string" },
+          "status": { "type": "string", "enum": ["executed", "failed"] },
+          "outcome": {
+            "type": "object",
+            "description": "The simulated outcome. Execution is deterministic per decision id unless fault injection is used.",
+            "required": ["metricName", "previousValue", "newValue", "delta", "unit", "success"],
+            "properties": {
+              "metricName": { "type": "string" },
+              "previousValue": { "type": "number" },
+              "newValue": { "type": "number" },
+              "delta": { "type": "number" },
+              "unit": { "type": "string" },
+              "success": { "type": "boolean" }
+            }
+          },
+          "faultInjection": { "type": ["string", "null"], "enum": ["success", "failure", "deviation", null], "description": "Present only on the process-engine path." },
+          "at": { "type": "string", "format": "date-time" },
+          "process": { "$ref": "#/components/schemas/DecisionProcess", "description": "Present only when the process engine ran the transition." },
+          "rolledBackParent": {
+            "type": ["object", "null"],
+            "description": "Present only on the process-engine path: null unless this was a successful rollback decision, then the outcome of closing the decision it undid.",
+            "required": ["id"],
+            "properties": {
+              "id": { "type": "string" },
+              "status": { "type": "string" },
+              "process": { "$ref": "#/components/schemas/DecisionProcess" },
+              "error": { "type": "string" }
+            }
+          }
+        }
+      },
+      "DecisionObservation": {
+        "type": "object",
+        "required": ["decisionId", "status", "observed", "diagnosis", "deviationDetected", "recommendedRollback"],
+        "properties": {
+          "decisionId": { "type": "string" },
+          "status": { "type": "string" },
+          "observed": {
+            "type": ["object", "null"],
+            "description": "Null when no metric has been recorded yet.",
+            "required": ["metric", "unit", "baseline", "value", "delta", "pctChange"],
+            "properties": {
+              "metric": { "type": "string" },
+              "unit": { "type": "string" },
+              "baseline": { "type": "number" },
+              "value": { "type": "number" },
+              "delta": { "type": "number" },
+              "pctChange": { "type": "number", "description": "Percent change, rounded to one decimal." }
+            }
+          },
+          "diagnosis": { "type": "string" },
+          "deviationDetected": { "type": "boolean" },
+          "recommendedRollback": {
+            "type": ["object", "null"],
+            "description": "Set only when the metric moved the wrong way.",
+            "required": ["summary", "rationale"],
+            "properties": { "summary": { "type": "string" }, "rationale": { "type": "string" } }
+          }
+        }
+      },
+      "DecisionResumeResult": {
+        "type": "object",
+        "required": ["id", "status", "process"],
+        "properties": {
+          "id": { "type": "string" },
+          "status": { "type": "string", "description": "The state the automatic transition moved the decision to." },
+          "process": { "$ref": "#/components/schemas/DecisionProcess" }
+        }
+      },
+      "DecisionRollbackResult": {
+        "type": "object",
+        "required": ["rollbackDecisionId", "parentDecisionId"],
+        "properties": {
+          "rollbackDecisionId": { "type": "string", "description": "The new rollback decision, entering at awaiting-approval (or the state the process engine chose)." },
+          "parentDecisionId": { "type": "string" },
+          "parentStatus": { "type": ["string", "null"], "description": "Present only on the process-engine path." },
+          "parentProcess": { "$ref": "#/components/schemas/DecisionProcess", "description": "Present only on the process-engine path." },
+          "process": { "$ref": "#/components/schemas/DecisionProcess", "description": "Present only on the process-engine path: the lifecycle state of the new rollback decision." }
+        }
+      },
+      "WorkflowExecutionRecord": {
+        "type": "object",
+        "description": "Metadata only; inputs and outputs are never stored in execution history.",
+        "required": ["runId", "workflowId", "version", "digest", "requestedBy", "status", "startedAt", "completedAt", "durationMs", "evaluationCount"],
+        "properties": {
+          "runId": { "type": "string" },
+          "workflowId": { "type": "string" },
+          "version": { "type": "integer", "minimum": 1 },
+          "digest": { "type": "string" },
+          "requestedBy": { "type": "string" },
+          "status": { "type": "string", "enum": ["succeeded", "blocked", "failed"] },
+          "startedAt": { "type": "integer", "description": "Epoch milliseconds." },
+          "completedAt": { "type": "integer", "description": "Epoch milliseconds." },
+          "durationMs": { "type": "integer", "minimum": 0 },
+          "evaluationCount": { "type": "integer", "minimum": 0 }
+        }
+      },
+      "WorkflowMonitoring": {
+        "type": "object",
+        "required": ["executions", "observedAt", "sampleLimit"],
+        "properties": {
+          "executions": { "type": "array", "description": "Latest executions across all workflows for the tenant, newest first.", "items": { "$ref": "#/components/schemas/WorkflowExecutionRecord" } },
+          "observedAt": { "type": "integer", "description": "Epoch milliseconds when the response was produced." },
+          "sampleLimit": { "type": "integer", "minimum": 1, "maximum": 100 }
+        }
+      },
+      "WorkflowExecutions": {
+        "type": "object",
+        "required": ["executions"],
+        "properties": {
+          "executions": { "type": "array", "description": "Executions of one workflow, newest first, at most the requested limit (1 to 100, default 25).", "items": { "$ref": "#/components/schemas/WorkflowExecutionRecord" } }
+        }
+      },
+      "TelemetryTraceSpan": {
+        "type": "object",
+        "description": "Trace span metadata. Prompts, outputs, tool arguments and secrets are never included.",
+        "required": ["traceId", "spanId", "parentSpanId", "source", "kind", "name", "status", "startedAt", "durationMs", "requestedBy", "runId", "workflowId", "decisionId", "agentId", "modelId", "toolName", "toolSucceeded", "inputTokens", "outputTokens", "totalTokens", "estimatedCostUsd"],
+        "properties": {
+          "traceId": { "type": "string" },
+          "spanId": { "type": "string" },
+          "parentSpanId": { "type": ["string", "null"] },
+          "source": { "type": "string", "enum": ["query", "plan", "workflow", "decision", "agent"] },
+          "kind": { "type": "string", "enum": ["request", "model", "tool", "evaluation", "decision", "workflow"] },
+          "name": { "type": "string" },
+          "status": { "type": "string", "enum": ["ok", "error", "blocked"] },
+          "startedAt": { "type": "integer", "description": "Epoch milliseconds." },
+          "durationMs": { "type": "integer", "minimum": 0 },
+          "requestedBy": { "type": "string" },
+          "runId": { "type": ["string", "null"] },
+          "workflowId": { "type": ["string", "null"] },
+          "decisionId": { "type": ["string", "null"] },
+          "agentId": { "type": ["string", "null"] },
+          "modelId": { "type": ["string", "null"] },
+          "toolName": { "type": ["string", "null"] },
+          "toolSucceeded": { "type": ["boolean", "null"] },
+          "inputTokens": { "type": ["integer", "null"] },
+          "outputTokens": { "type": ["integer", "null"] },
+          "totalTokens": { "type": ["integer", "null"] },
+          "estimatedCostUsd": { "type": ["number", "null"] },
+          "safetyDecision": { "type": ["string", "null"], "enum": ["ALLOW", "BLOCK", "ESCALATE", null], "description": "Can be absent or null on spans without an evaluation." }
+        }
+      },
+      "TelemetryAlert": {
+        "type": "object",
+        "required": ["id", "severity", "summary", "spanIds"],
+        "properties": {
+          "id": { "type": "string", "enum": ["tool-failure", "safety-block", "run-failure-rate", "estimated-cost"] },
+          "severity": { "type": "string", "enum": ["warning", "critical"] },
+          "summary": { "type": "string" },
+          "spanIds": { "type": "array", "items": { "type": "string" } }
+        }
+      },
+      "TelemetryTraces": {
+        "type": "object",
+        "required": ["spans", "alerts", "observedAt", "sampleLimit", "windowMs", "totals"],
+        "properties": {
+          "spans": { "type": "array", "description": "Newest first, at most sampleLimit.", "items": { "$ref": "#/components/schemas/TelemetryTraceSpan" } },
+          "alerts": { "type": "array", "description": "Alerts computed over the spans that fall inside the alert window.", "items": { "$ref": "#/components/schemas/TelemetryAlert" } },
+          "observedAt": { "type": "integer", "description": "Epoch milliseconds." },
+          "sampleLimit": { "type": "integer", "minimum": 1, "maximum": 500 },
+          "windowMs": { "type": "integer", "description": "The alert window, from QUICKSILVER_ALERT_WINDOW_MINUTES." },
+          "totals": {
+            "type": "object",
+            "required": ["inputTokens", "outputTokens", "estimatedCostUsd"],
+            "properties": {
+              "inputTokens": { "type": "integer", "minimum": 0 },
+              "outputTokens": { "type": "integer", "minimum": 0 },
+              "estimatedCostUsd": { "type": ["number", "null"], "description": "Null when no model span has an estimate." }
+            }
+          }
+        }
+      },
+      "CompanyEntityDirectory": {
+        "type": "object",
+        "required": ["total", "entities"],
+        "properties": {
+          "total": { "type": "integer", "minimum": 0, "description": "Count of every entity; entities holds at most the first 500 by name." },
+          "entities": {
+            "type": "array",
+            "maxItems": 500,
+            "items": {
+              "type": "object",
+              "required": ["id", "name", "entityType"],
+              "properties": {
+                "id": { "type": "string" },
+                "name": { "type": "string" },
+                "entityType": { "type": "string" },
+                "availability": { "type": ["string", "null"] },
+                "riskProfile": { "type": ["number", "null"] },
+                "costProfile": { "type": ["string", "null"] },
+                "department": { "type": ["string", "null"] },
+                "reportsTo": { "type": ["object", "null"], "required": ["id", "name"], "properties": { "id": { "type": "string" }, "name": { "type": "string" } } },
+                "capabilities": { "type": ["array", "null"], "items": { "type": "object", "required": ["id", "name"], "properties": { "id": { "type": "string" }, "name": { "type": "string" } } } }
+              }
+            }
+          }
+        }
+      },
+      "BrowserSession": {
+        "type": "object",
+        "required": ["principalId", "kind", "tenantId", "roles"],
+        "properties": {
+          "principalId": { "type": "string" },
+          "kind": { "const": "human", "description": "Browser sessions are always human principals." },
+          "tenantId": { "type": "string" },
+          "displayName": { "type": "string", "description": "Omitted when the identity provider gave none." },
+          "roles": { "type": "array", "items": { "type": "string" } }
+        }
+      },
+      "PublishedWorkflowVersion": {
+        "type": "object",
+        "description": "One immutable, digest-verified workflow version and where it is in the publication lifecycle.",
+        "required": ["workflowId", "version", "graph", "digest", "authoredBy", "createdAt", "status"],
+        "properties": {
+          "workflowId": { "type": "string" },
+          "version": { "type": "integer", "minimum": 1 },
+          "graph": { "$ref": "#/components/schemas/WorkflowGraph" },
+          "digest": { "type": "string", "description": "Digest of the graph content; recomputed and checked on every read." },
+          "authoredBy": { "type": "string" },
+          "createdAt": { "type": "integer", "description": "Epoch milliseconds." },
+          "status": { "type": "string", "enum": ["draft", "in-review", "published", "deprecated"] },
+          "reviewedBy": { "type": "string" },
+          "reviewNote": { "type": "string" },
+          "reviewedAt": { "type": "integer", "description": "Epoch milliseconds." },
+          "publishedAt": { "type": "integer", "description": "Epoch milliseconds." },
+          "deprecatedAt": { "type": "integer", "description": "Epoch milliseconds." },
+          "rollbackOfVersion": { "type": "integer", "minimum": 1 }
+        }
+      },
+      "WorkflowPublicationAuditEntry": {
+        "type": "object",
+        "required": ["event", "workflowId", "version", "actorId", "at", "digest"],
+        "properties": {
+          "event": { "type": "string", "enum": ["draft-created", "submitted-for-review", "reviewed", "published", "deprecated", "rolled-back"] },
+          "workflowId": { "type": "string" },
+          "version": { "type": "integer", "minimum": 1 },
+          "actorId": { "type": "string" },
+          "at": { "type": "integer", "description": "Epoch milliseconds." },
+          "digest": { "type": "string" },
+          "detail": { "type": "string" }
+        }
+      },
+      "WorkflowPublications": {
+        "type": "object",
+        "required": ["versions", "audit"],
+        "properties": {
+          "versions": { "type": "array", "description": "Newest version first, at most 100.", "maxItems": 100, "items": { "$ref": "#/components/schemas/PublishedWorkflowVersion" } },
+          "audit": { "type": "array", "description": "Newest event first, at most 100.", "maxItems": 100, "items": { "$ref": "#/components/schemas/WorkflowPublicationAuditEntry" } }
+        }
+      },
+      "WorkflowDiffChange": {
+        "type": "object",
+        "required": ["id", "change", "changedFields"],
+        "properties": {
+          "id": { "type": "string" },
+          "change": { "type": "string", "enum": ["added", "removed", "modified"] },
+          "changedFields": { "type": "array", "items": { "type": "string" }, "description": "Field names; config changes are listed as config.<key>. Values are never returned." }
+        }
+      },
+      "WorkflowVersionDiff": {
+        "type": "object",
+        "required": ["workflowId", "fromVersion", "toVersion", "fromDigest", "toDigest", "entryNodeChanged", "nodes", "edges", "riskChanges"],
+        "properties": {
+          "workflowId": { "type": "string" },
+          "fromVersion": { "type": "integer", "minimum": 1 },
+          "toVersion": { "type": "integer", "minimum": 1 },
+          "fromDigest": { "type": "string" },
+          "toDigest": { "type": "string" },
+          "entryNodeChanged": { "type": "boolean" },
+          "nodes": { "type": "array", "items": { "$ref": "#/components/schemas/WorkflowDiffChange" } },
+          "edges": { "type": "array", "items": { "$ref": "#/components/schemas/WorkflowDiffChange" } },
+          "riskChanges": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["nodeId", "field", "from", "to"],
+              "properties": {
+                "nodeId": { "type": "string" },
+                "field": { "type": "string", "enum": ["impact", "sideEffect", "evaluationRequired", "supervisorApprovalRequired"] },
+                "from": { "type": ["string", "boolean", "null"] },
+                "to": { "type": ["string", "boolean", "null"] }
+              }
+            }
+          }
+        }
+      },
+      "PlanPolicyCheck": {
+        "type": "object",
+        "required": ["policyId", "policyName", "result", "reason"],
+        "properties": {
+          "policyId": { "type": "string" },
+          "policyName": { "type": "string" },
+          "result": { "type": "string", "enum": ["applies", "superseded", "conflicts", "inapplicable"] },
+          "reason": { "type": "string" },
+          "reasonCode": { "type": "string" },
+          "supersededById": { "type": "string" }
+        }
+      },
+      "PlanKernelDecision": {
+        "type": "object",
+        "description": "The kernel's authorization result for one candidate action, after any tightening by the evaluator or planner-run escalation.",
+        "required": ["authorized", "riskLevel", "requiresApproval", "policySnapshot", "blockingReasons", "concerns", "policyConflicts", "policyChecks", "policyResolutions", "uncitedPolicyIds", "averageEvidenceConfidence", "explanation", "recommendation"],
+        "properties": {
+          "authorized": { "type": "boolean" },
+          "riskLevel": { "type": "integer", "minimum": 0, "maximum": 5 },
+          "requiresApproval": { "type": "boolean" },
+          "policySnapshot": { "type": "string" },
+          "blockingReasons": { "type": "array", "items": { "type": "string" } },
+          "concerns": { "type": "array", "items": { "type": "string" } },
+          "policyConflicts": { "type": "array", "items": { "type": "string" } },
+          "policyChecks": { "type": "array", "items": { "$ref": "#/components/schemas/PlanPolicyCheck" } },
+          "policyResolutions": { "type": "array", "items": { "type": "string" } },
+          "uncitedPolicyIds": { "type": "array", "items": { "type": "string" } },
+          "capabilityGraph": { "type": ["object", "null"], "description": "Capability graph findings (effective scopes, risk multiplier, missing requirements, held conflicts, problems). Null or absent when the capability is not in the company model.", "additionalProperties": true },
+          "averageEvidenceConfidence": { "type": "number" },
+          "explanation": {
+            "type": "object",
+            "required": ["appliedPolicies", "conflictsDetected", "riskComponents", "guardEvaluations"],
+            "properties": {
+              "appliedPolicies": { "type": "array", "items": { "type": "string" } },
+              "conflictsDetected": { "type": "array", "items": { "type": "string" } },
+              "riskComponents": { "type": "object", "description": "The risk arithmetic: baseRisk, impact tiers, reversibility, uncertainty, preMultiplierRisk, multiplier, finalRisk.", "additionalProperties": true },
+              "guardEvaluations": { "type": "array", "items": { "type": "object", "required": ["policyId", "result", "reason"], "properties": { "policyId": { "type": "string" }, "result": { "type": "string" }, "reasonCode": { "type": "string" }, "reason": { "type": "string" } } } }
+            }
+          },
+          "recommendation": { "type": "string", "enum": ["execute-autonomously", "request-approval", "reject"] }
+        }
+      },
+      "PlanEvaluation": {
+        "type": "object",
+        "description": "The Quicksilver Engine's deterministic evaluation of the proposed action.",
+        "required": ["reasoningScore", "hallucinationRisk", "brittleness", "failureExemplars", "failedToolCount", "diagnosticReport", "correctionSuggestions", "evaluatedAt", "taskType", "modelId"],
+        "properties": {
+          "reasoningScore": { "type": "number" },
+          "hallucinationRisk": { "type": "string", "enum": ["low", "med", "high"] },
+          "brittleness": { "type": "string", "enum": ["low", "med", "high"] },
+          "failureExemplars": { "type": "array", "items": { "type": "string" } },
+          "failedToolCount": { "type": "integer", "minimum": 0 },
+          "diagnosticReport": { "type": "array", "items": { "type": "string" } },
+          "correctionSuggestions": { "type": "array", "items": { "type": "string" } },
+          "evaluatedAt": { "type": "string", "format": "date-time" },
+          "taskType": { "type": "string" },
+          "modelId": { "type": ["string", "null"] }
+        }
+      },
+      "PlanDecisionItem": {
+        "type": "object",
+        "description": "One candidate action. decision, why, evaluation, safetyDecision, review and decisionDocId are null when the planner's actor or capability did not resolve in the company model; nothing is persisted for such an action.",
+        "required": ["action", "decision", "why", "escalationReasons", "evaluation", "safetyDecision", "review", "decisionDocId", "approvalFingerprint", "status", "process", "resolvedReferences"],
+        "properties": {
+          "action": {
+            "type": "object",
+            "description": "The planner's proposed action, as the planner produced it.",
+            "required": ["description", "actorId", "capabilityId", "applicablePolicyIds", "evidenceIds", "financialExposure", "reversible", "operationalImpact", "uncertainty"],
+            "properties": {
+              "description": { "type": "string" },
+              "actorId": { "type": "string" },
+              "capabilityId": { "type": "string" },
+              "applicablePolicyIds": { "type": "array", "items": { "type": "string" } },
+              "evidenceIds": { "type": "array", "items": { "type": "string" } },
+              "financialExposure": { "type": "number" },
+              "reversible": { "type": "boolean" },
+              "operationalImpact": { "type": "integer", "minimum": 0, "maximum": 5 },
+              "uncertainty": { "type": "integer", "minimum": 0, "maximum": 5 }
+            }
+          },
+          "decision": { "oneOf": [{ "$ref": "#/components/schemas/PlanKernelDecision" }, { "type": "null" }] },
+          "why": { "oneOf": [{ "$ref": "#/components/schemas/DecisionWhy" }, { "type": "null" }] },
+          "escalationReasons": { "type": "array", "items": { "type": "string" }, "description": "Evaluator reasons that tightened an allow into human review." },
+          "evaluation": { "oneOf": [{ "$ref": "#/components/schemas/PlanEvaluation" }, { "type": "null" }] },
+          "safetyDecision": { "type": ["string", "null"], "enum": ["ALLOW", "BLOCK", "ESCALATE", null] },
+          "review": {
+            "description": "The independent reviewer's notes. Advisory only; never changes the kernel's outcome.",
+            "oneOf": [
+              { "type": "object", "required": ["valid", "policyConflicts", "missingEvidence", "riskConcerns", "suggestions"], "properties": { "valid": { "type": "boolean" }, "policyConflicts": { "type": "array", "items": { "type": "string" } }, "missingEvidence": { "type": "array", "items": { "type": "string" } }, "riskConcerns": { "type": "array", "items": { "type": "string" } }, "suggestions": { "type": "array", "items": { "type": "string" } } } },
+              { "type": "null" }
+            ]
+          },
+          "decisionDocId": { "type": ["string", "null"], "description": "The persisted decision id, to pass to /api/decisions/{id}." },
+          "approvalFingerprint": { "type": ["string", "null"], "pattern": "^sha256:[a-f0-9]{64}$", "description": "Send back as expectedActionFingerprint when approving this decision." },
+          "status": { "type": ["string", "null"], "description": "The decision's initial status: awaiting-approval or rejected, or the state the process engine chose." },
+          "process": { "oneOf": [{ "$ref": "#/components/schemas/DecisionProcess" }, { "type": "null" }] },
+          "resolvedReferences": {
+            "type": "object",
+            "required": ["actor", "capability", "policies", "evidence"],
+            "properties": {
+              "actor": { "type": ["object", "null"], "required": ["id", "name", "entityType"], "properties": { "id": { "type": "string" }, "name": { "type": "string" }, "entityType": { "type": "string" } } },
+              "capability": { "type": ["object", "null"], "required": ["id", "name", "riskLevel"], "properties": { "id": { "type": "string" }, "name": { "type": "string" }, "riskLevel": { "type": "integer", "minimum": 0, "maximum": 5 } } },
+              "policies": { "type": "array", "items": { "type": "object", "required": ["id", "name", "scope", "priority"], "properties": { "id": { "type": "string" }, "name": { "type": "string" }, "scope": { "type": "string" }, "priority": { "type": "number" } } } },
+              "evidence": { "type": "array", "items": { "type": "object", "required": ["id", "title", "confidence"], "properties": { "id": { "type": "string" }, "title": { "type": "string" }, "confidence": { "type": "number" } } } }
+            }
+          }
+        }
+      },
+      "TraceReceipt": {
+        "type": "object",
+        "required": ["traceId", "persisted"],
+        "properties": {
+          "traceId": { "type": "string" },
+          "persisted": { "type": "boolean", "description": "False when the trace spans could not be written; the response itself is still valid." }
+        }
+      },
+      "PlanResponse": {
+        "type": "object",
+        "required": ["decomposition", "reasoning", "decisions", "telemetry"],
+        "properties": {
+          "decomposition": {
+            "type": "object",
+            "required": ["objective", "constraints", "successMetrics", "requiredCapabilities", "candidateWorkstreams"],
+            "properties": {
+              "objective": { "type": "string" },
+              "constraints": { "type": "array", "items": { "type": "string" } },
+              "successMetrics": { "type": "array", "items": { "type": "string" } },
+              "requiredCapabilities": { "type": "array", "items": { "type": "string" } },
+              "candidateWorkstreams": { "type": "array", "items": { "type": "string" } }
+            }
+          },
+          "reasoning": { "type": "string" },
+          "decisions": { "type": "array", "minItems": 1, "items": { "$ref": "#/components/schemas/PlanDecisionItem" } },
+          "telemetry": { "$ref": "#/components/schemas/TraceReceipt" }
+        }
+      },
+      "QueryResponse": {
+        "type": "object",
+        "description": "The query agent's structured answer plus the governance evaluation of it.",
+        "required": ["question", "entities", "capabilities", "policies", "supportingContext", "confidence", "toolCalls", "modelId", "usage", "audit", "telemetry", "nqc"],
+        "properties": {
+          "question": { "type": "string" },
+          "entities": { "type": "array", "items": { "type": "object", "required": ["id", "name", "entityType", "role", "reasoning"], "properties": { "id": { "type": "string" }, "name": { "type": "string" }, "entityType": { "type": "string" }, "role": { "type": ["string", "null"] }, "reasoning": { "type": "string" } } } },
+          "capabilities": { "type": "array", "items": { "type": "object", "required": ["id", "name", "riskLevel"], "properties": { "id": { "type": "string" }, "name": { "type": "string" }, "riskLevel": { "type": "integer", "minimum": 0, "maximum": 5 } } } },
+          "policies": { "type": "array", "items": { "type": "object", "required": ["id", "name", "scope"], "properties": { "id": { "type": "string" }, "name": { "type": "string" }, "scope": { "type": "string" } } } },
+          "supportingContext": { "type": "array", "items": { "type": "string" } },
+          "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+          "toolCalls": { "type": "array", "items": { "type": "object", "required": ["name", "succeeded"], "properties": { "name": { "type": "string" }, "succeeded": { "type": "boolean" }, "error": { "type": "string" }, "durationMs": { "type": "number" } } } },
+          "modelId": { "type": "string" },
+          "usage": { "type": "object", "description": "Provider-reported token counts; a field is null when the provider did not report it.", "required": ["inputTokens", "outputTokens", "totalTokens"], "properties": { "inputTokens": { "type": ["integer", "null"] }, "outputTokens": { "type": ["integer", "null"] }, "totalTokens": { "type": ["integer", "null"] } } },
+          "audit": { "type": "object", "required": ["persisted", "evaluationRecordIds"], "properties": { "persisted": { "type": "boolean" }, "evaluationRecordIds": { "type": "array", "items": { "type": "string" } }, "error": { "type": "string" } } },
+          "telemetry": { "$ref": "#/components/schemas/TraceReceipt" },
+          "nqc": {
+            "type": "object",
+            "required": ["reasoningScore", "hallucinationRisk", "brittleness", "issues", "corrections", "safetyDecision"],
+            "properties": {
+              "reasoningScore": { "type": "number" },
+              "hallucinationRisk": { "type": "string", "enum": ["low", "med", "high"] },
+              "brittleness": { "type": "string", "enum": ["low", "med", "high"] },
+              "issues": { "type": "array", "items": { "type": "string" } },
+              "corrections": { "type": "array", "items": { "type": "string" } },
+              "safetyDecision": { "type": "string", "enum": ["ALLOW", "BLOCK", "ESCALATE"] }
+            }
+          }
+        }
       },
       "DashboardOverview": {
         "type": "object",
@@ -2239,16 +2854,6 @@
       "WorkflowVersionAction": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/WorkflowVersionAction" } } } },
       "ReviewWorkflowRequest": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ReviewWorkflowRequest" } } } },
       "ChatRequest": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ChatRequest" } } } },
-      "JsonObject": {
-        "content": {
-          "application/json": {
-            "schema": {
-              "$ref": "#/components/schemas/JsonObject"
-            }
-          }
-        },
-        "required": true
-      },
       "BusinessAgentRequest": {
         "required": true,
         "content": { "application/json": { "schema": { "$ref": "#/components/schemas/BusinessAgentRequest" } } }
@@ -2348,16 +2953,21 @@
           }
         }
       },
-      "JsonResponse": {
-        "content": {
-          "application/json": {
-            "schema": {
-              "$ref": "#/components/schemas/JsonObject"
-            }
-          }
-        },
-        "description": "Successful JSON response; exact route-specific fields are not yet fully specified."
-      },
+      "DecisionActionResultResponse": { "description": "The decision after an approve, reject or request-evidence action.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/DecisionActionResult" } } } },
+      "DecisionExecutionResultResponse": { "description": "The simulated execution outcome of an approved decision.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/DecisionExecutionResult" } } } },
+      "DecisionObservationResponse": { "description": "The latest metric observation and diagnosis for an executed decision.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/DecisionObservation" } } } },
+      "DecisionResumeResultResponse": { "description": "The decision after the kernel took its automatic transition.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/DecisionResumeResult" } } } },
+      "DecisionRollbackResultResponse": { "description": "The new rollback decision and, with the process engine on, the lifecycle state of both decisions.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/DecisionRollbackResult" } } } },
+      "WorkflowMonitoringResponse": { "description": "Latest tenant-scoped workflow execution metadata.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/WorkflowMonitoring" } } } },
+      "TelemetryTracesResponse": { "description": "Recent trace span metadata, computed alerts and token totals.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/TelemetryTraces" } } } },
+      "CompanyEntityDirectoryResponse": { "description": "The company entity directory, first 500 entities by name.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CompanyEntityDirectory" } } } },
+      "BrowserSessionResponse": { "description": "The signed-in human behind the current browser session.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/BrowserSession" } } } },
+      "PlanResponse": { "description": "The plan, with one kernel-governed decision per candidate action. Resolved candidates are persisted as decision documents.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PlanResponse" } } } },
+      "QueryResponse": { "description": "A structured answer from the query agent with its governance evaluation.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/QueryResponse" } } } },
+      "WorkflowVersionDiffResponse": { "description": "A field-level comparison of two verified workflow versions; config values are not returned.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/WorkflowVersionDiff" } } } },
+      "WorkflowExecutionsResponse": { "description": "Metadata-only execution history for one workflow.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/WorkflowExecutions" } } } },
+      "WorkflowPublicationsResponse": { "description": "Every immutable version of one workflow and its publication audit.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/WorkflowPublications" } } } },
+      "PublishedWorkflowVersionResponse": { "description": "The workflow version after the lifecycle action (201 for a new draft, 200 otherwise).", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PublishedWorkflowVersion" } } } },
       "BusinessAgentResponse": {
         "content": { "application/json": { "schema": { "$ref": "#/components/schemas/BusinessAgentResponse" } } },
         "description": "Structured recommendations from one selected business specialist. They are not actions or approvals."

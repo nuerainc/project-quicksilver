@@ -417,3 +417,17 @@ test('no operation uses the generic JSON object as its request body', () => {
   const generic = Object.entries(contract.paths).flatMap(([path, methods]) => Object.entries(methods).filter(([, op]) => op.requestBody?.$ref === '#/components/requestBodies/JsonObject').map(([method]) => `${method.toUpperCase()} ${path}`))
   assert.deepEqual(generic, [], 'give each write operation a real request schema')
 })
+
+test('no operation answers with a generic placeholder response', () => {
+  const contract = JSON.parse(readFileSync(new URL('../../../docs/api/openapi.json', import.meta.url), 'utf8')) as {
+    paths: Record<string, Record<string, { responses?: Record<string, { $ref?: string }> }>>
+    components: { responses?: Record<string, unknown>; schemas?: Record<string, unknown> }
+  }
+  const generic = Object.entries(contract.paths).flatMap(([path, methods]) => Object.entries(methods).flatMap(([method, op]) =>
+    Object.entries(op.responses ?? {})
+      .filter(([status, response]) => /^(2\d\d|2XX)$/.test(status) && response.$ref === '#/components/responses/JsonResponse')
+      .map(([status]) => `${method.toUpperCase()} ${path} ${status}`)))
+  assert.deepEqual(generic, [], 'give each success response a named schema')
+  assert.equal(contract.components.responses?.JsonResponse, undefined, 'the generic response placeholder is gone')
+  assert.equal(contract.components.schemas?.JsonObject, undefined, 'the generic object schema is gone')
+})
