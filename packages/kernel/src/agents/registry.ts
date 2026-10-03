@@ -75,6 +75,8 @@ export const BUILT_IN_AGENT_MANIFESTS: readonly AgentManifest[] = Object.freeze(
   // Coordinates kernel authorization, human approval, execution readiness and rollback; never grants authority.
   Object.freeze({ id: 'nuera-quicksilver:supervisor', version: 1, authority: 'review', tasks: Object.freeze(['evaluation', 'routing', 'other'] as EvaluationTaskType[]), maximumImpact: 'critical', requiresEvaluation: true }),
   Object.freeze({ id: 'nuera-quicksilver:query', version: 1, authority: 'propose', tasks: Object.freeze(['reasoning'] as EvaluationTaskType[]), maximumImpact: 'moderate', requiresEvaluation: true }),
+  // The chat assistant answers questions about the app and the company by reading; it changes nothing.
+  Object.freeze({ id: 'nuera-quicksilver:assistant', version: 1, authority: 'propose', tasks: Object.freeze(['reasoning'] as EvaluationTaskType[]), maximumImpact: 'low', requiresEvaluation: true }),
   // Aura objective parser: reads an objective into structured fields; proposes nothing.
   Object.freeze({ id: 'nuera-quicksilver:intent', version: 1, authority: 'propose', tasks: Object.freeze(['reasoning'] as EvaluationTaskType[]), maximumImpact: 'low', requiresEvaluation: true }),
   // Onboard shadow stage (M4): proposes actions for the owner to judge; nothing it proposes is executed.

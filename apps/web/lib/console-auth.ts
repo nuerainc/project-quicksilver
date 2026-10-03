@@ -94,6 +94,7 @@ const TOKEN_PATHS: ReadonlySet<string> = new Set([
   '/api/whoami',
   '/api/plan',
   '/api/query',
+  '/api/chat',
   '/api/agents/run',
   '/api/monitoring/workflows',
   '/api/monitoring/traces',
@@ -126,6 +127,8 @@ export function mayCarryConsoleToken(url: string): boolean {
   if (/^\/api\/workflows\/publications\?workflowId=[a-zA-Z0-9._:%-]{1,256}$/.test(url)) return true
   if (/^\/api\/workflows\/executions\?workflowId=[a-zA-Z0-9._:%-]{1,256}(?:&limit=[0-9]{1,3})?$/.test(url)) return true
   if (/^\/api\/workflows\/diff\?workflowId=[a-zA-Z0-9._:%-]{1,256}&from=[0-9]{1,9}&to=[0-9]{1,9}$/.test(url)) return true
+  if (/^\/api\/decisions(?:\?(?:status=[a-z-]{1,30}&)?limit=[0-9]{1,2})?$/.test(url)) return true
+  if (/^\/api\/decisions\/[A-Za-z0-9._:-]{1,200}$/.test(url)) return true
   return /^\/api\/decisions\/[^/?#]+\/(action|execute|observe|resume|rollback)$/.test(url) || TOKEN_PATHS.has(url)
 }
 
@@ -141,7 +144,7 @@ export interface ConsoleWhoami {
 
 export type ConsoleDecisionRoute = 'action' | 'execute' | 'observe' | 'resume' | 'rollback'
 /** Every console call that can be refused for auth: the decision routes plus plan, query and the workflow builder. */
-export type ConsoleRoute = ConsoleDecisionRoute | 'plan' | 'query' | 'agents/run'
+export type ConsoleRoute = ConsoleDecisionRoute | 'plan' | 'query' | 'chat' | 'decisions' | 'decisions/detail' | 'agents/run'
   | 'dashboard/overview' | 'dashboard/finance'
   | 'entities'
   | 'monitoring/workflows' | 'monitoring/traces'
@@ -159,6 +162,9 @@ export const CONSOLE_ROUTE_PERMISSION: Readonly<Record<ConsoleRoute, string>> = 
   rollback: 'decision:rollback',
   plan: 'decision:propose',
   query: 'decision:read',
+  chat: 'decision:read',
+  decisions: 'decision:read',
+  'decisions/detail': 'decision:read',
   'agents/run': 'decision:read',
   'monitoring/workflows': 'workflow:read',
   'monitoring/traces': 'audit:read',

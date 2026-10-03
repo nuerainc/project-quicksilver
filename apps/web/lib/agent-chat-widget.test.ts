@@ -8,7 +8,7 @@ const layout = readFileSync(new URL('../app/layout.tsx', import.meta.url), 'utf8
 
 test('business chat is available across every app page and separates asking, planning, and specialist work', () => {
   assert.match(layout, /<AgentChatWidget\s*\/>/)
-  assert.match(widget, /chatRequest\(submittedMode, text, agentKey, context\)/)
+  assert.match(widget, /chatRequest\(submittedMode, text, agentKey, context, history\)/)
   assert.match(widget, /businessAgentContext\(messages\.map/)
   assert.match(widget, /aria-label="Chat mode"/)
   assert.match(widget, />Ask<\/button>/)
@@ -25,9 +25,13 @@ test('business chat is available across every app page and separates asking, pla
   assert.match(widget, /\/planning#console-token/)
 })
 
-test('company records cited by Ask mode link into the entity directory', () => {
-  assert.match(widget, /href=\{`\/entities\?search=\$\{encodeURIComponent\(entity\.name\)\}`\}/)
-  assert.match(widget, /Open record/)
+test('Ask mode reads the whole app through /api/chat and links only to pages of the app', () => {
+  const request = readFileSync(new URL('./chat-request.ts', import.meta.url), 'utf8')
+  assert.match(request, /path: '\/api\/chat'/)
+  assert.match(widget, /What I looked at/)
+  assert.match(widget, /isLocalLink/)
+  assert.match(widget, /href\.startsWith\('\/'\) && !href\.startsWith\('\/\/'\) && !href\.startsWith\('\/api\/'\)/)
+  assert.match(widget, /never approves or changes anything/)
 })
 
 test('chat launcher and transcript have accessible, session-scoped controls', () => {
