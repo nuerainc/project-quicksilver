@@ -527,9 +527,10 @@ body:has(.app-topbar) > #main-content { min-height: 100dvh; margin-inline-start:
 .app-session--mobile:not(.app-session__button) { justify-content: space-between; }
 .app-topbar[data-collapsed='true'] .app-session__name { display: none; }
 
+.qs-dashboard-section-heading a { display: inline-flex; align-items: center; min-height: 1.75rem; }
 /* Touch screens: controls are at least 44px tall (WCAG 2.5.5), and the dashboard's text links are real targets. */
 @media (pointer: coarse) {
   .app-session__button { display: inline-flex; align-items: center; min-height: 2.75rem; }
   .app-sidebar-collapse { width: 2.75rem; min-height: 2.75rem; }
-  .qs-dashboard-section-heading a { display: inline-flex; align-items: center; min-height: 2.75rem; }
+  .qs-dashboard-section-heading a { min-height: 2.75rem; }
 }
