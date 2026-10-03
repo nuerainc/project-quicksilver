@@ -52,6 +52,8 @@ import { FileCommerceProposalStore, FilePendingPaymentStore, MemoryCommercePropo
 import { SecretsVault, generateMasterKey } from './vault.ts'
 import { taskSetup } from './tasks-setup.ts'
 import { createShutdownHandler } from './shutdown.ts'
+import { buildGovernedMemory } from './governed-memory.ts'
+import type { MemoryStore } from '@quicksilver/kernel'
 
 /** Where the command was run from (npm sets INIT_CWD; workspace scripts run inside packages/host). */
 const baseDir = process.env.INIT_CWD ?? process.cwd()
@@ -335,7 +337,7 @@ function buildMedia(config: HostConfig, log: Logger): MediaService | undefined {
   })
 }
 
-async function buildAgentRunner(log: Logger): Promise<AgentRunner | undefined> {
+async function buildAgentRunner(log: Logger, memory: MemoryStore): Promise<AgentRunner | undefined> {
   if (!process.env.SANITY_CONTEXT_MCP_URL || !process.env.SANITY_CONTEXT_TOKEN) {
     log.warn('Sanity Context MCP is not configured; agent steps will fail closed')
     return undefined
@@ -357,6 +359,8 @@ async function buildAgentRunner(log: Logger): Promise<AgentRunner | undefined> {
       taskType: 'reasoning',
       input,
       impactLevel: impact,
+      // Lessons from the run are kept through the governed store; authorization never reads them.
+      memory,
       ...(signal ? { signal } : {}),
     })
     const out = run.output
@@ -455,13 +459,15 @@ async function main(): Promise<void> {
   const hosting = buildHosting(config, genesis, log)
   const media = buildMedia(config, log)
   const actions = buildActions(config, log)
+  const memory = buildGovernedMemory(config)
+  if (!memory.persistent) log.warn('governed memory is held in memory only and is lost on restart; use the file run store to keep it')
   const tasks = taskSetup(config, { baseDir })
   for (const note of tasks.notes) log.warn(note)
   const host = new QuicksilverHost(config, {
     principals,
     store,
     logger: log,
-    agentRunner: await buildAgentRunner(log),
+    agentRunner: await buildAgentRunner(log, memory.store),
     evaluationSink: await buildEvaluationSink(log),
     intent,
     shadow,

@@ -92,3 +92,40 @@ test('intent parser: values whose quote is not in the objective are dropped', as
   assert.deepEqual(parsed.constraints.map((c) => c.id), ['no_paid_ads'])
   assert.deepEqual(parsed.dropped.sort(), ['constraint:no_debt', 'revenueTarget'])
 })
+
+test('lessons from a governed run are kept through the memory store, and only through it', async () => {
+  const { MemoryStore } = await import('@quicksilver/kernel')
+  const failing: NueraQuicksilverAgent<{ q: string }, { answer: string }> = {
+    id: 'nuera-quicksilver:reviewer',
+    version: 1,
+    tasks: ['evaluation'],
+    async execute() {
+      return { output: { answer: 'ok' }, modelId: 'stub-model', evaluationContext: ['ev-1: evidence'], toolCalls: [{ name: 'lookup', succeeded: false, error: 'timeout' }] }
+    },
+  }
+  const memory = new MemoryStore()
+  const run = await executeGovernedAgent(failing, { agentId: failing.id, taskType: 'evaluation', input: { q: 'x' }, memory })
+  assert.ok(run.memoryWrites.length > 0)
+  assert.ok(run.memoryWrites.every((w) => w.stored))
+  const [entry] = memory.entries()
+  assert.equal(entry!.kind, 'failure-exemplar')
+  assert.deepEqual(entry!.proposedBy, { id: failing.id, kind: 'agent' })
+  assert.match(entry!.content, /Tool lookup failed: timeout/)
+  assert.ok(memory.recall({ domain: 'evaluation' }).every((m) => m.advisory))
+
+  const without = await executeGovernedAgent(failing, { agentId: failing.id, taskType: 'evaluation', input: { q: 'x' } })
+  assert.deepEqual(without.memoryWrites, [])
+})
+
+test('a memory store that fails does not fail the agent run', async () => {
+  const { MemoryStore } = await import('@quicksilver/kernel')
+  const failing: NueraQuicksilverAgent<{ q: string }, { answer: string }> = {
+    id: 'nuera-quicksilver:reviewer', version: 1, tasks: ['evaluation'],
+    async execute() { return { output: { answer: 'ok' }, modelId: 'm', evaluationContext: ['ev-1: e'], toolCalls: [{ name: 'lookup', succeeded: false, error: 'timeout' }] } },
+  }
+  const broken = new MemoryStore()
+  ;(broken as unknown as { save: () => void }).save = () => { throw new Error('disk full') }
+  const run = await executeGovernedAgent(failing, { agentId: failing.id, taskType: 'evaluation', input: { q: 'x' }, memory: broken })
+  assert.deepEqual(run.output, { answer: 'ok' })
+  assert.ok(run.memoryWrites.every((w) => !w.stored && /disk full/.test(w.reasons.join(' '))))
+})

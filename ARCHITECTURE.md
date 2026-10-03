@@ -353,9 +353,17 @@ unchanged). Details are in the linked docs.
   worker, dead letters, cron and signed webhooks. See
   [durable runs](./docs/platform/durable-runs.md) and
   [triggers](./docs/platform/triggers.md).
-- **Governed memory and routing** (`nqc/memory.ts`, `nqc/routing.ts`):
-  fail-closed memory writes and role-based model selection. Neither is
-  connected to persistent storage yet.
+- **Governed memory and routing** (`nqc/memory.ts`, `nqc/memory-store.ts`,
+  `nqc/routing.ts`): fail-closed memory writes, a persistent store behind them,
+  and role-based model selection. The store is a hash-chained file per tenant
+  (`<store dir>/<tenant>/memory.json`, host with the file run store); every
+  write goes through the governor, each entry records who proposed it, entries
+  expire, only a person can forget one, and a file that was edited will not
+  load. Recalled memory is advisory text: no authorization module reads it
+  (`memory-boundary.test.ts` checks the imports). Not yet done: recalled
+  lessons are not injected into agent prompts, there is no API to list or
+  forget memories, and the web app (serverless) has no store, so only the host
+  keeps memory. Routing is still not persisted.
 
 ## 8d. Target: intent and playbook layers
 
