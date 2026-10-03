@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
-import { authFailureMessage, consoleHeaders, readConsoleToken } from '@/lib/console-auth'
+import { authFailureMessage, consoleHeaders, resolveConsoleAccess } from '@/lib/console-auth'
 
 type EntityRecord = {
   id: string
@@ -24,21 +24,20 @@ export default function EntitiesPage() {
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [needsSignIn, setNeedsSignIn] = useState(false)
 
   useEffect(() => {
     setSearch(new URLSearchParams(window.location.search).get('search') ?? '')
-    const token = readConsoleToken()
-    if (!token) {
-      setLoading(false)
-      setError('Sign in with a principal that has decision:read to view company records.')
-      return
-    }
     let current = true
-    fetch(API_PATH, { headers: consoleHeaders(API_PATH, token), cache: 'no-store' })
+    resolveConsoleAccess()
+      .then((access) => {
+        if (!access.signedIn) { if (current) setNeedsSignIn(true); throw new Error('Sign in with a principal that has decision:read to view company records.') }
+        return fetch(API_PATH, { headers: consoleHeaders(API_PATH, access.token), cache: 'no-store' })
+      })
       .then(async (response) => {
         const body = await response.json().catch(() => ({}))
         if (!response.ok) {
-          if (response.status === 401) throw new Error(authFailureMessage(401, 'entities') ?? 'Sign in to view company records.')
+          if (response.status === 401) { if (current) setNeedsSignIn(true); throw new Error(authFailureMessage(401, 'entities') ?? 'Sign in to view company records.') }
           throw new Error(body.error ?? 'Could not load company records.')
         }
         return body as { total: number; entities: EntityRecord[] }
@@ -73,7 +72,7 @@ export default function EntitiesPage() {
           <label className="qs-field"><span>Search company records</span><input type="search" value={search} onChange={(event) => setSearch(event.currentTarget.value)} placeholder="Name, team, capability…" /></label>
         </div>
 
-        {error && <div className="qs-data-card" role="alert"><p>{error}</p>{!readConsoleToken() && <Link className="qs-action-secondary" href="/planning#console-token">Go to sign in</Link>}</div>}
+        {error && <div className="qs-data-card" role="alert"><p>{error}</p>{needsSignIn && <Link className="qs-action-secondary" href="/planning#console-token">Go to sign in</Link>}</div>}
         {!error && loading && <p className="qs-helper" role="status">Loading the authorized company directory…</p>}
         {!error && !loading && visible.length === 0 && <p className="qs-helper">{entities.length ? 'No records match this search.' : 'No entity records were found in the configured company dataset.'}</p>}
         {!error && visible.length > 0 && (

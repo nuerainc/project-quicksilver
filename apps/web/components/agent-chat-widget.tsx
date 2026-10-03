@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
 
-import { authFailureMessage, consoleHeaders, readConsoleToken } from '@/lib/console-auth'
+import { authFailureMessage, consoleHeaders, resolveConsoleAccess } from '@/lib/console-auth'
 import { chatRequest, type ChatMode } from '@/lib/chat-request'
 import { businessAgentContext } from '@/lib/business-agent-context'
 import type { BusinessAgentKey } from '@quicksilver/agent'
@@ -79,7 +79,7 @@ export function AgentChatWidget() {
 
   useEffect(() => {
     if (open) {
-      setTokenPresent(Boolean(readConsoleToken()))
+      void resolveConsoleAccess().then((access) => setTokenPresent(access.signedIn))
       inputRef.current?.focus()
     }
   }, [open])
@@ -121,8 +121,8 @@ export function AgentChatWidget() {
     event.preventDefault()
     const text = question.trim()
     if (!text || busy) return
-    const token = readConsoleToken()
-    if (!token) {
+    const access = await resolveConsoleAccess()
+    if (!access.signedIn) {
       setTokenPresent(false)
       setError(mode === 'plan'
         ? 'Sign in with a principal allowed to propose decisions before asking Quicksilver to plan work.'
@@ -149,7 +149,7 @@ export function AgentChatWidget() {
       const path = chat.path
       const response = await fetch(path, {
         method: 'POST',
-        headers: consoleHeaders(path, token, { 'content-type': 'application/json' }),
+        headers: consoleHeaders(path, access.token, { 'content-type': 'application/json' }),
         body: JSON.stringify(chat.body),
         cache: 'no-store',
       })

@@ -6,7 +6,7 @@ import {
   authFailureMessage,
   clearConsoleToken,
   consoleHeaders,
-  readConsoleToken,
+  resolveConsoleAccess,
   saveConsoleToken,
   soleOperatorPrompt,
   type ConsoleDecisionRoute,
@@ -155,12 +155,21 @@ export default function HomePage() {
   const [who, setWho] = useState<ConsoleWhoami | null>(null)
   const [authNote, setAuthNote] = useState<string | null>(null)
 
+  // Signed in with the organisation account (OIDC) rather than a pasted token: the
+  // browser session cookie goes with each request, so there is no token to keep.
+  const [session, setSession] = useState(false)
+  const signedIn = Boolean(token) || session
+
   useEffect(() => {
-    const stored = readConsoleToken()
-    if (stored) {
-      setToken(stored)
-      void lookupWhoami(stored)
-    }
+    void resolveConsoleAccess().then((access) => {
+      if (access.token) {
+        setToken(access.token)
+        void lookupWhoami(access.token)
+      } else if (access.whoami) {
+        setSession(true)
+        setWho(access.whoami)
+      }
+    })
     // Run once on mount.
   }, [])
 
@@ -214,7 +223,7 @@ export default function HomePage() {
     try {
       // Planning needs a principal with decision:propose (A-3); the server
       // records that principal as the requester.
-      if (!token) throw new Error(authFailureMessage(401, 'plan')!)
+      if (!signedIn) throw new Error(authFailureMessage(401, 'plan')!)
       const res = await fetch('/api/plan', {
         method: 'POST',
         headers: consoleHeaders('/api/plan', token, { 'content-type': 'application/json' }),
@@ -252,7 +261,7 @@ export default function HomePage() {
    */
   async function callDecisionRoute<T = unknown>(decisionDocId: string, route: ConsoleDecisionRoute, body: Record<string, unknown>): Promise<T> {
     setError(null)
-    if (!token) throw new Error(authFailureMessage(401, route)!)
+    if (!signedIn) throw new Error(authFailureMessage(401, route)!)
     const url = `/api/decisions/${encodeURIComponent(decisionDocId)}/${route}`
     const res = await fetch(url, {
       method: 'POST',
@@ -443,7 +452,7 @@ export default function HomePage() {
             </p>
             <button
               onClick={handlePlan}
-              disabled={busy || objective.trim().length < 3 || !token}
+              disabled={busy || objective.trim().length < 3 || !signedIn}
               className="qs-action-primary"
             >
               {busy ? 'Preparing plan…' : 'Create plan'}
@@ -455,7 +464,7 @@ export default function HomePage() {
         </section>
 
         <aside className="qs-access-column" aria-label="Access and guidance">
-          <ConsoleSignIn token={token} who={who} note={authNote} onSignIn={handleSignIn} onSignOut={handleSignOut} />
+          <ConsoleSignIn token={token} session={session} who={who} note={authNote} onSignIn={handleSignIn} onSignOut={handleSignOut} />
           <section className="qs-guidance-card" aria-label="How governed planning works">
             <p className="qs-eyebrow">How it works</p>
             <ol>
@@ -540,9 +549,10 @@ export default function HomePage() {
  * The input is a password field and is cleared after sign-in.
  */
 function ConsoleSignIn({
-  token, who, note, onSignIn, onSignOut,
+  token, session, who, note, onSignIn, onSignOut,
 }: {
   token: string | null
+  session: boolean
   who: ConsoleWhoami | null
   note: string | null
   onSignIn: (token: string) => void
@@ -551,19 +561,21 @@ function ConsoleSignIn({
   const [draft, setDraft] = useState('')
   return (
     <section aria-label="Supervisor sign-in" className="qs-panel qs-access-panel">
-      {token ? (
+      {token || session ? (
         <div className="flex flex-wrap items-center justify-between gap-3 font-mono text-xs">
           <span className="text-quicksilver-signal">
             {who
               ? <>Signed in as <strong>{who.displayName ?? who.principalId}</strong> <span className="text-quicksilver-accent">({who.kind}{who.displayName ? ` · ${who.principalId}` : ''}) · can: {who.permissions.filter((p) => p.startsWith('decision:')).map((p) => p.slice('decision:'.length)).join(', ') || 'no decision actions'}</span></>
               : 'Signed in'}
           </span>
-          <button
-            onClick={onSignOut}
-            className="rounded border border-quicksilver-border px-3 py-1.5 uppercase tracking-widest text-quicksilver-accent transition hover:text-quicksilver-signal"
-          >
-            Sign out
-          </button>
+          {token ? (
+            <button
+              onClick={onSignOut}
+              className="rounded border border-quicksilver-border px-3 py-1.5 uppercase tracking-widest text-quicksilver-accent transition hover:text-quicksilver-signal"
+            >
+              Sign out
+            </button>
+          ) : <span className="text-quicksilver-accent">Organisation account · sign out from the menu</span>}
         </div>
       ) : DEMO ? (
         <div className="flex flex-wrap items-center gap-2">

@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { authFailureMessage, consoleHeaders, readConsoleToken, type ConsoleRoute } from '@/lib/console-auth'
+import { authFailureMessage, consoleHeaders, resolveConsoleAccess, type ConsoleRoute } from '@/lib/console-auth'
 import { agentReviewNoteProblem } from '@/lib/agent-review'
 
 type Agent = { agentId: string; displayName: string; description: string; version: number; manifest: { authority: 'propose' | 'review'; tasks: string[]; maximumImpact: string; requiresEvaluation: boolean }; digest: string; authoredBy: string; lifecycle: 'draft' | 'in-review' | 'published' | 'archived'; reviewedBy?: string; reviewNote?: string; rollbackFrom?: { version: number; digest: string }; builtIn?: true }
@@ -25,10 +25,10 @@ export default function AgentsPage() {
   const [reviewNote, setReviewNote] = useState('')
 
   async function request(route: ConsoleRoute, method: 'GET' | 'POST', body?: unknown, query = '') {
-    const token = readConsoleToken()
-    if (!token) throw new Error('Sign in on the home page before managing agent definitions.')
+    const access = await resolveConsoleAccess()
+    if (!access.signedIn) throw new Error('Sign in before managing agent definitions.')
     const url = `/api/${route}${query}`
-    const response = await fetch(url, { method, headers: consoleHeaders(url, token, body ? { 'content-type': 'application/json' } : {}), ...(body ? { body: JSON.stringify(body) } : {}), cache: 'no-store' })
+    const response = await fetch(url, { method, headers: consoleHeaders(url, access.token, body ? { 'content-type': 'application/json' } : {}), ...(body ? { body: JSON.stringify(body) } : {}), cache: 'no-store' })
     const payload = await response.json().catch(() => ({}))
     if (!response.ok) throw new Error(authFailureMessage(response.status, route, payload.error) ?? payload.error ?? 'Agent request failed.')
     return payload
@@ -40,9 +40,10 @@ export default function AgentsPage() {
   }
   useEffect(() => {
     void refresh()
-    const token = readConsoleToken()
-    if (!token) return
-    void fetch('/api/whoami', { headers: consoleHeaders('/api/whoami', token), cache: 'no-store' }).then(async (response) => {
+    void resolveConsoleAccess().then(async (access) => {
+      if (!access.signedIn) return
+      if (access.whoami) { setPermissions(access.whoami.permissions); return }
+      const response = await fetch('/api/whoami', { headers: consoleHeaders('/api/whoami', access.token), cache: 'no-store' })
       if (response.ok) setPermissions((await response.json() as { permissions?: string[] }).permissions ?? [])
     }).catch(() => undefined)
   }, [])
