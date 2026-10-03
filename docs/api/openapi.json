@@ -278,6 +278,56 @@
         }
       }
     },
+    "/api/chat": {
+      "post": {
+        "operationId": "chatWithQuicksilver",
+        "description": "The chat assistant. It answers questions about the app and the company by reading, as the person asking: every tool it uses is one of the app's own read routes, run with that person's credentials. It cannot approve, execute or change anything.",
+        "tags": ["Planning"],
+        "responses": {
+          "400": { "$ref": "#/components/responses/ErrorResponse" },
+          "401": { "$ref": "#/components/responses/ErrorResponse" },
+          "403": { "$ref": "#/components/responses/ErrorResponse" },
+          "429": { "$ref": "#/components/responses/RateLimitResponse" },
+          "503": { "$ref": "#/components/responses/ErrorResponse" },
+          "2XX": { "$ref": "#/components/responses/ChatResponse" }
+        },
+        "requestBody": { "$ref": "#/components/requestBodies/ChatRequest" }
+      }
+    },
+    "/api/decisions": {
+      "get": {
+        "operationId": "listDecisions",
+        "description": "Recent decisions, newest first. Needs decision:read.",
+        "tags": ["Decisions"],
+        "parameters": [
+          { "$ref": "#/components/parameters/DecisionStatus" },
+          { "$ref": "#/components/parameters/DecisionLimit" }
+        ],
+        "responses": {
+          "400": { "$ref": "#/components/responses/ErrorResponse" },
+          "401": { "$ref": "#/components/responses/ErrorResponse" },
+          "403": { "$ref": "#/components/responses/ErrorResponse" },
+          "503": { "$ref": "#/components/responses/ErrorResponse" },
+          "2XX": { "$ref": "#/components/responses/DecisionListResponse" }
+        }
+      }
+    },
+    "/api/decisions/{id}": {
+      "get": {
+        "operationId": "getDecision",
+        "description": "One decision in full, including the kernel's explanation of why (risk arithmetic, policy guards, the policy revision, and what would change the answer) when it was recorded. Needs decision:read.",
+        "tags": ["Decisions"],
+        "parameters": [{ "$ref": "#/components/parameters/DecisionId" }],
+        "responses": {
+          "400": { "$ref": "#/components/responses/ErrorResponse" },
+          "401": { "$ref": "#/components/responses/ErrorResponse" },
+          "403": { "$ref": "#/components/responses/ErrorResponse" },
+          "404": { "$ref": "#/components/responses/ErrorResponse" },
+          "503": { "$ref": "#/components/responses/ErrorResponse" },
+          "2XX": { "$ref": "#/components/responses/DecisionDetailResponse" }
+        }
+      }
+    },
     "/api/decisions/{id}/action": {
       "post": {
         "operationId": "approveDecisionAction",
@@ -1105,6 +1155,113 @@
   },
   "components": {
     "schemas": {
+      "ChatRequest": {
+        "type": "object",
+        "required": ["message"],
+        "additionalProperties": false,
+        "properties": {
+          "message": { "type": "string", "minLength": 2, "maxLength": 2000 },
+          "history": {
+            "type": "array",
+            "maxItems": 6,
+            "description": "Earlier turns, oldest first. Only the last six are used; they are context, not instructions.",
+            "items": {
+              "type": "object",
+              "required": ["question", "answer"],
+              "properties": { "question": { "type": "string" }, "answer": { "type": "string" } }
+            }
+          }
+        }
+      },
+      "ChatResponse": {
+        "type": "object",
+        "required": ["answer", "links", "confidence", "toolsUsed"],
+        "properties": {
+          "answer": { "type": "string" },
+          "links": {
+            "type": "array",
+            "description": "Pages of this app only; anything else is dropped before it is returned.",
+            "items": { "type": "object", "required": ["label", "href"], "properties": { "label": { "type": "string" }, "href": { "type": "string", "pattern": "^/" } } }
+          },
+          "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+          "toolsUsed": { "type": "array", "items": { "type": "string" } },
+          "audit": { "type": "object", "properties": { "persisted": { "type": "boolean" }, "evaluationRecordIds": { "type": "array", "items": { "type": "string" } }, "error": { "type": "string" } } },
+          "telemetry": { "type": "object", "properties": { "traceId": { "type": "string" }, "persisted": { "type": "boolean" } } },
+          "nqc": { "type": "object", "properties": { "reasoningScore": { "type": "number" }, "hallucinationRisk": { "type": "string" }, "brittleness": { "type": "string" }, "issues": { "type": "array", "items": { "type": "string" } }, "corrections": { "type": "array", "items": { "type": "string" } }, "safetyDecision": { "type": "string", "enum": ["ALLOW", "ESCALATE", "BLOCK"] } } }
+        }
+      },
+      "DecisionSummary": {
+        "type": "object",
+        "required": ["id", "title", "status", "requiredApproval"],
+        "properties": {
+          "id": { "type": "string" },
+          "title": { "type": "string" },
+          "action": { "type": ["string", "null"] },
+          "status": { "type": "string", "enum": ["proposed", "awaiting-approval", "approved", "executed", "failed", "rejected", "rollback-proposed", "rolled-back"] },
+          "riskLevel": { "type": ["integer", "null"], "minimum": 0, "maximum": 5 },
+          "requiredApproval": { "type": "boolean" },
+          "safetyDecision": { "type": ["string", "null"] },
+          "requestedBy": { "type": ["string", "null"] },
+          "createdAt": { "type": ["string", "null"], "format": "date-time" }
+        }
+      },
+      "DecisionList": {
+        "type": "object",
+        "required": ["observedAt", "decisions"],
+        "properties": { "observedAt": { "type": "string", "format": "date-time" }, "decisions": { "type": "array", "items": { "$ref": "#/components/schemas/DecisionSummary" } } }
+      },
+      "DecisionWhy": {
+        "type": "object",
+        "description": "The kernel's own reasoning for a decision. Every entry in whatWouldChangeIt that is simulated was found by changing one input and running the same authorization again.",
+        "required": ["recommendation", "headline", "risk", "policySnapshot", "guards", "whatWouldChangeIt"],
+        "properties": {
+          "recommendation": { "type": "string", "enum": ["execute-autonomously", "request-approval", "reject"] },
+          "headline": { "type": "string" },
+          "risk": {
+            "type": "object",
+            "required": ["lines", "preMultiplierRisk", "multiplier", "finalRisk", "autoMax", "review", "band"],
+            "properties": {
+              "lines": { "type": "array", "items": { "type": "object", "required": ["label", "value"], "properties": { "label": { "type": "string" }, "value": { "type": "number" }, "note": { "type": "string" } } } },
+              "preMultiplierRisk": { "type": "integer" }, "multiplier": { "type": "number" }, "finalRisk": { "type": "integer" },
+              "autoMax": { "type": "integer" }, "review": { "type": "integer" },
+              "band": { "type": "string", "enum": ["within-autonomous-ceiling", "needs-approval", "above-review-ceiling"] }
+            }
+          },
+          "policySnapshot": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+          "guards": { "type": "array", "items": { "type": "object", "required": ["policyId", "policyName", "result", "reason", "citedByPlanner"], "properties": { "policyId": { "type": "string" }, "policyName": { "type": "string" }, "result": { "type": "string" }, "reasonCode": { "type": "string" }, "reason": { "type": "string" }, "citedByPlanner": { "type": "boolean" } } } },
+          "uncitedPolicyIds": { "type": "array", "items": { "type": "string" } },
+          "approvalDrivers": { "type": "array", "items": { "type": "string" } },
+          "blockingReasons": { "type": "array", "items": { "type": "string" } },
+          "whatWouldChangeIt": { "type": "array", "items": { "type": "object", "required": ["change", "kind", "simulated", "improves"], "properties": { "change": { "type": "string" }, "kind": { "type": "string", "enum": ["action", "capability", "policy", "review", "evidence"] }, "simulated": { "type": "boolean" }, "improves": { "type": "boolean" }, "outcome": { "type": "object", "properties": { "recommendation": { "type": "string" }, "riskLevel": { "type": "integer" }, "blockingReasons": { "type": "integer" }, "concerns": { "type": "integer" } } } } } }
+        }
+      },
+      "DecisionDetail": {
+        "type": "object",
+        "required": ["id"],
+        "properties": {
+          "id": { "type": "string" },
+          "question": { "type": ["string", "null"] },
+          "selectedAction": { "type": ["string", "null"] },
+          "reasoningSummary": { "type": ["string", "null"] },
+          "constraints": { "type": ["array", "null"], "items": { "type": "string" } },
+          "riskLevel": { "type": ["integer", "null"] },
+          "requiredApproval": { "type": ["boolean", "null"] },
+          "status": { "type": ["string", "null"] },
+          "safetyDecision": { "type": ["string", "null"] },
+          "requestedBy": { "type": ["string", "null"] },
+          "proposedBy": { "type": ["string", "null"] },
+          "approvedByName": { "type": ["string", "null"] },
+          "createdAt": { "type": ["string", "null"] },
+          "executedAt": { "type": ["string", "null"] },
+          "policySnapshotVersion": { "type": ["string", "null"] },
+          "policyChecks": { "type": ["array", "null"], "items": { "type": "object", "properties": { "result": { "type": "string" }, "reason": { "type": "string" }, "policyName": { "type": ["string", "null"] } } } },
+          "policyResolutions": { "type": ["array", "null"], "items": { "type": "string" } },
+          "evidenceTitles": { "type": ["array", "null"], "items": { "type": ["string", "null"] } },
+          "reviewerNotes": { "type": ["object", "null"] },
+          "why": { "oneOf": [{ "$ref": "#/components/schemas/DecisionWhy" }, { "type": "null" }], "description": "Absent for decisions planned before the explanation was recorded." },
+          "processHistory": { "type": ["array", "null"], "items": { "type": "object" } }
+        }
+      },
       "Error": {
         "type": "object",
         "properties": {
@@ -1911,6 +2068,7 @@
       }
     },
     "requestBodies": {
+      "ChatRequest": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ChatRequest" } } } },
       "JsonObject": {
         "content": {
           "application/json": {
@@ -1994,6 +2152,9 @@
       }
     },
     "responses": {
+      "ChatResponse": { "description": "The assistant's answer, with links to pages of the app.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ChatResponse" } } } },
+      "DecisionListResponse": { "description": "Recent decisions.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/DecisionList" } } } },
+      "DecisionDetailResponse": { "description": "One decision.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/DecisionDetail" } } } },
       "RateLimitResponse": {
         "content": {
           "application/json": {
@@ -2124,6 +2285,8 @@
       }
     },
     "parameters": {
+      "DecisionStatus": { "name": "status", "in": "query", "required": false, "schema": { "type": "string", "enum": ["proposed", "awaiting-approval", "approved", "executed", "failed", "rejected", "rollback-proposed", "rolled-back"] } },
+      "DecisionLimit": { "name": "limit", "in": "query", "required": false, "schema": { "type": "integer", "minimum": 1, "maximum": 50, "default": 25 } },
       "DecisionId": {
         "schema": {
           "type": "string",

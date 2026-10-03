@@ -11,12 +11,10 @@ import type { BusinessAgentChoice } from '@/lib/business-agent-request'
 import styles from './agent-chat-widget.module.css'
 
 type QueryResponse = {
-  question: string
-  entities: Array<{ id: string; name: string; entityType: string; role: string | null; reasoning: string }>
-  capabilities: Array<{ id: string; name: string; riskLevel: number }>
-  policies: Array<{ id: string; name: string; scope: string }>
-  supportingContext: string[]
+  answer: string
+  links: Array<{ label: string; href: string }>
   confidence: number
+  toolsUsed?: string[]
   audit?: { persisted: boolean; evaluationRecordIds: string[] }
   nqc?: { reasoningScore: number; hallucinationRisk: string; brittleness: string; safetyDecision: string; issues: string[] }
 }
@@ -142,10 +140,11 @@ export function AgentChatWidget() {
             question: message.question,
             ...(message.agent ? { summary: message.agent.summary, safetyDecision: message.agent.nqc?.safetyDecision } : {}),
             ...(message.plan ? { summary: message.plan.reasoning } : {}),
-            ...(message.response ? { summary: message.response.supportingContext.join(' ') } : {}),
+            ...(message.response ? { summary: message.response.answer } : {}),
           })))
         : []
-      const chat = chatRequest(submittedMode, text, agentKey, context)
+      const history = messages.flatMap((message) => message.response ? [{ question: message.question, answer: message.response.answer }] : [])
+      const chat = chatRequest(submittedMode, text, agentKey, context, history)
       const path = chat.path
       const response = await fetch(path, {
         method: 'POST',
@@ -156,7 +155,7 @@ export function AgentChatWidget() {
       const payload = await response.json().catch(() => ({}))
       if (!response.ok) {
         if (response.status === 401) setTokenPresent(false)
-        const route = submittedMode === 'plan' ? 'plan' : submittedMode === 'agent' ? 'agents/run' : 'query'
+        const route = submittedMode === 'plan' ? 'plan' : submittedMode === 'agent' ? 'agents/run' : 'chat'
         const message = authFailureMessage(response.status, route, payload.error, payload.retryAfterSeconds)
           ?? payload.error
           ?? payload.detail
@@ -194,7 +193,7 @@ export function AgentChatWidget() {
 
           <div className={styles.safetyNote}>
             {mode === 'ask'
-              ? 'Answers use company context and NQC evaluation. Ask mode is read-only.'
+              ? 'Ask reads the app and your company data as you. It can explain and link, and it never approves or changes anything.'
               : mode === 'plan'
                 ? 'Plan mode creates evaluated proposals for review. It never approves or executes actions.'
                 : 'A business specialist researches and proposes work. It never approves or performs outside actions.'}
@@ -207,13 +206,13 @@ export function AgentChatWidget() {
                 <span aria-hidden="true">✦</span>
                 <h3>{mode === 'ask' ? 'What would you like to know?' : mode === 'plan' ? 'What outcome should the business pursue?' : agentKey === 'auto' ? 'Put Quicksilver to work' : `Work with the ${BUSINESS_AGENTS.find((agent) => agent.key === agentKey)?.label ?? 'business'} agent`}</h3>
                 <p>{mode === 'ask'
-                  ? 'Ask about company entities, capabilities, policies, or the evidence behind them.'
+                  ? 'Ask what needs your approval, why a decision was refused, how workflows and spend are doing, what you can do, or who and what is in the company.'
                   : mode === 'plan'
                     ? 'Describe a goal in plain language. Quicksilver will propose actions, evaluate them, and save decisions for review.'
                     : 'Give a specialist a task in your own words. You’ll get recommendations, evidence gaps, and questions to resolve.'}</p>
                 <div className={styles.suggestions} aria-label={mode === 'ask' ? 'Example questions' : 'Example objectives'}>
                   {(mode === 'ask'
-                    ? ['Which policies apply to an action?', 'What evidence supports this capability?']
+                    ? ['What is waiting for my approval?', 'Why was the last plan refused, and what would change that?', 'How are my workflows doing?', 'What am I allowed to do here?']
                     : mode === 'plan'
                       ? ['Reduce operating costs without lowering service quality.', 'Improve on-time delivery over the next quarter.']
                       : ['Find evidence behind our current sales slowdown.', 'Draft a plan to reduce fulfillment delays.']).map((example) => (
@@ -231,7 +230,7 @@ export function AgentChatWidget() {
                 </article>
               ))
             )}
-            {busy && <p className={styles.thinking} role="status">Searching company knowledge…</p>}
+            {busy && <p className={styles.thinking} role="status">{mode === 'ask' ? 'Looking through the app and company data…' : mode === 'plan' ? 'Preparing a plan for review…' : 'The specialist is working…'}</p>}
             {error && <p className={styles.error} role="alert">{error}</p>}
           </div>
           {expanded && (
@@ -248,6 +247,7 @@ export function AgentChatWidget() {
                   ['/entities','Company data','Manage business records'],
                   ['/agents','Agents','Explore agent capabilities'],
                   ['/monitoring','Monitoring','Runs, activity, and alerts'],
+                  ['/monitoring/traces','Traces & alerts','Model calls, cost, and alerts'],
                 ].map(([href, label, description]) => (
                   <Link key={href} href={href} className={styles.contextLink} onClick={() => setExpanded(false)}>
                     <span>{label}</span><small>{description}</small>
@@ -344,26 +344,26 @@ function PlanAnswer({ result }: { result: PlanChatResponse }) {
   )
 }
 
+const TOOL_LABELS: Record<string, string> = {
+  get_my_access: 'your access', list_decisions: 'decisions', get_decision: 'a decision', get_business_overview: 'the overview',
+  get_finance_summary: 'the money ledger', get_workflow_activity: 'workflow activity', get_trace_summary: 'traces',
+  list_agent_catalog: 'the agent catalog', list_company_entities: 'company records', list_workflow_versions: 'workflow versions', get_workflow_runs: 'workflow runs',
+}
+
+/** Only pages of this app: the server already filters, and this is the second check. */
+const isLocalLink = (href: string) => href.startsWith('/') && !href.startsWith('//') && !href.startsWith('/api/')
+
 function QueryAnswer({ result }: { result: QueryResponse }) {
+  const paragraphs = result.answer.split(/\n{2,}/).map((part) => part.trim()).filter(Boolean)
+  const links = (result.links ?? []).filter((link) => isLocalLink(link.href))
+  const looked = [...new Set((result.toolsUsed ?? []).map((name) => TOOL_LABELS[name] ?? 'company data'))]
   return (
     <div className={styles.answer}>
-      {result.supportingContext.length ? (
-        <ul className={styles.contextList}>
-          {result.supportingContext.map((item, index) => <li key={`${index}-${item}`}>{item}</li>)}
-        </ul>
-      ) : <p>No supporting company context was found for this question.</p>}
-
-      {(result.entities.length > 0 || result.capabilities.length > 0 || result.policies.length > 0) && (
-        <details className={styles.references}>
-          <summary>Related records</summary>
-          {result.entities.map((entity) => (
-            <p key={entity.id}><strong>{entity.name}</strong> <span>{entity.entityType}{entity.role ? ` · ${entity.role}` : ''}</span> <Link href={`/entities?search=${encodeURIComponent(entity.name)}`}>Open record</Link></p>
-          ))}
-          {result.capabilities.map((capability) => <p key={capability.id}><strong>{capability.name}</strong> <span>Capability · risk {capability.riskLevel}/5</span></p>)}
-          {result.policies.map((policy) => <p key={policy.id}><strong>{policy.name}</strong> <span>Policy · {policy.scope}</span></p>)}
-        </details>
+      {paragraphs.length ? paragraphs.map((part, index) => <p key={`${index}-${part.slice(0, 20)}`}>{part}</p>) : <p>No answer was found for this question.</p>}
+      {links.length > 0 && (
+        <p className={styles.chatLinks}>{links.map((link) => <Link key={link.href} className={styles.reviewPlan} href={link.href}>{link.label} <span aria-hidden="true">→</span></Link>)}</p>
       )}
-
+      {looked.length > 0 && <details className={styles.references}><summary>What I looked at</summary><p>{looked.join(', ')}</p></details>}
       <div className={styles.evaluation}>
         <span>{Math.round(result.confidence * 100)}% confidence</span>
         {result.nqc && <span>NQC · {result.nqc.safetyDecision}</span>}
