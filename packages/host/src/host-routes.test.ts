@@ -23,6 +23,7 @@ import { parseHostConfig } from './config.ts'
 import type { DecisionApiDeps } from './decisions-api.ts'
 import type { GenesisApiDeps } from './genesis-api.ts'
 import { QuicksilverHost } from './host.ts'
+import type { HostingApiDeps } from './hosting-api.ts'
 import type { IntentApiDeps } from './intent-api.ts'
 import { Logger } from './log.ts'
 import { HOST_ROUTES, matchHostRoute } from './routes.ts'
@@ -99,6 +100,7 @@ async function start(options: StartOptions = {}) {
     intent: {} as IntentApiDeps,
     shadow: { store: new MemoryShadowStore() } as unknown as ShadowApiDeps,
     genesis: {} as GenesisApiDeps,
+    hosting: {} as HostingApiDeps,
     decisions: {} as DecisionApiDeps,
     tasks: {
       store: new MemoryTaskStore(),

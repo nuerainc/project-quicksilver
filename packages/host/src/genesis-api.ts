@@ -86,6 +86,11 @@ export interface GenesisApiDeps {
   pending?: PendingPaymentStore
   /** P-027 commerce actions: proposals for a human to approve into Stripe product, price and payment-link creation. The routes return 404 when absent. */
   commerce?: CommerceDeps
+  /**
+   * Called after an experiment leaves running/held (killed, scaled or completed), so things tied to it
+   * (P-026 hosted sites) come down. Best effort: a failure is swallowed so the verdict still stands.
+   */
+  onExperimentEnded?: (experimentId: string, status: string) => Promise<void>
 }
 
 export interface GenesisApiContext {
@@ -592,6 +597,9 @@ export async function handleGenesisRoute(ctx: GenesisApiContext, deps: GenesisAp
         : applyEvaluation(exp, evaluation, KERNEL, at, `Evaluated at the request of ${principal.id}.`)
       if (!r.ok) return { status: 409, body: { error: 'The verdict was not applied.', reasons: r.reasons } }
       await save(r.experiment)
+      if (deps.onExperimentEnded && r.experiment.status !== 'running' && r.experiment.status !== 'held' && r.experiment.status !== 'draft') {
+        try { await deps.onExperimentEnded(id, r.experiment.status) } catch { /* the verdict stands; reconcile catches a missed teardown */ }
+      }
       return { status: 200, body: { evaluation, applied: r.experiment.status, appliedBy: action === 'decide' ? principal.id : KERNEL.id, awaitingDecision: false, experiment: r.experiment, executed: false } }
     })
   }

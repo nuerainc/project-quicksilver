@@ -200,7 +200,7 @@ the security, observability and developer-experience groups below.
 | P-023 | Compute: an always-on workspace, sandboxed backends, desktop and remote machine control; an isolated workspace per venture and client. | operational evidence | Sandboxed backends: `packages/operator` local and Docker sandboxes, `operator.test.ts` "sandbox: …", "docker sandbox: …" (M8 part 1); hosting templates (P-014) | partial | Always-on workspace, remote and desktop control, per-venture workspaces: M8 |
 | P-024 | Web and browser: search, deep research, browser automation including logged-in sites. | automated test, operational evidence | `packages/operator/src/web-search.ts` Brave public web search provider, read-only `web_search` and bounded multi-query `deep_research` evidence tools; `web-search.test.ts` covers citation normalization/deduplication, query coverage, partial failures, key handling, limits, error redaction, timeout and cancellation | partial | Public web search and bounded evidence gathering are implemented; source-page retrieval, durable research reports and browser automation (especially authenticated browser sessions) remain missing. Live provider evidence needs `BRAVE_SEARCH_API_KEY`. |
 | P-025 | Media: image, video, speech, transcription, diagrams, image understanding. | — | — | missing | |
-| P-026 | Hosting: sites, apps, services, custom domains and version history; experiment pages created and torn down per experiment. | — | — | missing | The host templates host Quicksilver itself, not experiment pages |
+| P-026 | Hosting: sites, apps, services, custom domains and version history; experiment pages created and torn down per experiment. | automated test | `packages/host/src/hosting.test.ts` (static-only file lint, digest-pinned immutable releases, append-only history, file and memory stores, the file adapter, and the HTTP chain: human-only publish behind the WAES review gate, rollback, teardown, automatic teardown when an experiment is killed, reconcile) | partial | Static experiment pages only, behind a deploy-adapter interface; the one adapter that ships writes files to a directory and deploys nothing. See [experiment hosting](experiment-hosting.md). Still missing: a real deploy target (Azure is the chosen host; no adapter yet), custom domains, apps and services, a Sanity-backed store (file-only), a console panel, and live evidence |
 | P-027 | Commerce: payments, products, prices, payment links and orders, feeding the finance layer. | automated test | `packages/host/src/genesis-payment-webhook.test.ts` "end to end (default): a Stripe-signed delivery through the running host lands in pending; a human confirms it into the ledger", "end to end (autoRecordPaymentWebhooks: true): the delivery is recorded straight into the ledger, once", "mapStripeEvent: …", "sink: concurrent deliveries of the same payment still record it once"; `triggers.test.ts` "Webhook (stripe scheme): …"; `packages/host/src/genesis-commerce.test.ts` (Stripe client with a fake `fetch`, proposals, the human-approval and WAES gates, idempotent retry, test-key-only) | partial | Recording side: a signed Stripe webhook (`payment_intent.succeeded`, paid `checkout.session.completed`) records revenue that already moved into the Genesis ledger, pending a human confirm by default (`autoRecordPaymentWebhooks`), one entry per PaymentIntent. Commerce actions (test mode only, off by default via `commerceMode`): a product, price or payment link is created in Stripe only after a human approves a proposal and any customer-facing text has a passing WAES review of its exact text; the one Stripe write client (`createStripeCommerceClient`) has those three create calls and refuses live keys. Nothing initiates a charge, payout, refund or transfer. Still missing: orders; a live mode; customer refunds (`charge.refunded` is ignored: the ledger has no kind for money returned to a customer); a Sanity-backed pending queue (file-only for v1); live Stripe delivery evidence |
 | P-028 | Integrations: MCP client and server, an app catalog, office and productivity tools; Onboard connectors write `OBSERVED` values. | automated test | MCP server: `packages/host/src/mcp-tasks.test.ts` "MCP tool calls return the same results as the HTTP API"; MCP client: the Sanity Context MCP path (`contracts.test.ts`); CSV connector: P-083 | partial | App catalog and office tools: missing. Live connectors: deferred until P-088 closes (sequenced last by product-owner decision) |
 | P-029 | Governance and security: command approval, sandboxing, behavior rules, per-agent permissions, no training on user data. | automated test, manual check | Approval and per-agent permissions: P-030 to P-037; behavior rules: policies (P-034) | partial | Command approval and sandboxing now in `packages/operator` (`operator.test.ts` "policy: …", "gate: …", "loop: approvals …"). "No training on user data" is a model-provider term to confirm (manual check, founder decision) |
@@ -502,13 +502,16 @@ the provider's own hand-over.
 | Status | Count |
 |---|---|
 | covered | 85 |
-| partial | 26 |
-| missing | 3 |
+| partial | 27 |
+| missing | 2 |
 | needs operational evidence | 9 |
 | **Total** | **123** |
 
-As of 2026-10-01, the matrix has 85 covered, 26 partial, 3 missing, and 9
-requirements that need operational evidence. P-027 moved from missing to
+As of 2026-10-01, the matrix has 85 covered, 27 partial, 2 missing, and 9
+requirements that need operational evidence. P-026 moved from missing to
+partial (2026-10-03): static experiment pages can be staged as immutable
+releases, published by a human behind the review gate, and torn down with their
+experiment; no real deploy target exists yet. P-027 moved from missing to
 partial (2026-10-02): a signed Stripe webhook now records payments that
 already happened into the Genesis ledger; nothing initiates a payment, and
 products, prices, payment links, orders and customer refunds remain open. P-088 moved from covered to
@@ -534,8 +537,9 @@ pre-1.0 OpenAPI contract and route/method drift test, but stable 1.0.0
 semantics remain unfinished. P-119's agent draft/review/publish API is present;
 its former “API absent” gap is corrected, while the local Go toolchain and CI
 evidence for the current working tree remain outstanding.
-P-025, P-026 and P-088 remain missing: media, experiment hosting, and live
-business connectors. P-027 (commerce) is partial: incoming Stripe payments are
+P-025 and P-088 remain missing: media and live business connectors.
+P-026 (experiment hosting) is partial: the contract, stores and a file adapter
+exist, with no real deploy target. P-027 (commerce) is partial: incoming Stripe payments are
 recorded, and test-mode products, prices and payment links can be created
 after a human approves them, but nothing takes or makes payments. P-031 now has a privacy-reviewed quantitative Genesis experiment
 trajectory export but remains partial pending general batch runs, broader

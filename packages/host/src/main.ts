@@ -42,6 +42,8 @@ import { createSanityClient, createSanityStoreClient } from './sanity-client.ts'
 import { FileShadowStore, MemoryShadowStore, type ShadowApiDeps, type ShadowStore } from './shadow-api.ts'
 import { SanityShadowStore } from './shadow-store-sanity.ts'
 import { FileGenesisStore, MemoryGenesisStore, type GenesisApiDeps } from './genesis-api.ts'
+import { FileHostingAdapter, FileHostingStore, MemoryHostingStore } from './hosting.ts'
+import type { HostingApiDeps } from './hosting-api.ts'
 import { FileCommerceProposalStore, FilePendingPaymentStore, MemoryCommerceProposalStore, MemoryPendingPaymentStore } from './genesis-store.ts'
 import { SecretsVault, generateMasterKey } from './vault.ts'
 import { taskSetup } from './tasks-setup.ts'
@@ -210,6 +212,28 @@ async function buildGenesis(config: HostConfig, log: Logger): Promise<GenesisApi
   return { config: genesis, store: dir ? new FileGenesisStore(dir, config.tenantId) : new MemoryGenesisStore(config.tenantId), pending, ...(commerce ? { commerce } : {}), ...(runWaes ? { runWaes } : {}) }
 }
 
+/**
+ * P-026 experiment hosting: on only when a Genesis run exists (its review gate and experiments) and
+ * QUICKSILVER_HOSTING_DIR names where a static server reads published sites. The file adapter writes
+ * <dir>/<tenant>/<site>/live/ and deploys nothing. Release history sits next to the Genesis data.
+ */
+function buildHosting(config: HostConfig, genesis: GenesisApiDeps | undefined, log: Logger): HostingApiDeps | undefined {
+  const out = process.env.QUICKSILVER_HOSTING_DIR
+  if (!out) return undefined
+  if (!genesis) {
+    log.warn('QUICKSILVER_HOSTING_DIR is set but there is no Genesis run; hosting needs its review gate, so the hosting routes are off')
+    return undefined
+  }
+  const storeDir = process.env.QUICKSILVER_GENESIS_DIR
+    ? resolve(baseDir, process.env.QUICKSILVER_GENESIS_DIR)
+    : config.store.kind === 'file' ? join(dirname(config.store.path), 'genesis') : undefined
+  if (!storeDir) log.warn('hosted-site history is kept in memory; use a file store or QUICKSILVER_GENESIS_DIR to keep it')
+  return {
+    store: storeDir ? new FileHostingStore(storeDir, config.tenantId) : new MemoryHostingStore(config.tenantId),
+    adapter: new FileHostingAdapter(resolve(baseDir, out)),
+  }
+}
+
 async function buildAgentRunner(log: Logger): Promise<AgentRunner | undefined> {
   if (!process.env.SANITY_CONTEXT_MCP_URL || !process.env.SANITY_CONTEXT_TOKEN) {
     log.warn('Sanity Context MCP is not configured; agent steps will fail closed')
@@ -326,6 +350,8 @@ async function main(): Promise<void> {
   const { store, close, ready } = await buildStore(config, log)
   const intent = await buildIntent(config, log)
   const shadow = await buildShadow(config, log, intent)
+  const genesis = await buildGenesis(config, log)
+  const hosting = buildHosting(config, genesis, log)
   const tasks = taskSetup(config, { baseDir })
   for (const note of tasks.notes) log.warn(note)
   const host = new QuicksilverHost(config, {
@@ -337,7 +363,8 @@ async function main(): Promise<void> {
     intent,
     shadow,
     decisions: await buildDecisions(config, shadow),
-    genesis: await buildGenesis(config, log),
+    genesis,
+    ...(hosting ? { hosting } : {}),
     tasks: {
       store: tasks.store,
       clients: tasks.clients,
