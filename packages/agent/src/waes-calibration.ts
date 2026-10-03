@@ -43,9 +43,16 @@ export interface WaesCalibrationCaseResult {
   evidenceQuality: WaesEvidenceQualityReport
 }
 
+export type WaesEvaluatorKind = 'live-provider' | 'deterministic-reference'
+
 export interface WaesCalibrationReport {
   timestamp: string
   version: '1.0.0'
+  /**
+   * What produced the verdicts. `deterministic-reference` is a set of patterns written against this dataset: it checks that
+   * the harness works, and says nothing about how well a model judges real content.
+   */
+  evaluatorKind: WaesEvaluatorKind
   totalCases: number
   matchedCases: number
   agreementRate: number
@@ -62,7 +69,9 @@ export interface WaesCalibrationReport {
   cases: WaesCalibrationCaseResult[]
 }
 
-const NOW = 1770000000000 // Fixed calibration epoch (2026-02)
+/** The dataset's evidence dates are fixed, so every evaluator is run as if it were this moment (2026-02). */
+export const WAES_CALIBRATION_NOW = 1770000000000
+const NOW = WAES_CALIBRATION_NOW
 
 export const WAES_CALIBRATION_DATASET_V1: readonly WaesCalibrationCase[] = Object.freeze([
   // --- TRUTHFULNESS CASES ---
@@ -376,6 +385,7 @@ export function createDeterministicWaesEvaluator(): (req: WaesReviewRequest) => 
 export async function runWaesCalibrationSuite(
   evaluator: (req: WaesReviewRequest) => Promise<WaesAssessment>,
   dataset: readonly WaesCalibrationCase[] = WAES_CALIBRATION_DATASET_V1,
+  evaluatorKind: WaesEvaluatorKind = 'deterministic-reference',
 ): Promise<WaesCalibrationReport> {
   const caseResults: WaesCalibrationCaseResult[] = []
   let matchedCases = 0
@@ -432,6 +442,7 @@ export async function runWaesCalibrationSuite(
   return {
     timestamp: new Date().toISOString(),
     version: '1.0.0',
+    evaluatorKind,
     totalCases: dataset.length,
     matchedCases,
     agreementRate,
