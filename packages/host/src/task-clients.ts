@@ -182,7 +182,8 @@ async function withClientFileLock<T>(path: string, operation: () => Promise<T>):
       break
     } catch (error) {
       const code = (error as NodeJS.ErrnoException).code
-      if (code !== 'EEXIST' && code !== 'EISDIR') throw error
+      // Windows reports EPERM, not EEXIST, while the lock directory is pending deletion.
+      if (code !== 'EEXIST' && code !== 'EISDIR' && !(process.platform === 'win32' && code === 'EPERM')) throw error
       try {
         if (Date.now() - (await stat(lockDir)).mtimeMs > CLIENT_LOCK_STALE_MS) {
           await rm(lockDir, { recursive: true, force: true })

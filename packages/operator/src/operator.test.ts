@@ -403,6 +403,7 @@ test('the AI SDK driver maps the loop transcript to model messages', () => {
 // Memory (M8 part 2)
 
 import { ftsQuery, loadProjectContext, MemoryBook, memoryTools, SessionArchive, MEMORY_CAPS } from './index.ts'
+import { isLockContention } from './memory.ts'
 
 test('memory: runs are archived and recalled by full-text search', async () => {
   const ws = await workspace()
@@ -619,6 +620,15 @@ test('memory: separate processes serialize concurrent writers to the same durabl
   const reopened = new MemoryBook(path)
   assert.equal((await reopened.all()).length, 10, 'cross-process updates are not lost')
   assert.equal((await reopened.history()).filter((event) => event.action === 'created').length, 10)
+})
+
+test('memory: lock contention includes Windows EPERM only on Windows', () => {
+  assert.equal(isLockContention('EEXIST', 'linux'), true)
+  assert.equal(isLockContention('EISDIR', 'linux'), true)
+  assert.equal(isLockContention('EPERM', 'win32'), true)
+  assert.equal(isLockContention('EPERM', 'linux'), false, 'a real permission error is not retried on POSIX')
+  assert.equal(isLockContention('EACCES', 'win32'), false)
+  assert.equal(isLockContention(undefined, 'win32'), false)
 })
 
 test('memory: a lock left by a crashed writer is reclaimed after the stale timeout', async () => {
