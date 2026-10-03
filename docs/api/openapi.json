@@ -294,6 +294,19 @@
         "requestBody": { "$ref": "#/components/requestBodies/ChatRequest" }
       }
     },
+    "/api/inbox": {
+      "get": {
+        "operationId": "getInbox",
+        "description": "What needs the signed-in person, computed from records and from what they may do (no model). Each item carries the actions they may take. Only items they can act on count toward counts.actionable. A source that could not be loaded is reported as unavailable, and counts.complete is then false.",
+        "tags": ["Decisions"],
+        "responses": {
+          "401": { "$ref": "#/components/responses/ErrorResponse" },
+          "403": { "$ref": "#/components/responses/ErrorResponse" },
+          "503": { "$ref": "#/components/responses/ErrorResponse" },
+          "2XX": { "$ref": "#/components/responses/InboxResponse" }
+        }
+      }
+    },
     "/api/decisions": {
       "get": {
         "operationId": "listDecisions",
@@ -1155,6 +1168,49 @@
   },
   "components": {
     "schemas": {
+      "AttentionAction": {
+        "type": "object",
+        "required": ["id", "label", "tone"],
+        "properties": {
+          "id": { "type": "string", "enum": ["approve", "reject", "execute", "review"] },
+          "label": { "type": "string" },
+          "tone": { "type": "string", "enum": ["primary", "danger", "neutral"] },
+          "link": { "type": "string", "pattern": "^/", "description": "A page of the app to open." },
+          "call": {
+            "type": "object",
+            "description": "An app route to call as the signed-in person. For approve, the body carries the fingerprint of exactly what the card shows.",
+            "required": ["method", "path", "body", "confirm"],
+            "properties": { "method": { "type": "string", "enum": ["POST"] }, "path": { "type": "string", "pattern": "^/api/decisions/" }, "body": { "type": "object" }, "confirm": { "type": "boolean" } }
+          }
+        }
+      },
+      "AttentionItem": {
+        "type": "object",
+        "required": ["id", "kind", "severity", "title", "reason", "actionable", "link", "actions"],
+        "properties": {
+          "id": { "type": "string" },
+          "kind": { "type": "string", "enum": ["approval", "stale-approval", "rollback", "execute", "refused", "failed-decision", "waiting-on-others", "workflow-failure", "agent-review", "trace-alert"] },
+          "severity": { "type": "string", "enum": ["critical", "warning", "info"] },
+          "title": { "type": "string" },
+          "reason": { "type": "string" },
+          "since": { "type": ["string", "null"], "format": "date-time" },
+          "actionable": { "type": "boolean" },
+          "link": { "type": "string", "pattern": "^/" },
+          "actions": { "type": "array", "items": { "$ref": "#/components/schemas/AttentionAction" } },
+          "covers": { "type": "object", "properties": { "action": { "type": ["string", "null"] }, "riskLevel": { "type": ["integer", "null"] }, "why": { "type": ["string", "null"] }, "policyVersion": { "type": ["string", "null"] } } },
+          "nearMiss": { "type": ["string", "null"] }
+        }
+      },
+      "Inbox": {
+        "type": "object",
+        "required": ["observedAt", "items", "sources", "counts"],
+        "properties": {
+          "observedAt": { "type": "string", "format": "date-time" },
+          "items": { "type": "array", "items": { "$ref": "#/components/schemas/AttentionItem" } },
+          "sources": { "type": "array", "items": { "type": "object", "required": ["id", "status"], "properties": { "id": { "type": "string", "enum": ["decisions", "workflows", "agents", "traces"] }, "status": { "type": "string", "enum": ["ok", "unavailable", "skipped"] }, "reason": { "type": "string" } } } },
+          "counts": { "type": "object", "required": ["actionable", "other", "complete"], "properties": { "actionable": { "type": "integer" }, "other": { "type": "integer" }, "complete": { "type": "boolean", "description": "False when a source could not be checked, so a zero is not a clean bill." } } }
+        }
+      },
       "ChatRequest": {
         "type": "object",
         "required": ["message"],
@@ -1175,7 +1231,7 @@
       },
       "ChatResponse": {
         "type": "object",
-        "required": ["answer", "links", "confidence", "toolsUsed"],
+        "required": ["answer", "links", "showAttention", "confidence", "toolsUsed"],
         "properties": {
           "answer": { "type": "string" },
           "links": {
@@ -1183,6 +1239,7 @@
             "description": "Pages of this app only; anything else is dropped before it is returned.",
             "items": { "type": "object", "required": ["label", "href"], "properties": { "label": { "type": "string" }, "href": { "type": "string", "pattern": "^/" } } }
           },
+          "showAttention": { "type": "boolean", "description": "Show the live needs-you list under the answer. The list is built by the app from records, not from the answer text." },
           "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
           "toolsUsed": { "type": "array", "items": { "type": "string" } },
           "audit": { "type": "object", "properties": { "persisted": { "type": "boolean" }, "evaluationRecordIds": { "type": "array", "items": { "type": "string" } }, "error": { "type": "string" } } },
@@ -2152,6 +2209,7 @@
       }
     },
     "responses": {
+      "InboxResponse": { "description": "What needs the signed-in person.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Inbox" } } } },
       "ChatResponse": { "description": "The assistant's answer, with links to pages of the app.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ChatResponse" } } } },
       "DecisionListResponse": { "description": "Recent decisions.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/DecisionList" } } } },
       "DecisionDetailResponse": { "description": "One decision.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/DecisionDetail" } } } },

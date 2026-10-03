@@ -14,6 +14,8 @@ import type { ModelTokenUsage } from './contracts.ts'
 export const AssistantResultSchema = z.object({
   answer: z.string(),
   links: z.array(z.object({ label: z.string(), href: z.string() })),
+  /** Show the live "needs you" list, with its buttons, under the answer. The list is built by the app from records, never from this text. */
+  showAttention: z.boolean(),
   confidence: z.number().min(0).max(1),
 })
 export type AssistantResult = z.infer<typeof AssistantResultSchema>
@@ -66,6 +68,7 @@ export async function askAssistant(
     if (!parsed) throw new Error('Model did not return structured output.')
     return {
       answer: parsed.answer,
+      showAttention: parsed.showAttention === true,
       links: parsed.links.filter((link) => isAllowedAppLink(link.href)).slice(0, 6),
       confidence: parsed.confidence,
       toolCalls, modelId: selectedModelId, usage: normalizeModelTokenUsage(result.totalUsage),

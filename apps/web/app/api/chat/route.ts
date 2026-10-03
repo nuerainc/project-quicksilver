@@ -65,6 +65,7 @@ export async function POST(req: Request) {
     return NextResponse.json({
       answer: result.answer,
       links: result.links,
+      showAttention: result.showAttention,
       confidence: result.confidence,
       toolsUsed: [...new Set(result.toolCalls.map((call) => call.name))],
       audit: { persisted: audit.persisted, evaluationRecordIds: audit.ids, ...(audit.error ? { error: audit.error } : {}) },

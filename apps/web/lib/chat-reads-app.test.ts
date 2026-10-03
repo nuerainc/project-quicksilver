@@ -11,7 +11,7 @@ import { APP_TOOL_SAMPLE_PATHS } from '../../../packages/agent/src/app-tools.ts'
 import { mayCarryConsoleToken } from './console-auth.ts'
 
 const read = (rel: string) => readFileSync(new URL(rel, import.meta.url), 'utf8')
-const appFetch = read('./chat-app-fetch.ts')
+const appFetch = read('./app-read-routes.ts') + read('./chat-app-fetch.ts')
 const chatRoute = read('../app/api/chat/route.ts')
 
 test('every path an assistant tool reads is served by a route listed in chat-app-fetch', () => {

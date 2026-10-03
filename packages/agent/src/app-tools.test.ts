@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-import { APP_TOOL_NAMES, buildAppTools, isAllowedAppLink, shapeAppResult } from './app-tools.ts'
+import { APP_TOOL_NAMES, APP_TOOL_SAMPLE_PATHS, buildAppTools, isAllowedAppLink, shapeAppResult } from './app-tools.ts'
 import { listAgentManifests } from './governance.ts'
 
 type Executable = { execute: (input: unknown, options: unknown) => Promise<unknown>; inputSchema: { safeParse(v: unknown): { success: boolean } } }
@@ -76,4 +76,9 @@ test('the assistant is a registered agent that reads and proposes nothing', () =
   assert.equal(assistant!.authority, 'propose')
   assert.equal(assistant!.maximumImpact, 'low')
   assert.equal(assistant!.requiresEvaluation, true)
+})
+
+test('get_attention reads the inbox and tells the model to ask for the live list, not to list the items itself', () => {
+  assert.ok(APP_TOOL_NAMES.includes('get_attention'))
+  assert.ok(APP_TOOL_SAMPLE_PATHS.includes('/api/inbox'))
 })
