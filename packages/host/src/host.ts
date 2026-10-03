@@ -27,6 +27,9 @@ import { handleIntentRoute, type IntentApiDeps } from './intent-api.ts'
 import { handleShadowRoute, type ShadowApiDeps } from './shadow-api.ts'
 import { handleGenesisRoute, withLock, type GenesisApiDeps } from './genesis-api.ts'
 import { handleMediaRoute } from './media-api.ts'
+import { handleActionsRoute } from './actions-api.ts'
+import { ActionService, type ActionServiceOptions, type ActionStore } from './actions.ts'
+import { EffectfulToolExecutor, type ToolDefinition } from './tool-executor.ts'
 import type { MediaService } from './media.ts'
 import { handleHostingRoute, teardownSitesForExperiment, type HostingApiDeps } from './hosting-api.ts'
 import { genesisPaymentWebhookSink } from './genesis-payment-webhook.ts'
@@ -76,6 +79,8 @@ export interface HostDependencies {
   hosting?: HostingApiDeps
   /** P-025 media: requests within a cost cap, moderation, retention and provenance. Routes return 404 when absent. */
   media?: MediaService
+  /** P-095 approved actions: the tools this host has, which of them are enabled, and where proposals are kept. Routes return 404 when absent. */
+  actions?: { store: ActionStore; tools: readonly ToolDefinition[]; policy: ActionServiceOptions['policy'] }
   /** Aura decision journal: decisions the provider logs, plus judged shadow verdicts. Routes return 404 when absent. */
   decisions?: DecisionApiDeps
   /**
@@ -123,6 +128,7 @@ export class QuicksilverHost {
   /** Per-principal buckets for `write` and `model` routes, and per-endpoint buckets for webhooks (A-5). */
   private readonly limiters: { write: TokenBucketLimiter; model: TokenBucketLimiter; webhook: Map<string, TokenBucketLimiter> }
   private readonly hostPrincipal: Principal
+  private readonly actions?: ActionService
   private readonly authorizationAudit: FileAuthorizationAuditStore
   private server?: Server
   private started = false
@@ -166,6 +172,10 @@ export class QuicksilverHost {
     const authorizationKey: AuthorizationSigningKey | undefined = authorizationSecret
       ? { keyId: `${config.tenantId}:${config.worker.id}`, secret: authorizationSecret }
       : undefined
+    if (deps.actions) {
+      const executor = new EffectfulToolExecutor({ tools: deps.actions.tools, ...(authorizationKey ? { signingKey: authorizationKey } : {}), ...(deps.now ? { now: deps.now } : {}) })
+      this.actions = new ActionService({ tenantId: config.tenantId, store: deps.actions.store, executor, policy: deps.actions.policy, ...(authorizationKey ? { signingKey: authorizationKey } : {}), ...(deps.now ? { now: () => new Date(deps.now!()) } : {}) })
+    }
     this.queue = new WorkflowRunQueue({ store, tenantId: config.tenantId, access: this.access, ...config.queue, ...(deps.now ? { now: deps.now } : {}) })
     this.worker = new WorkflowRunWorker({
       queue: this.queue,
@@ -604,6 +614,27 @@ export class QuicksilverHost {
       if (handled) return handled
     }
 
+    // Approved actions (P-095): proposals are records; a different human's approval runs the action once
+    if (parts[1] === 'actions' && this.actions) {
+      const can = (p: Permission) => this.access.authorize(principal, p, { tenantId: this.config.tenantId, kind: 'actions', id: 'actions' })
+      const needAny = (...ps: Permission[]) => {
+        const ds = ps.map(can)
+        return ds.some((d) => d.allowed) ? undefined : { status: 403, body: { error: ds[0]!.reasons.join(' ') } }
+      }
+      const handled = await handleActionsRoute({
+        method, parts, principal: { id: principal.id, kind: principal.kind }, actions: this.actions,
+        needRead: () => needAny('decision:read'),
+        needPropose: () => needAny('intent:provide', 'decision:propose'),
+        humanOnly: (what) => needAny('intent:provide') ?? (principal.kind === 'human' ? undefined : { status: 403, body: { error: `Only a human ${what}.` } }),
+        bodyOf: async () => {
+          const body = await readJson(req, this.config.http.maxBodyBytes)
+          return body.ok ? { ok: true as const, value: (body.value ?? {}) as Record<string, unknown> } : { ok: false as const, res: { status: body.status, body: { error: body.error } } }
+        },
+        withLock,
+      })
+      if (handled) return handled
+    }
+
     // Runs
     if (path === '/api/runs' && method === 'GET') {
       const denied = this.authorize(principal, 'run:read')
@@ -791,6 +822,7 @@ export class QuicksilverHost {
     if (feature === 'tasks') return !!this.tasks
     if (feature === 'hosting') return !!this.deps.hosting && !!this.deps.genesis
     if (feature === 'media') return !!this.deps.media
+    if (feature === 'actions') return !!this.actions
     return !!this.deps[feature]
   }
 

@@ -27,7 +27,7 @@ import type { Permission } from '@quicksilver/kernel/identity'
  * - `tasks`: task submission keeps its own per-client bucket (`tasks.rateLimit`).
  */
 
-export type HostRouteFeature = 'intent' | 'shadow' | 'genesis' | 'decisions' | 'tasks' | 'vault' | 'hosting' | 'media'
+export type HostRouteFeature = 'intent' | 'shadow' | 'genesis' | 'decisions' | 'tasks' | 'vault' | 'hosting' | 'media' | 'actions'
 export type HostRateLimitClass = 'write' | 'model' | 'webhook' | 'tasks'
 
 export type HostRouteAccess =
@@ -129,6 +129,14 @@ export const HOST_ROUTES: readonly HostRoute[] = Object.freeze<HostRoute[]>([
   { method: 'POST', path: '/api/media/assets/:id/delete', feature: 'media', rateLimit: 'write', access: anyOf('intent:provide') },
   { method: 'POST', path: '/api/media/purge', feature: 'media', rateLimit: 'write', access: anyOf('intent:provide') },
   { method: 'GET', path: '/api/media/provenance', feature: 'media', access: anyOf('decision:read') },
+  // P-095 approved actions: proposing records only; approve, reject and resolve are humans-only in the handler (and never the proposer).
+  { method: 'GET', path: '/api/actions', feature: 'actions', access: anyOf('decision:read') },
+  { method: 'GET', path: '/api/actions/proposals', feature: 'actions', access: anyOf('decision:read') },
+  { method: 'GET', path: '/api/actions/proposals/:id', feature: 'actions', access: anyOf('decision:read') },
+  { method: 'POST', path: '/api/actions/proposals', feature: 'actions', rateLimit: 'write', access: anyOf('intent:provide', 'decision:propose') },
+  { method: 'POST', path: '/api/actions/proposals/:id/approve', feature: 'actions', rateLimit: 'write', access: anyOf('intent:provide') },
+  { method: 'POST', path: '/api/actions/proposals/:id/reject', feature: 'actions', rateLimit: 'write', access: anyOf('intent:provide') },
+  { method: 'POST', path: '/api/actions/proposals/:id/resolve', feature: 'actions', rateLimit: 'write', access: anyOf('intent:provide') },
 
   // ── Runs ──
   { method: 'GET', path: '/api/runs', access: anyOf('run:read') },
