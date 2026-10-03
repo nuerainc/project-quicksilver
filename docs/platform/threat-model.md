@@ -349,6 +349,34 @@ Also: build the host image with only the host workspace's production
 dependencies, so Studio tooling is not in it at all (B-10). Rerun both audits
 monthly and at every milestone (C-5).
 
+### 7.1 Re-audit, 2026-10-03
+
+`npm audit --json` on the whole workspace: **17 findings, 12 high, 5 moderate, 0 critical** (21, 13 high, before
+the first change below). More advisories were published since 2026-09-27, mostly in the file-matching chain
+(`braces`, `micromatch`, `fast-glob`, `globby`, `chokidar`) that `@sanity/codegen` and `tailwindcss` 3 use.
+
+**Done in this change**
+- **B-9 (part):** `ai` 5 is removed from `apps/web`. No file in `apps/web` imports `ai` or `@ai-sdk/*`. That clears `undici`, `@fastify/busboy`
+  (high), `@ai-sdk/provider-utils`, `@ai-sdk/gateway` and `ai` itself: 4 findings including 1 high.
+- **B-10:** `deploy/Dockerfile.host` installs only the host workspace (`npm ci --workspace=@quicksilver/host`). Checked in a clean
+  checkout: 154 packages, `npm audit` says **0 vulnerabilities**, Sanity and Next are not installed, `main.ts check` answers
+  "Config OK" and `/healthz` answers `{"status":"ok"}`. The host image therefore holds none of the advisories below.
+
+**Every remaining finding and its decision**
+
+| Package | Severity | Reached through | Where it loads | Decision | Revisit when |
+|---|---|---|---|---|---|
+| `sanity`, `@sanity/cli`, `@sanity/codegen`, `@sanity/runtime-cli` | High / moderate | `apps/studio` (direct) | Studio editor tooling on the founder's machine; not in the host image, not in the web app | Accept for now. Do not run the CLI against archives or YAML from untrusted sources. | Upgrade Sanity Studio to 6 in its own reviewed change (a major version; the workflow plugin and schema checks need testing). `npm audit fix` cannot do it |
+| `adm-zip`, `js-yaml`, `@vercel/frameworks`, `typeid-js`, `uuid` | High / moderate | `@sanity/cli` | Same | Same | Same |
+| `fast-glob`, `globby`, `micromatch`, `braces`, `chokidar` | High | `@sanity/codegen` (Studio) and `tailwindcss` 3 (web build) | Studio tooling and the web build; never loaded at runtime by the host or the web server | Accept: they match file paths on the developer's own machine and CI | Sanity 6 and Tailwind 4 |
+| `tailwindcss` | High | `apps/web` (dev dependency) | Web build only | Accept | Move to Tailwind 4 (a major version: config and class changes) |
+| `postcss` | High | `next` (bundled copy) | Inside the web app's `next` package; it processes the app's own CSS at build and does not parse attacker-supplied CSS at runtime | Accept: both advisories need attacker-controlled CSS or source maps | Next 16 upgrade (a major version) |
+| `next` | Moderate | `apps/web` (direct) | Web runtime and build; flagged only through `postcss` | Same | Same |
+
+What this does and does not show: no advisory is in the **host** runtime image, and none of the remaining ones is reachable through
+input an outsider controls. But `postcss` sits inside `next`, which is the web runtime package, so "no high-severity advisory in any
+runtime path" is **not yet true for the web app** until the Next 16 upgrade. Rerun the audit monthly and at every milestone (C-5).
+
 ## 8. Prioritized actions
 
 Owner type: **code** (a change in this repository), **founder decision**, or
