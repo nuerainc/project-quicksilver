@@ -64,7 +64,9 @@ export type { SanityCapabilityDocument, SanityEntityDocument, SanityPolicyDocume
 export type { GraphCycle } from './graph-cycles.ts'
 export { computeRisk, explainRisk, averageEvidenceConfidence } from './risk.ts'
 export type { RiskBreakdown } from './risk.ts'
-export { authorize } from './approval.ts'
+export { authorize, resolveThresholds } from './approval.ts'
+export { explainWhy } from './why.ts'
+export type { DecisionWhy, WhyChange, WhyGuard, WhyRiskLine } from './why.ts'
 export type { AuthorizeArgs, AuthorizeResult, AuthorizationExplanation } from './approval.ts'
 export {
   GUARD_OPS,

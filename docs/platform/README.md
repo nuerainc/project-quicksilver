@@ -16,6 +16,7 @@ that every operating mode depends on.
 - [Operator memory governance (M8 part 2)](operator-memory.md)
 - [Public web search and research boundary (P-024 foundation)](web-research.md)
 - [Durable workflow runs: queue, worker, dead letters](durable-runs.md)
+- [Chat assistant: what it can read and how it is kept to what you can see](chat-assistant.md)
 - [Identity and RBAC](identity-rbac.md)
 - [Triggers: cron schedules and signed webhooks](triggers.md)
 - [Hosted runtime: host process, management API, secrets vault, logs and metrics](hosted-runtime.md)

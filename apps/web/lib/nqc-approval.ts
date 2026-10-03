@@ -470,6 +470,25 @@ export type WhoamiResult =
  * the same helpers the decision routes use and report who it belongs to. It
  * grants nothing; each route still runs its own check.
  */
+/** The same answer for a principal that is already authenticated, such as a signed-in browser session. */
+export function checkWhoamiPrincipal(principal: Principal, env: CredentialEnv): WhoamiResult {
+  if (validatePrincipal(principal).length) return { ok: false, status: 503, body: { error: 'Authenticated principal data is invalid.' } }
+  const tenantId = tenantOf(env)
+  const permissions = PERMISSIONS.filter((permission) => quietAccessController.authorize(principal, permission, { tenantId, kind: 'decision' }).allowed)
+  return {
+    ok: true,
+    status: 200,
+    body: {
+      principalId: principal.id,
+      kind: principal.kind,
+      tenantId: principal.tenantId,
+      ...(principal.displayName ? { displayName: principal.displayName } : {}),
+      permissions,
+      credential: 'principal',
+    },
+  }
+}
+
 export function checkWhoami(authorization: string | null, env: CredentialEnv): WhoamiResult {
   let provider: StaticTokenIdentityProvider | null
   try {
@@ -481,19 +500,7 @@ export function checkWhoami(authorization: string | null, env: CredentialEnv): W
   if (provider) {
     const principal = provider.authenticateHeader(authorization)
     if (!principal) return { ok: false, status: 401, body: { error: 'A valid credential is required.' } }
-    const permissions = PERMISSIONS.filter((permission) => quietAccessController.authorize(principal, permission, { tenantId, kind: 'decision' }).allowed)
-    return {
-      ok: true,
-      status: 200,
-      body: {
-        principalId: principal.id,
-        kind: principal.kind,
-        tenantId: principal.tenantId,
-        ...(principal.displayName ? { displayName: principal.displayName } : {}),
-        permissions,
-        credential: 'principal',
-      },
-    }
+    return checkWhoamiPrincipal(principal, env)
   }
   const shared = checkSharedSupervisorToken(authorization, env)
   if (!shared.ok) return { ok: false, status: shared.status === 503 ? 503 : 401, body: { error: shared.reason } }

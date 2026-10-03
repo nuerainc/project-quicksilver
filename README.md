@@ -55,7 +55,23 @@ dedicated Sanity project, Context MCP configuration, and model credentials.
 | Sanity Studio, schema deployment and seed data | Requires dedicated project configuration | `SANITY_STUDIO_PROJECT_ID` and Sanity auth |
 | Live Context MCP and model-backed planning | Requires external credentials | `npm run verify:mcp` and `npm run verify:llm` |
 | Public hosting, SSO/OIDC and multi-tenant hosting | Not operationally complete | See parity items P-014, P-107 and P-108 |
-| Effectful external integrations | Not implemented | See parity item P-095 |
+| Effectful external actions (email, signed webhook) | Built behind human approval; dry run by default; never run against a live provider | [Approved actions](./docs/platform/approved-actions.md), parity item P-095 |
+
+### What has not been proven
+
+Stated plainly, because it is the part a cold reader most needs:
+
+- **No real email or webhook has been sent by this code.** The approved-action
+  adapters (Resend email, signed webhook) have only been exercised against
+  fakes, so there is no operational evidence yet. They ship as dry runs.
+- **The decision loop's "Execute" is a simulation.** It records a state change
+  and an observed metric; it does not act on the outside world. Real effects go
+  through [approved actions](./docs/platform/approved-actions.md) instead.
+- **WAES scoring has not been calibrated against a live model provider.**
+- **Connectors (Stripe, HubSpot, QuickBooks) have not been run against real accounts.**
+
+The full list, with what each item needs, is in the
+[parity matrix](./docs/platform/parity-tests.md).
 
 For a credential-free health check, run `npm run verify`. For contributor setup
 and package boundaries, read [CONTRIBUTING.md](./CONTRIBUTING.md). Project terms
@@ -146,7 +162,7 @@ flowchart LR
     Kernel -- "needs a human" --> UI["👤 Approval UI"]
     Kernel -- "hard block" --> Rej["⛔ Rejected"]
 
-    Auto --> Exec["▶️ Execute (simulated)<br/>→ observe metric"]
+    Auto --> Exec["▶️ Execute (simulated in this loop)<br/>→ observe metric"]
     UI --> Exec
     Exec -- "metric moved the wrong way" --> RB["↩️ Rollback<br/>(always human)"]
     Exec --> Log[("📜 Decision record<br/>+ process history")]
@@ -204,7 +220,7 @@ Nuera Quicksilver has **no hosted demo**. Run it locally (see [Run it locally](#
 1. Open the console at `http://localhost:3000`. The objective is pre-filled.
 2. Click **Send to Quicksilver**. A real plan takes about a minute.
 3. Scroll to **Decisions**. Each card shows the kernel's risk and verdict and a **Process** line (where it is, what can happen next). Click **Show reasoning & evidence** for the policies, evidence and the dashed **Independent review** from the reviewer model.
-4. **Approve** a card, **Execute** it (simulated) and **Observe** the metric. If it moves the wrong way, **propose a rollback**.
+4. **Approve** a card, **Execute** it (a simulation: nothing outside the console changes; real effects use [approved actions](./docs/platform/approved-actions.md)) and **Observe** the metric. If it moves the wrong way, **propose a rollback**.
 5. Open `/decisions` to see every transition, who took it (kernel, human or executor) and when. Open `/workflows` for the draft workflow builder.
 
 Local runs need a configured Sanity project and model credentials. The live demo

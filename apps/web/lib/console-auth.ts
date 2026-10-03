@@ -37,6 +37,38 @@ export function readConsoleToken(storage: () => TokenStorage | undefined = brows
   }
 }
 
+export interface ConsoleAccess {
+  /** The pasted token, when there is one; it is the only thing sent as `Authorization`. */
+  token: string | null
+  /** A pasted token, or a signed-in browser session (OIDC cookie). */
+  signedIn: boolean
+  /** Who the server says this is. Filled only when it had to ask, which is when there is no pasted token. */
+  whoami: ConsoleWhoami | null
+}
+
+type AccessFetch = (input: string, init?: { headers?: Record<string, string>; cache?: 'no-store'; credentials?: 'same-origin' }) => Promise<{ status: number; json(): Promise<unknown> }>
+
+/**
+ * Whether this browser can call the app's API as a person: a pasted token (checked by the
+ * server on each call) or a signed-in OIDC session (the cookie goes with same-origin
+ * requests). Pages used to look only for the token, so a person signed in with OIDC was
+ * told to sign in. With neither, or when the server cannot be asked, the answer is "not
+ * signed in" and the page shows its sign-in prompt.
+ */
+export async function resolveConsoleAccess(fetcher: AccessFetch = (input, init) => fetch(input, init), storage?: () => TokenStorage | undefined): Promise<ConsoleAccess> {
+  const token = storage ? readConsoleToken(storage) : readConsoleToken()
+  if (token) return { token, signedIn: true, whoami: null }
+  try {
+    const res = await fetcher('/api/whoami', { cache: 'no-store', credentials: 'same-origin' })
+    if (res.status !== 200) return { token: null, signedIn: false, whoami: null }
+    const body = await res.json() as Partial<ConsoleWhoami> | null
+    if (!body || typeof body.principalId !== 'string' || !Array.isArray(body.permissions)) return { token: null, signedIn: false, whoami: null }
+    return { token: null, signedIn: true, whoami: body as ConsoleWhoami }
+  } catch {
+    return { token: null, signedIn: false, whoami: null }
+  }
+}
+
 /** Returns false when the token could not be stored (it is then kept in memory only). */
 export function saveConsoleToken(token: string, storage: () => TokenStorage | undefined = browserSessionStorage): boolean {
   try {
@@ -62,6 +94,8 @@ const TOKEN_PATHS: ReadonlySet<string> = new Set([
   '/api/whoami',
   '/api/plan',
   '/api/query',
+  '/api/chat',
+  '/api/inbox',
   '/api/agents/run',
   '/api/monitoring/workflows',
   '/api/monitoring/traces',
@@ -94,6 +128,8 @@ export function mayCarryConsoleToken(url: string): boolean {
   if (/^\/api\/workflows\/publications\?workflowId=[a-zA-Z0-9._:%-]{1,256}$/.test(url)) return true
   if (/^\/api\/workflows\/executions\?workflowId=[a-zA-Z0-9._:%-]{1,256}(?:&limit=[0-9]{1,3})?$/.test(url)) return true
   if (/^\/api\/workflows\/diff\?workflowId=[a-zA-Z0-9._:%-]{1,256}&from=[0-9]{1,9}&to=[0-9]{1,9}$/.test(url)) return true
+  if (/^\/api\/decisions(?:\?(?:status=[a-z-]{1,30}&)?limit=[0-9]{1,2})?$/.test(url)) return true
+  if (/^\/api\/decisions\/[A-Za-z0-9._:-]{1,200}$/.test(url)) return true
   return /^\/api\/decisions\/[^/?#]+\/(action|execute|observe|resume|rollback)$/.test(url) || TOKEN_PATHS.has(url)
 }
 
@@ -109,7 +145,7 @@ export interface ConsoleWhoami {
 
 export type ConsoleDecisionRoute = 'action' | 'execute' | 'observe' | 'resume' | 'rollback'
 /** Every console call that can be refused for auth: the decision routes plus plan, query and the workflow builder. */
-export type ConsoleRoute = ConsoleDecisionRoute | 'plan' | 'query' | 'agents/run'
+export type ConsoleRoute = ConsoleDecisionRoute | 'plan' | 'query' | 'chat' | 'inbox' | 'decisions' | 'decisions/detail' | 'agents/run'
   | 'dashboard/overview' | 'dashboard/finance'
   | 'entities'
   | 'monitoring/workflows' | 'monitoring/traces'
@@ -127,6 +163,10 @@ export const CONSOLE_ROUTE_PERMISSION: Readonly<Record<ConsoleRoute, string>> = 
   rollback: 'decision:rollback',
   plan: 'decision:propose',
   query: 'decision:read',
+  chat: 'decision:read',
+  inbox: 'decision:read',
+  decisions: 'decision:read',
+  'decisions/detail': 'decision:read',
   'agents/run': 'decision:read',
   'monitoring/workflows': 'workflow:read',
   'monitoring/traces': 'audit:read',
