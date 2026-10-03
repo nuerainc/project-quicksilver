@@ -7,7 +7,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
 import { digestToken } from '../../../packages/kernel/src/identity/tokens.ts'
-import { checkWhoami, type CredentialEnv } from './nqc-approval.ts'
+import { checkWhoami, checkWhoamiPrincipal, type CredentialEnv } from './nqc-approval.ts'
 import {
   CONSOLE_TOKEN_KEY,
   authFailureMessage,
@@ -15,6 +15,7 @@ import {
   consoleHeaders,
   mayCarryConsoleToken,
   readConsoleToken,
+  resolveConsoleAccess,
   saveConsoleToken,
   soleOperatorPrompt,
   type TokenStorage,
@@ -209,4 +210,46 @@ test('approve body: the approver can never come from the request body', () => {
   for (const field of ['approvedBy', 'supervisorId', 'approverId', 'actorId', 'principalId']) {
     assert.equal(DecisionActionBody.safeParse({ action: 'approve', [field]: 'entity-mallory' }).success, false, field)
   }
+})
+
+// ── Signed in through OIDC rather than a pasted token ──────────────────────
+
+const accessStorage = (value?: string): (() => TokenStorage) => {
+  const map = new Map<string, string>(value ? [[CONSOLE_TOKEN_KEY, value]] : [])
+  const storage: TokenStorage = { getItem: (k) => map.get(k) ?? null, setItem: (k, v) => void map.set(k, v), removeItem: (k) => void map.delete(k) }
+  return () => storage
+}
+const replying = (status: number, body: unknown = {}) => async () => ({ status, json: async () => body })
+
+test('a pasted token counts as signed in without asking the server', async () => {
+  let asked = false
+  const access = await resolveConsoleAccess(async () => { asked = true; return { status: 401, json: async () => ({}) } }, accessStorage('tok'))
+  assert.deepEqual(access, { token: 'tok', signedIn: true, whoami: null })
+  assert.equal(asked, false)
+})
+
+test('with no token, a signed-in browser session counts as signed in and says who it is', async () => {
+  const who = { principalId: 'entity-ana', kind: 'human', tenantId: 'acme', permissions: ['decision:read'], credential: 'principal' }
+  const access = await resolveConsoleAccess(replying(200, who), accessStorage())
+  assert.equal(access.signedIn, true)
+  assert.equal(access.token, null)
+  assert.equal(access.whoami?.principalId, 'entity-ana')
+})
+
+test('with neither a token nor a session, or when the server cannot be reached, it is not signed in', async () => {
+  assert.equal((await resolveConsoleAccess(replying(401), accessStorage())).signedIn, false)
+  assert.equal((await resolveConsoleAccess(replying(503), accessStorage())).signedIn, false)
+  assert.equal((await resolveConsoleAccess(replying(200, { odd: true }), accessStorage())).signedIn, false)
+  assert.equal((await resolveConsoleAccess(async () => { throw new Error('offline') }, accessStorage())).signedIn, false)
+})
+
+test('whoami for a browser session lists the permissions its roles give, and none for another tenant', () => {
+  const ok = checkWhoamiPrincipal({ id: 'entity-ana', kind: 'human', tenantId: 'acme', roles: ['supervisor'], displayName: 'Ana' }, env)
+  assert.equal(ok.status, 200)
+  assert.ok(ok.ok && ok.body.permissions.includes('decision:approve'))
+  assertNoSecrets(ok.body, ALL_SECRETS)
+  const viewer = checkWhoamiPrincipal({ id: 'entity-vic', kind: 'human', tenantId: 'acme', roles: ['viewer'] }, env)
+  assert.ok(viewer.ok && !viewer.body.permissions.includes('decision:approve'))
+  const other = checkWhoamiPrincipal({ id: 'entity-zed', kind: 'human', tenantId: 'globex', roles: ['supervisor'] }, env)
+  assert.ok(other.ok && other.body.permissions.length === 0)
 })

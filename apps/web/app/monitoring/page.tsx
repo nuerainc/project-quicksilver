@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { authFailureMessage, consoleHeaders, readConsoleToken } from '@/lib/console-auth'
+import { authFailureMessage, consoleHeaders, resolveConsoleAccess } from '@/lib/console-auth'
 
 type Execution = {
   runId: string
@@ -42,15 +42,15 @@ export default function WorkflowMonitoringPage() {
   const refresh = useCallback(async () => {
     setLoading(true)
     setError(null)
-    const token = readConsoleToken()
-    if (!token) {
+    const access = await resolveConsoleAccess()
+    if (!access.signedIn) {
       setExecutions([])
       setLoading(false)
-      setError(`${authFailureMessage(401, CONSOLE_ROUTE)}. Return to the home page and sign in with a principal that has workflow:read.`)
+      setError(`${authFailureMessage(401, CONSOLE_ROUTE)}. Sign in with a principal that has workflow:read.`)
       return
     }
     try {
-      const response = await fetch(API_PATH, { headers: consoleHeaders(API_PATH, token), cache: 'no-store' })
+      const response = await fetch(API_PATH, { headers: consoleHeaders(API_PATH, access.token), cache: 'no-store' })
       const result = await response.json().catch(() => ({}))
       if (!response.ok) throw new Error(authFailureMessage(response.status, CONSOLE_ROUTE, result.error) ?? result.error ?? 'Could not load monitoring data.')
       const data = result as MonitoringResponse

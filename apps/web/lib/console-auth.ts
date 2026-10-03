@@ -37,6 +37,38 @@ export function readConsoleToken(storage: () => TokenStorage | undefined = brows
   }
 }
 
+export interface ConsoleAccess {
+  /** The pasted token, when there is one; it is the only thing sent as `Authorization`. */
+  token: string | null
+  /** A pasted token, or a signed-in browser session (OIDC cookie). */
+  signedIn: boolean
+  /** Who the server says this is. Filled only when it had to ask, which is when there is no pasted token. */
+  whoami: ConsoleWhoami | null
+}
+
+type AccessFetch = (input: string, init?: { headers?: Record<string, string>; cache?: 'no-store'; credentials?: 'same-origin' }) => Promise<{ status: number; json(): Promise<unknown> }>
+
+/**
+ * Whether this browser can call the app's API as a person: a pasted token (checked by the
+ * server on each call) or a signed-in OIDC session (the cookie goes with same-origin
+ * requests). Pages used to look only for the token, so a person signed in with OIDC was
+ * told to sign in. With neither, or when the server cannot be asked, the answer is "not
+ * signed in" and the page shows its sign-in prompt.
+ */
+export async function resolveConsoleAccess(fetcher: AccessFetch = (input, init) => fetch(input, init), storage?: () => TokenStorage | undefined): Promise<ConsoleAccess> {
+  const token = storage ? readConsoleToken(storage) : readConsoleToken()
+  if (token) return { token, signedIn: true, whoami: null }
+  try {
+    const res = await fetcher('/api/whoami', { cache: 'no-store', credentials: 'same-origin' })
+    if (res.status !== 200) return { token: null, signedIn: false, whoami: null }
+    const body = await res.json() as Partial<ConsoleWhoami> | null
+    if (!body || typeof body.principalId !== 'string' || !Array.isArray(body.permissions)) return { token: null, signedIn: false, whoami: null }
+    return { token: null, signedIn: true, whoami: body as ConsoleWhoami }
+  } catch {
+    return { token: null, signedIn: false, whoami: null }
+  }
+}
+
 /** Returns false when the token could not be stored (it is then kept in memory only). */
 export function saveConsoleToken(token: string, storage: () => TokenStorage | undefined = browserSessionStorage): boolean {
   try {

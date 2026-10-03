@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { WorkflowEdge, WorkflowGraph, WorkflowNode, WorkflowNodeKind } from '@quicksilver/kernel'
 import { validateWorkflowGraph } from '@quicksilver/kernel/workflows/graph'
-import { authFailureMessage, consoleHeaders, readConsoleToken, type ConsoleRoute } from '@/lib/console-auth'
+import { authFailureMessage, consoleHeaders, resolveConsoleAccess, type ConsoleRoute } from '@/lib/console-auth'
 import { graphLayout } from '@/lib/workflow-layout'
 
 type ValidationResponse = { valid: boolean; errors: string[]; topologicalOrder: string[] }
@@ -28,17 +28,17 @@ const nodeTitles: Record<WorkflowNodeKind, string> = { trigger: 'Trigger', agent
 const DRAFT_STORAGE_KEY = 'nuera-quicksilver/workflow-draft/v1'
 
 /**
- * POST to a workflow route with the token signed in on the home page (this
- * tab's sessionStorage). Every workflow route requires a principal (A-3):
+ * POST to a workflow route as the signed-in person (a pasted token in this
+ * tab's sessionStorage, or the OIDC browser session). Every workflow route requires a principal (A-3):
  * validate and simulate need workflow:read, a live run needs run:enqueue.
  */
 async function postWorkflow(route: Extract<ConsoleRoute, `workflows/${string}`>, body: unknown, fallback: string): Promise<unknown> {
-  const token = readConsoleToken()
-  if (!token) throw new Error(`${authFailureMessage(401, route)} (use the token box on the home page).`)
+  const access = await resolveConsoleAccess()
+  if (!access.signedIn) throw new Error(`${authFailureMessage(401, route)} (sign in first).`)
   const url = `/api/${route}`
   const response = await fetch(url, {
     method: 'POST',
-    headers: consoleHeaders(url, token, { 'content-type': 'application/json' }),
+    headers: consoleHeaders(url, access.token, { 'content-type': 'application/json' }),
     body: JSON.stringify(body),
   })
   const result = await response.json().catch(() => ({}))
@@ -52,10 +52,10 @@ async function validateGraph(graph: unknown): Promise<ValidationResponse> {
 
 async function getWorkflowPublications(workflowId: string): Promise<PublicationList> {
   const route: ConsoleRoute = 'workflows/publications'
-  const token = readConsoleToken()
-  if (!token) throw new Error(`${authFailureMessage(401, route)} (use the token box on the home page).`)
+  const access = await resolveConsoleAccess()
+  if (!access.signedIn) throw new Error(`${authFailureMessage(401, route)} (sign in first).`)
   const url = `/api/workflows/publications?workflowId=${encodeURIComponent(workflowId)}`
-  const response = await fetch(url, { headers: consoleHeaders(url, token) })
+  const response = await fetch(url, { headers: consoleHeaders(url, access.token) })
   const result = await response.json().catch(() => ({}))
   if (!response.ok) throw new Error(authFailureMessage(response.status, route, result.error) ?? result.error ?? 'Could not load workflow versions.')
   return result as PublicationList
@@ -63,10 +63,10 @@ async function getWorkflowPublications(workflowId: string): Promise<PublicationL
 
 async function getWorkflowExecutions(workflowId: string): Promise<WorkflowExecution[]> {
   const route: ConsoleRoute = 'workflows/executions'
-  const token = readConsoleToken()
-  if (!token) throw new Error(`${authFailureMessage(401, route)} (use the token box on the home page).`)
+  const access = await resolveConsoleAccess()
+  if (!access.signedIn) throw new Error(`${authFailureMessage(401, route)} (sign in first).`)
   const url = `/api/workflows/executions?workflowId=${encodeURIComponent(workflowId)}&limit=25`
-  const response = await fetch(url, { headers: consoleHeaders(url, token) })
+  const response = await fetch(url, { headers: consoleHeaders(url, access.token) })
   const result = await response.json().catch(() => ({}))
   if (!response.ok) throw new Error(authFailureMessage(response.status, route, result.error) ?? result.error ?? 'Could not load workflow execution history.')
   return (result as { executions: WorkflowExecution[] }).executions
@@ -74,10 +74,10 @@ async function getWorkflowExecutions(workflowId: string): Promise<WorkflowExecut
 
 async function getWorkflowVersionDiff(workflowId: string, from: number, to: number): Promise<WorkflowVersionDiff> {
   const route: ConsoleRoute = 'workflows/diff'
-  const token = readConsoleToken()
-  if (!token) throw new Error(`${authFailureMessage(401, route)} (use the token box on the home page).`)
+  const access = await resolveConsoleAccess()
+  if (!access.signedIn) throw new Error(`${authFailureMessage(401, route)} (sign in first).`)
   const url = `/api/workflows/diff?workflowId=${encodeURIComponent(workflowId)}&from=${from}&to=${to}`
-  const response = await fetch(url, { headers: consoleHeaders(url, token) })
+  const response = await fetch(url, { headers: consoleHeaders(url, access.token) })
   const result = await response.json().catch(() => ({}))
   if (!response.ok) throw new Error(authFailureMessage(response.status, route, result.error) ?? result.error ?? 'Could not compare workflow versions.')
   return result as WorkflowVersionDiff
