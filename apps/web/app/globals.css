@@ -463,6 +463,8 @@ body:has(.app-topbar) > #main-content { min-height: 100dvh; margin-inline-start:
   .app-mobile-menu { display: block; }
   .app-command-trigger:not(.app-command-trigger--mobile) { display: none; }
   .app-command-trigger--mobile { display: flex; margin-top: 0.5rem; }
+  /* The sign-in control lives in the menu panel on small screens; the top bar has no room for a second one. */
+  .app-session:not(.app-session--mobile) { display: none; }
 }
 
 @media (max-width: 38rem) {
@@ -524,3 +526,10 @@ body:has(.app-topbar) > #main-content { min-height: 100dvh; margin-inline-start:
 .app-session--mobile { margin-top: 0.75rem; }
 .app-session--mobile:not(.app-session__button) { justify-content: space-between; }
 .app-topbar[data-collapsed='true'] .app-session__name { display: none; }
+
+/* Touch screens: controls are at least 44px tall (WCAG 2.5.5), and the dashboard's text links are real targets. */
+@media (pointer: coarse) {
+  .app-session__button { display: inline-flex; align-items: center; min-height: 2.75rem; }
+  .app-sidebar-collapse { width: 2.75rem; min-height: 2.75rem; }
+  .qs-dashboard-section-heading a { display: inline-flex; align-items: center; min-height: 2.75rem; }
+}
