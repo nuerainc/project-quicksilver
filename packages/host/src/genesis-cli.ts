@@ -54,6 +54,7 @@ import { decideSpend, genesisBlockers, genesisFacts, validateGenesisConfig, type
 import { loadHostConfig } from './config.ts'
 import { contentStatus, createManualReview, MANUAL_REVIEW_LABEL, parseContentReviewInput, readContentArg, reviewSummary } from './genesis-reviews.ts'
 import { genesisStoresFromEnv, MoneyLedgerIntegrityError, runStartedAt } from './genesis-store.ts'
+import { parseMoney } from './genesis-api.ts'
 import { exportGenesisResearchTrajectories } from './genesis-research.ts'
 import { SecretsVault } from './vault.ts'
 import { CLI_VALUE_FLAGS, parseCommandArgs } from './cli-args.ts'
@@ -121,13 +122,6 @@ function findExperiment(id: string | undefined): [Experiment, number] {
   const i = experiments.findIndex((e) => e.definition.id === id)
   if (!id || i < 0) fail(`No experiment "${id}". Draft one with: npm run genesis -- experiment draft <file.json>`)
   return [experiments[i]!, i]
-}
-function parseSource(): MoneyEntryInput['source'] {
-  const raw = flag('--source') ?? ''
-  const at = raw.indexOf(':')
-  const type = raw.slice(0, at) as MoneyEntryInput['source']['type']
-  if (at < 1 || !MONEY_SOURCES.includes(type)) fail(`--source must be <type>:<ref>, type one of ${MONEY_SOURCES.join(', ')}.`)
-  return { type, ref: raw.slice(at + 1) }
 }
 const usd = (n: number) => `$${n.toFixed(2)}`
 
@@ -201,22 +195,33 @@ switch (cmd) {
   case 'refund': {
     const hasCategory = cmd === 'spend' || cmd === 'refund'
     const [raw, a, b] = positional
-    const amountUsd = Number(raw)
-    const category = hasCategory ? a : cmd === 'compute' ? 'compute' : 'sales'
+    const category = hasCategory ? a : undefined
     const description = hasCategory ? b : a
-    if (!(amountUsd > 0) || !category || !description) fail(`Usage: ${cmd} <amountUsd> ${hasCategory ? '<category> ' : ''}"<what>" --source <type>:<ref> [--experiment <id>]`)
-    const experimentId = flag('--experiment')
+    if (!raw || (hasCategory && !category) || !description) fail(`Usage: ${cmd} <amountUsd> ${hasCategory ? '<category> ' : ''}"<what>" --source <type>:<ref> [--experiment <id>]`)
+    // The same validation the HTTP API applies (genesis-api.ts parseMoney), so both refuse the same inputs, before any rule is consulted.
+    const sourceFlag = flag('--source') ?? ''
+    const colon = sourceFlag.indexOf(':')
+    const checked = parseMoney({
+      kind: cmd,
+      amountUsd: Number(raw),
+      ...(category !== undefined ? { category } : {}),
+      description,
+      ...(colon > 0 ? { source: { type: sourceFlag.slice(0, colon), ref: sourceFlag.slice(colon + 1) } } : {}),
+      ...(flag('--experiment') ? { experimentId: flag('--experiment') } : {}),
+    })
+    if (!checked.ok) fail(`${checked.error} Usage: ${cmd} <amountUsd> ${hasCategory ? '<category> ' : ''}"<what>" --source <type>:<ref> [--experiment <id>]`)
+    const { amountUsd, category: checkedCategory, description: checkedDescription, source: checkedSource, experimentId } = checked.input
     const experiment = experimentId ? findExperiment(experimentId)[0] : undefined
     const now = new Date()
     let spendAuthorization: MoneyEntryInput['spendAuthorization']
     if (cmd === 'spend' || cmd === 'compute') {
-      const d = decideSpend(config, ledger, { amountUsd, category, description, ...(experimentId ? { experimentId } : {}) }, now, experiment)
+      const d = decideSpend(config, ledger, { amountUsd, category: checkedCategory, description: checkedDescription, ...(experimentId ? { experimentId } : {}) }, now, experiment)
       console.log(`Kernel: ${d.recommendation} (spend risk ${d.riskLevel}).${d.reasons.length ? ` ${d.reasons.join(' ')}` : ''}`)
       if (d.recommendation === 'reject') fail('Not recorded: the rules refuse this spend. If the money already moved outside the rules, stop the run and review it.')
       if (d.recommendation === 'request-approval' && !args.includes('--confirm')) fail('Not recorded: this needs your decision. Re-run with --confirm to approve it as yourself.')
       spendAuthorization = { decisionId: `spend-${randomUUID()}`, recommendation: d.recommendation, riskLevel: d.riskLevel, reasons: d.reasons, confirmedBy: founder.id, confirmedAt: now.toISOString() }
     }
-    const r = appendMoney(ledger, { kind: cmd as MoneyKind, amountUsd, category, description, source: parseSource(), ...(experimentId ? { experimentId } : {}), ...(spendAuthorization ? { spendAuthorization } : {}) }, founder, now)
+    const r = appendMoney(ledger, { kind: cmd as MoneyKind, amountUsd, category: checkedCategory, description: checkedDescription, source: checkedSource, ...(experimentId ? { experimentId } : {}), ...(spendAuthorization ? { spendAuthorization } : {}) }, founder, now)
     if (!r.ok) fail(r.reasons.join(' '))
     await stores.ledger.append(config.runId, r.entry)
     const t = moneyTotals(r.ledger)

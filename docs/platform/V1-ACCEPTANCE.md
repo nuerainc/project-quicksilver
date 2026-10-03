@@ -11,7 +11,7 @@ exists so the acceptance question ("is every in-scope item mapped to
 evidence?") has one direct answer instead of requiring a full read of the
 register.
 
-**As of 2026-10-02:** 85 covered, 9 needing operational evidence, 29 partial, 0 missing (123 total).
+**As of 2026-10-02:** 86 covered, 9 needing operational evidence, 28 partial, 0 missing (123 total).
 
 ## Automated evidence (every P-001–P-123 row)
 
@@ -139,7 +139,7 @@ claimed for that row at this status.
 | P-116 | covered | `packages/sdk-python/tests/test_client.py` covers URL policy, typed validation/preview/run results, malformed contracts, HTTP errors, invalid request data, and all three CLI commands; `python -m unittest discover -s packages/sdk-python/tests -v`; `pyproject.toml` has no runtime dependencies |
 | P-117 | partial | `cli-args.test.ts` covers production flag profiles; `onboard-cli.test.ts` checks CLI-created and CLI-answered intent through the authenticated HTTP API; `genesis-cli.test.ts` checks review writes and reads both ways across CLI and HTTP using `FileGenesisStore`; existing `operate.test.ts`, `whatif.test.ts`, and `tasks.test.ts` exercise real CLI paths and domain services |
 | P-118 | partial | `docs/api/openapi.json` (OpenAPI 3.1, version 0.4.0); `apps/web/lib/app-routes.test.ts` asserts route/method drift, operation IDs, write request bodies, and local reference resolution; workflow graph, validation, simulation, and run schemas |
-| P-119 | partial | Go workflow client implements validation, safe preview and read-only run; `client_test.go` covers URL policy, HTTP contracts, safe modes, NQC evaluation validation, errors/size limits and cancellation. The authenticated agent draft API is `apps/web/app/api/agents/drafts/route.ts`, backed by the tested catalog lifecycle in `agent-catalog-store.test.ts` and contract tests |
+| P-119 | covered | Go workflow client implements validation, safe preview and read-only run; `client_test.go` covers URL policy, HTTP contracts, safe modes, NQC evaluation validation, errors/size limits and cancellation. The authenticated agent draft API is `apps/web/app/api/agents/drafts/route.ts`, backed by the tested catalog lifecycle in `agent-catalog-store.test.ts` and contract tests |
 | P-120 | covered | `apps/web/lib/workflow-layout.test.ts` "lays out branches and merges deterministically without overlap", "handles an empty draft with finite minimum canvas dimensions"; included in `npm run seed:test` |
 | P-121 | needs operational evidence | `apps/studio/scripts/e2e-live.ts` (`npm run e2e:live`), `apps/studio/scripts/smoke-test.ts` |
 | P-122 | partial | Responsive grouped navigation; business operations dashboard; preserved objective planner at `/planning`; accessible decision, workflow, agent and monitoring workspaces; full-width workflow map auto-fits through `ResizeObserver`; viewports and typography use responsive breakpoints; covered by `responsive-shell.test.ts`, `home-experience.test.ts`, `workspace-pages.test.ts`, and `workflow-page-usability.test.ts` |

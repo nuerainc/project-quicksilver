@@ -82,8 +82,8 @@ Gate 0 is complete: every checklist item above is recorded. The P-001–P-123
 baseline is approved, every owner decision is recorded, and
 [`V1-ACCEPTANCE.md`](platform/V1-ACCEPTANCE.md) maps every row to its
 evidence. No claim is made that a required capability is complete merely
-because a scope, policy, or acceptance-mapping decision is recorded — 85 rows
-are covered, 29 partial, 0 missing, and 9 (including the five operational
+because a scope, policy, or acceptance-mapping decision is recorded — 86 rows
+are covered, 28 partial, 0 missing, and 9 (including the five operational
 blockers) need operational evidence that has not yet been recorded.
 
 See the [v1 external credential and access checklist](platform/v1-credential-prerequisites.md)
