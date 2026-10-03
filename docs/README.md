@@ -8,6 +8,7 @@ by Quicksilver, our Sanity Challenge 2026 submission, which lives separately at
 - [NQC Kernel and Quicksilver Engine](nqc/README.md)
 - [Platform architecture](platform/README.md)
 - [Implementation roadmap](NUERA-QUICKSILVER-ROADMAP.md)
+- [Usability plan: attention list, sign-in, approvals inbox, chat as the only agent entry](USABILITY-PLAN.md)
 - [Enterprise specification coverage](NUERA-QUICKSILVER-SPEC-COVERAGE.md)
 - [Canonical naming](NUERA-QUICKSILVER-NAMING.md)
 - [Glossary](GLOSSARY.md): project terminology and status vocabulary
