@@ -25,6 +25,8 @@ import type { GenesisApiDeps } from './genesis-api.ts'
 import { QuicksilverHost } from './host.ts'
 import type { HostingApiDeps } from './hosting-api.ts'
 import type { MediaService } from './media.ts'
+import { MemoryActionStore } from './actions.ts'
+import { dryRunTools } from './tool-executor.ts'
 import type { IntentApiDeps } from './intent-api.ts'
 import { Logger } from './log.ts'
 import { HOST_ROUTES, matchHostRoute } from './routes.ts'
@@ -103,6 +105,7 @@ async function start(options: StartOptions = {}) {
     genesis: {} as GenesisApiDeps,
     hosting: {} as HostingApiDeps,
     media: {} as MediaService,
+    actions: { store: new MemoryActionStore('t'), tools: dryRunTools(), policy: { enabledTools: [] } },
     decisions: {} as DecisionApiDeps,
     tasks: {
       store: new MemoryTaskStore(),

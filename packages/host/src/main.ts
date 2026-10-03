@@ -45,6 +45,8 @@ import { FileGenesisStore, MemoryGenesisStore, type GenesisApiDeps } from './gen
 import { FileHostingAdapter, FileHostingStore, MemoryHostingStore } from './hosting.ts'
 import type { HostingApiDeps } from './hosting-api.ts'
 import { FileMediaStore, MediaService, MemoryMediaStore, parseMediaPolicy } from './media.ts'
+import { FileActionStore, MemoryActionStore, type ActionPolicy, type ActionStore } from './actions.ts'
+import { dryRunTools, type ToolDefinition } from './tool-executor.ts'
 import { FileCommerceProposalStore, FilePendingPaymentStore, MemoryCommerceProposalStore, MemoryPendingPaymentStore } from './genesis-store.ts'
 import { SecretsVault, generateMasterKey } from './vault.ts'
 import { taskSetup } from './tasks-setup.ts'
@@ -236,6 +238,50 @@ function buildHosting(config: HostConfig, genesis: GenesisApiDeps | undefined, l
 }
 
 /**
+ * P-095 approved actions: on only when QUICKSILVER_ACTIONS_CONFIG names a policy file listing the
+ * tools to enable (see deploy/actions/actions.example.json). Every tool that ships is a dry run:
+ * approving an action records the decision and a result that says nothing was sent or changed.
+ * Approval also needs the authorization key (execution.authorizationKeyEnv) to be set.
+ */
+function buildActions(config: HostConfig, log: Logger): { store: ActionStore; tools: ToolDefinition[]; policy: Partial<ActionPolicy> & { enabledTools: string[] } } | undefined {
+  const file = process.env.QUICKSILVER_ACTIONS_CONFIG
+  if (!file) return undefined
+  const path = resolve(baseDir, file)
+  if (!existsSync(path)) {
+    log.error('QUICKSILVER_ACTIONS_CONFIG names a file that does not exist; the action routes are off', { path })
+    return undefined
+  }
+  let raw: Record<string, unknown>
+  try { raw = JSON.parse(readFileSync(path, 'utf8')) } catch {
+    log.error('the actions policy is not valid JSON; the action routes are off', { path })
+    return undefined
+  }
+  const tools = dryRunTools()
+  const known = new Set(tools.map((t) => t.manifest.id))
+  const enabled = raw.enabledTools
+  if (!Array.isArray(enabled) || enabled.some((id) => typeof id !== 'string' || !known.has(id))) {
+    log.error('the actions policy must list enabledTools from the tools this host has; the action routes are off', { path, available: [...known] })
+    return undefined
+  }
+  const number = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : undefined)
+  const dir = process.env.QUICKSILVER_ACTIONS_DIR
+    ? resolve(baseDir, process.env.QUICKSILVER_ACTIONS_DIR)
+    : config.store.kind === 'file' ? join(dirname(config.store.path), 'genesis') : undefined
+  if (!dir) log.warn('action proposals are kept in memory; use a file store or QUICKSILVER_ACTIONS_DIR to keep them')
+  log.warn('approved actions are on; every tool is a dry run, so approving one sends and changes nothing')
+  return {
+    store: dir ? new FileActionStore(dir, config.tenantId) : new MemoryActionStore(config.tenantId),
+    tools,
+    policy: {
+      enabledTools: enabled as string[],
+      ...(number(raw.proposalTtlMs) ? { proposalTtlMs: number(raw.proposalTtlMs)! } : {}),
+      ...(number(raw.approvalTtlMs) ? { approvalTtlMs: number(raw.approvalTtlMs)! } : {}),
+      ...(number(raw.maxInputBytes) ? { maxInputBytes: number(raw.maxInputBytes)! } : {}),
+    },
+  }
+}
+
+/**
  * P-025 media: on only when QUICKSILVER_MEDIA_CONFIG names a policy file (budget, per-request caps,
  * retention, allowed kinds, blocked terms; see deploy/media/media.example.json). No real provider
  * ships: until an adapter that implements the media contract is registered here, status works and
@@ -385,6 +431,7 @@ async function main(): Promise<void> {
   const genesis = await buildGenesis(config, log)
   const hosting = buildHosting(config, genesis, log)
   const media = buildMedia(config, log)
+  const actions = buildActions(config, log)
   const tasks = taskSetup(config, { baseDir })
   for (const note of tasks.notes) log.warn(note)
   const host = new QuicksilverHost(config, {
@@ -399,6 +446,7 @@ async function main(): Promise<void> {
     genesis,
     ...(hosting ? { hosting } : {}),
     ...(media ? { media } : {}),
+    ...(actions ? { actions } : {}),
     tasks: {
       store: tasks.store,
       clients: tasks.clients,

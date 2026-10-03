@@ -1,44 +1,59 @@
-/**
- * Effectful Tool Execution behind Kernel Authorization Contract (P-095 / M8h).
- *
- * Enforces the NQC Kernel Authorization Contract before any side-effecting or
- * protected tool executes:
- * - Must be registered in ToolRegistry with valid contractVersion and access class.
- * - Side-effecting tools MUST present a signed, unexpired ExecutionAuthorizationRecord.
- * - Authorizations must be tamper-evident (HMAC verified with kernel signing key).
- * - Binds exact tenantId, runId, nodeId, actionFingerprint, workflowDigest, and evidenceCount >= 1.
- * - Single-use token consumption prevents replay attacks.
- * - Dedicated write credentials and protection against public challenge project (d280bqjc).
- * - Produces immutable audit evidence for every execution attempt.
- */
-
 import { createHash, randomUUID } from 'node:crypto'
+
 import {
-  actionFingerprint,
+  consumeExecutionAuthorization,
   verifyExecutionAuthorization,
   type AuthorizationSigningKey,
   type ExecutionAuthorizationRecord,
 } from '@quicksilver/kernel/runtime'
-import { ToolRegistry, type ToolAccessClass, type ToolManifest } from '@quicksilver/kernel/tools/registry'
-import type { WorkflowNode } from '@quicksilver/kernel/workflows/graph'
-import type { WorkflowRuntimeContext } from '@quicksilver/kernel/workflows/runtime'
+import { ToolRegistry, type ToolManifest } from '@quicksilver/kernel/tools/registry'
 
-export interface ToolExecutionContext {
-  node: WorkflowNode
+/**
+ * Effectful tool execution behind the kernel authorization contract (P-095).
+ *
+ * A tool is a manifest plus an adapter. The executor runs an adapter only when:
+ *   - the tool is registered (a ToolRegistry entry with a valid manifest and an adapter);
+ *   - for a side-effect tool, a kernel-signed authorization record is presented and checked
+ *     against what the CALLER says should be executed: tenant, run, step, action, content
+ *     digest, approval digest and evidence count. Nothing is checked against the record's
+ *     own fields, which would make the check always pass;
+ *   - that record has not been used before by this executor.
+ * Every attempt, including a refusal, leaves an audit record.
+ *
+ * The adapters that ship here are dry runs. They record what they were asked and report
+ * `executed: false`; none of them sends, writes or deletes anything. A real adapter is
+ * added by registering it with the host, one provider at a time.
+ */
+
+export interface ToolCall {
+  toolId: string
   input: unknown
-  priorOutputs: Record<string, unknown>
   tenantId: string
   runId: string
-  authorization?: ExecutionAuthorizationRecord
+  nodeId: string
+  /** Stable for one intended effect; an adapter passes it to the provider so a retry cannot repeat the effect. */
+  idempotencyKey: string
   signal?: AbortSignal
 }
 
-export type ToolAdapter = (context: ToolExecutionContext) => Promise<unknown>
+export type ToolRun = (call: ToolCall) => Promise<unknown>
 
-export interface ToolExecutionAuditRecord {
+export interface ToolDefinition {
+  manifest: ToolManifest
+  run: ToolRun
+}
+
+export interface ExpectedGrant {
+  actionFingerprint: string
+  workflowDigest: string
+  approvalDigest: string
+  evidenceCount: number
+}
+
+export interface ToolExecutionAudit {
   auditId: string
   toolId: string
-  access: ToolAccessClass
+  access: ToolManifest['access'] | 'unknown'
   tenantId: string
   runId: string
   nodeId: string
@@ -46,253 +61,141 @@ export interface ToolExecutionAuditRecord {
   keyId?: string
   actionFingerprint?: string
   inputDigest: string
-  outputDigest: string
-  status: 'success' | 'failed'
-  error?: string
+  outputDigest?: string
+  status: 'success' | 'failed' | 'refused'
+  reasons?: string[]
   executedAt: string
 }
 
+export class ToolRefusedError extends Error {
+  readonly reasons: string[]
+  constructor(reasons: string[]) {
+    super(reasons.join(' '))
+    this.name = 'ToolRefusedError'
+    this.reasons = reasons
+  }
+}
+
 export interface EffectfulToolExecutorOptions {
-  registry?: ToolRegistry
+  tools: readonly ToolDefinition[]
   signingKey?: AuthorizationSigningKey
-  workflowDigest?: string
-  evidenceCount?: number
-  auditSink?: (record: ToolExecutionAuditRecord) => Promise<void> | void
+  auditSink?: (record: ToolExecutionAudit) => Promise<void> | void
   now?: () => number
 }
 
-const digest = (value: unknown): string =>
-  createHash('sha256').update(JSON.stringify(value ?? null)).digest('hex')
+export const sha256 = (value: unknown): string => `sha256:${createHash('sha256').update(JSON.stringify(value ?? null)).digest('hex')}`
 
 export class EffectfulToolExecutor {
-  readonly registry: ToolRegistry
-  private readonly adapters = new Map<string, ToolAdapter>()
-  private readonly auditLog: ToolExecutionAuditRecord[] = []
-  private readonly consumedTokens = new Set<string>()
+  readonly registry = new ToolRegistry()
+  private readonly runs = new Map<string, ToolRun>()
+  private readonly used = new Set<string>()
   private readonly signingKey?: AuthorizationSigningKey
-  private readonly workflowDigest?: string
-  private readonly evidenceCount?: number
-  private readonly auditSink?: (record: ToolExecutionAuditRecord) => Promise<void> | void
+  private readonly auditSink?: (record: ToolExecutionAudit) => Promise<void> | void
   private readonly now: () => number
+  private readonly audit: ToolExecutionAudit[] = []
 
-  constructor(options: EffectfulToolExecutorOptions = {}) {
-    this.registry = options.registry ?? new ToolRegistry()
+  constructor(options: EffectfulToolExecutorOptions) {
     this.signingKey = options.signingKey
-    this.workflowDigest = options.workflowDigest
-    this.evidenceCount = options.evidenceCount
     this.auditSink = options.auditSink
     this.now = options.now ?? Date.now
-
-    // Register standard safe built-in adapters
-    this.registerBuiltInAdapters()
-  }
-
-  registerAdapter(toolId: string, adapter: ToolAdapter): void {
-    if (this.adapters.has(toolId)) throw new Error(`Tool adapter "${toolId}" is already registered.`)
-    this.adapters.set(toolId, adapter)
-  }
-
-  getAuditLog(): readonly ToolExecutionAuditRecord[] {
-    return Object.freeze([...this.auditLog])
-  }
-
-  validateTool(node: WorkflowNode): { allowed: boolean; reasons: string[] } {
-    const toolId = node.config?.toolId ?? node.id
-    const registered = this.registry.get(toolId)
-    if (!registered) {
-      return { allowed: false, reasons: [`Tool "${toolId}" is not registered in the kernel ToolRegistry.`] }
+    for (const tool of options.tools) {
+      this.registry.register(tool.manifest)
+      this.runs.set(tool.manifest.id, tool.run)
     }
-    return { allowed: true, reasons: [] }
   }
 
-  async executeTool(
-    node: WorkflowNode,
-    context: WorkflowRuntimeContext,
-    authorization?: ExecutionAuthorizationRecord,
-  ): Promise<unknown> {
-    const toolId = node.config?.toolId ?? node.id
-    const registered = this.registry.get(toolId)
-    if (!registered) {
-      throw new Error(`Tool "${toolId}" is not registered in the kernel ToolRegistry; dispatch refused.`)
+  has(toolId: string): boolean { return this.runs.has(toolId) && this.registry.get(toolId) !== undefined }
+  manifest(toolId: string): Readonly<ToolManifest> | undefined { return this.registry.get(toolId)?.manifest }
+  toolIds(): string[] { return this.registry.list().map((t) => t.manifest.id) }
+  auditLog(): readonly ToolExecutionAudit[] { return [...this.audit] }
+
+  async execute(call: ToolCall, grant?: { record: ExecutionAuthorizationRecord; expected: ExpectedGrant }): Promise<{ output: unknown; audit: ToolExecutionAudit }> {
+    const manifest = this.manifest(call.toolId)
+    const run = this.runs.get(call.toolId)
+    const inputDigest = sha256(call.input)
+    const base = { toolId: call.toolId, access: manifest?.access ?? ('unknown' as const), tenantId: call.tenantId, runId: call.runId, nodeId: call.nodeId, inputDigest }
+    const refuse = async (reasons: string[]): Promise<never> => {
+      await this.record({ ...base, status: 'refused', reasons, ...(grant ? { authorizationId: grant.record?.authorizationId } : {}) })
+      throw new ToolRefusedError(reasons)
     }
 
-    const { manifest } = registered
-    const isSideEffect = manifest.access === 'side-effect' || node.config?.sideEffect === true || manifest.requiresApproval === true
-
-    // 1. Strict Kernel Authorization Contract enforcement for side-effecting / protected tools
-    if (isSideEffect) {
-      if (!authorization) {
-        throw new Error(`Side-effect tool "${toolId}" requires a signed kernel execution authorization record.`)
-      }
-      if (!this.signingKey) {
-        throw new Error('Host authorization signing key is not configured; refusing to execute side-effect tool.')
-      }
-
-      // Check for replay attacks: single-use token consumption
-      if (this.consumedTokens.has(authorization.authorizationId)) {
-        throw new Error(`Authorization token "${authorization.authorizationId}" has already been consumed; replay refused.`)
-      }
-
-      const expectedFingerprint = actionFingerprint(node, toolId)
-      const expectedWorkflowDigest = this.workflowDigest ?? authorization.workflowDigest
-      const expectedEvidenceCount = this.evidenceCount ?? authorization.evidenceCount
-
-      const verification = verifyExecutionAuthorization(authorization, this.signingKey, {
-        tenantId: context.tenantId ?? '',
-        runId: context.runId ?? '',
-        nodeId: node.id,
-        actionFingerprint: expectedFingerprint,
-        workflowDigest: expectedWorkflowDigest,
-        approvalDigest: authorization.approvalDigest,
-        evidenceCount: expectedEvidenceCount,
-        now: this.now(),
+    if (!manifest || !run) return refuse([`Tool "${call.toolId}" is not registered on this host.`])
+    const protectedCall = manifest.access === 'side-effect' || manifest.requiresApproval
+    if (protectedCall) {
+      if (!grant?.record) return refuse([`"${call.toolId}" has side effects and needs a kernel-signed execution authorization.`])
+      if (!this.signingKey) return refuse(['The authorization signing key is not configured; the call was not made.'])
+      const { record, expected } = grant
+      if (this.used.has(record.authorizationId)) return refuse([`Authorization "${record.authorizationId}" was already used; replay refused.`])
+      const checked = verifyExecutionAuthorization(record, this.signingKey, {
+        tenantId: call.tenantId, runId: call.runId, nodeId: call.nodeId,
+        actionFingerprint: expected.actionFingerprint, workflowDigest: expected.workflowDigest,
+        approvalDigest: expected.approvalDigest, evidenceCount: expected.evidenceCount, now: this.now(),
       })
-
-      if (!verification.valid) {
-        throw new Error(`Kernel authorization verification failed for tool "${toolId}": ${verification.reasons.join(' ')}`)
-      }
-
-      // Mark token consumed in executor state
-      this.consumedTokens.add(authorization.authorizationId)
+      if (!checked.valid) return refuse(checked.reasons)
+      if (record.capability !== call.toolId) return refuse(['Authorization was issued for a different tool.'])
+      try { consumeExecutionAuthorization(record, this.signingKey, this.now()) } catch (e) { return refuse([(e as Error).message]) }
+      this.used.add(record.authorizationId)
     }
 
-    const adapter = this.adapters.get(toolId)
-    if (!adapter) {
-      throw new Error(`No execution adapter is implemented for tool "${toolId}".`)
-    }
-
-    const input = context.outputs[node.id] ?? context.input
-    const inputDigest = digest(input)
-    const timestamp = new Date(this.now()).toISOString()
-
+    const authInfo = grant?.record ? { authorizationId: grant.record.authorizationId, keyId: grant.record.keyId, actionFingerprint: grant.record.actionFingerprint } : {}
     try {
-      const output = await adapter({
-        node,
-        input,
-        priorOutputs: context.outputs,
-        tenantId: context.tenantId ?? '',
-        runId: context.runId ?? '',
-        authorization,
-        signal: context.signal,
-      })
-
-      const auditRecord: ToolExecutionAuditRecord = {
-        auditId: `audit:tool:${randomUUID()}`,
-        toolId,
-        access: manifest.access,
-        tenantId: context.tenantId ?? '',
-        runId: context.runId ?? '',
-        nodeId: node.id,
-        authorizationId: authorization?.authorizationId,
-        keyId: authorization?.keyId,
-        actionFingerprint: authorization?.actionFingerprint,
-        inputDigest,
-        outputDigest: digest(output),
-        status: 'success',
-        executedAt: timestamp,
-      }
-      this.auditLog.push(auditRecord)
-      if (this.auditSink) await this.auditSink(auditRecord)
-
-      return output
+      const output = await run(call)
+      const audit = await this.record({ ...base, ...authInfo, status: 'success', outputDigest: sha256(output) })
+      return { output, audit }
     } catch (error) {
-      const auditRecord: ToolExecutionAuditRecord = {
-        auditId: `audit:tool:${randomUUID()}`,
-        toolId,
-        access: manifest.access,
-        tenantId: context.tenantId ?? '',
-        runId: context.runId ?? '',
-        nodeId: node.id,
-        authorizationId: authorization?.authorizationId,
-        keyId: authorization?.keyId,
-        actionFingerprint: authorization?.actionFingerprint,
-        inputDigest,
-        outputDigest: digest(null),
-        status: 'failed',
-        error: (error as Error).message,
-        executedAt: timestamp,
-      }
-      this.auditLog.push(auditRecord)
-      if (this.auditSink) await this.auditSink(auditRecord)
+      await this.record({ ...base, ...authInfo, status: 'failed', reasons: [(error as Error).message.slice(0, 300)] })
       throw error
     }
   }
 
-  private registerBuiltInAdapters(): void {
-    // 1. Sanity Metadata Mutation Adapter
-    this.registry.register({
-      id: 'sanity.mutate',
-      contractVersion: 1,
-      provider: 'sanity',
-      access: 'side-effect',
-      requiresApproval: true,
-      description: 'Executes authorized internal metadata mutations in Sanity.',
-    })
-    this.adapters.set('sanity.mutate', async (ctx) => {
-      const payload = ctx.input as { projectId?: string; documentId?: string; mutations?: unknown }
-      if (payload?.projectId === 'd280bqjc') {
-        throw new Error('Tool execution prohibited in the public Quicksilver challenge project (d280bqjc).')
-      }
-      return {
-        applied: true,
-        documentId: payload?.documentId ?? 'doc-1',
-        mutationDigest: digest(payload?.mutations),
-        timestamp: this.now(),
-      }
-    })
-
-    // 2. HTTP Webhook Notification Dispatcher
-    this.registry.register({
-      id: 'webhook.dispatch',
-      contractVersion: 1,
-      provider: 'http',
-      access: 'side-effect',
-      requiresApproval: true,
-      description: 'Dispatches signed webhook event payloads to external URLs.',
-    })
-    this.adapters.set('webhook.dispatch', async (ctx) => {
-      const payload = ctx.input as { url?: string; payload?: unknown }
-      if (!payload?.url || typeof payload.url !== 'string') {
-        throw new Error('Webhook URL is required.')
-      }
-      return {
-        dispatched: true,
-        targetUrl: payload.url,
-        payloadDigest: digest(payload.payload),
-        timestamp: this.now(),
-      }
-    })
-
-    // 3. Operational Notification Dispatcher
-    this.registry.register({
-      id: 'notification.send',
-      contractVersion: 1,
-      provider: 'notification',
-      access: 'side-effect',
-      requiresApproval: true,
-      description: 'Sends authorized operational notifications to verified recipients.',
-    })
-    this.adapters.set('notification.send', async (ctx) => {
-      const payload = ctx.input as { channel?: string; message?: string }
-      return {
-        sent: true,
-        channel: payload?.channel ?? 'internal',
-        messageDigest: digest(payload?.message),
-        timestamp: this.now(),
-      }
-    })
-
-    // 4. Read-Only Query Tool
-    this.registry.register({
-      id: 'sanity.query',
-      contractVersion: 1,
-      provider: 'sanity',
-      access: 'read-only',
-      requiresApproval: false,
-      description: 'Executes read-only telemetry and state queries.',
-    })
-    this.adapters.set('sanity.query', async (ctx) => {
-      return { results: [], queryInput: ctx.input, queryTime: this.now() }
-    })
+  private async record(partial: Omit<ToolExecutionAudit, 'auditId' | 'executedAt'>): Promise<ToolExecutionAudit> {
+    const audit: ToolExecutionAudit = { auditId: `audit:tool:${randomUUID()}`, executedAt: new Date(this.now()).toISOString(), ...partial }
+    this.audit.push(audit)
+    if (this.auditSink) await this.auditSink(audit)
+    return audit
   }
+}
+
+// ── Dry-run adapters ───────────────────────────────────────────────────────
+
+const PUBLIC_CHALLENGE_PROJECT = 'd280bqjc'
+
+/** What a dry run returns: the request, digested, and an explicit statement that nothing happened. */
+const dry = (call: ToolCall, extra: Record<string, unknown> = {}) => ({
+  dryRun: true,
+  executed: false,
+  note: 'Dry run: nothing was sent, written or changed.',
+  toolId: call.toolId,
+  idempotencyKey: call.idempotencyKey,
+  inputDigest: sha256(call.input),
+  ...extra,
+})
+
+/** The shipped tools. Each keeps the manifest a real adapter would use, so swapping the adapter later changes no contract. */
+export function dryRunTools(): ToolDefinition[] {
+  return [
+    {
+      manifest: { id: 'notification.send', contractVersion: 1, provider: 'notification', access: 'side-effect', requiresApproval: true, description: 'Send an operational notification to a verified recipient (dry run).' },
+      run: async (call) => dry(call),
+    },
+    {
+      manifest: { id: 'webhook.dispatch', contractVersion: 1, provider: 'http', access: 'side-effect', requiresApproval: true, description: 'Send a signed event payload to an external URL (dry run).' },
+      run: async (call) => {
+        const url = (call.input as { url?: unknown } | null)?.url
+        if (typeof url !== 'string' || !/^https:\/\//.test(url)) throw new Error('webhook.dispatch needs an https:// url.')
+        return dry(call, { targetHost: new URL(url).hostname })
+      },
+    },
+    {
+      manifest: { id: 'sanity.mutate', contractVersion: 1, provider: 'sanity', access: 'side-effect', requiresApproval: true, description: 'Apply an approved metadata mutation in the dedicated Sanity project (dry run).' },
+      run: async (call) => {
+        if ((call.input as { projectId?: unknown } | null)?.projectId === PUBLIC_CHALLENGE_PROJECT) throw new Error(`Tool execution is prohibited in the public Quicksilver challenge project (${PUBLIC_CHALLENGE_PROJECT}).`)
+        return dry(call)
+      },
+    },
+    {
+      manifest: { id: 'sanity.query', contractVersion: 1, provider: 'sanity', access: 'read-only', requiresApproval: false, description: 'Read-only state query (dry run: returns no data).' },
+      run: async (call) => dry(call, { results: [] }),
+    },
+  ]
 }

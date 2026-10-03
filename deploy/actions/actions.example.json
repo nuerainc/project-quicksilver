@@ -1,0 +1,6 @@
+{
+  "enabledTools": ["notification.send"],
+  "proposalTtlMs": 86400000,
+  "approvalTtlMs": 900000,
+  "maxInputBytes": 16384
+}
