@@ -5,10 +5,14 @@ not been checked against real users; the first step below is to watch one.
 
 ## Principles
 
-1. **The chat is the only place to talk to an agent.** Every other page works like a normal app:
+1. **The chat is the only place to talk to an agent, and there is one chat.** One input and one
+   conversation, with no Ask, Plan and Work modes. Every other page works like a normal app:
    lists, detail pages, buttons. Agent results appear on those pages; agents are started from chat.
-2. **The chat reads everything you can see, and writes nothing.** Approving, rejecting, executing,
-   publishing and rolling back stay buttons a person presses (with separation of duties).
+2. **The chat reads everything you can see, and performs nothing.** It may offer a card ("Create
+   this plan?", "Approve this decision"). Clicking the card is a human act, made through the app's
+   normal route with the person's own credentials, so the audit trail shows a person. The model has
+   no approve, reject, execute, publish or rollback tool, and a card that approves or executes is
+   built by the server from records and looked up by id, never from model text.
 3. **Show what needs you, derived not stored.** One "attention" list answers "what should I look at
    now?" for every surface. An item disappears when it is dealt with. There is no read state.
 4. **Say when we could not check.** If a source of attention items fails to load, the list says so.
@@ -19,8 +23,10 @@ not been checked against real users; the first step below is to watch one.
 ## The attention list
 
 One function turns the current state and the signed-in person's permissions into a list of things
-that need that person. Each item has a stable id, a kind, a severity, a one-line reason, a link
-and the time it started needing attention.
+that need that person. Each item has a stable id, a kind, a severity, a one-line reason, a link,
+the time it started needing attention, and **the actions you can take on it**: Approve, Reject,
+Execute, Observe, Review, Retry. The list needs no model: it is computed from records, so it is
+instant, free, and cannot be paraphrased wrongly.
 
 | Source | Item | Shown to | Link |
 |---|---|---|---|
@@ -47,14 +53,26 @@ Rules:
 - A source that fails shows as "Could not check decisions" with a retry, and the badge shows a
   dot instead of a number. A silent zero is a bug.
 - Order: severity, then age. The same list feeds every surface.
+- **One click is only offered when the card shows everything the click covers.** An approve card
+  shows the action, the risk, the one-line why and the policy version, and the click sends the same
+  `expectedActionFingerprint` the approve route already requires, so a stale card gets a 409
+  instead of approving something you did not see. Items that need more (risk above the review
+  ceiling, a sole-operator justification) show "Review" and open the decision page.
+- No batch approve for now: it weakens "you saw what you approved".
+- After a click the card updates in place and the list is refetched; a refusal (403, 409) says why
+  on the card.
 
 Surfaces, in the order they are built:
+
+One shared `AttentionList` component renders all of these, buttons included.
 
 1. **Header bell** with a count and a dropdown. Polls about once a minute and when the tab
    regains focus. It is polling, not real time, and the dropdown says "Checked 12 s ago".
 2. **Overview card**: "Needs your attention", the same list in full.
-3. **Chat**: a `get_attention` tool, so "what needs me?" works, and the empty chat suggests
-   "3 decisions are waiting for you" instead of fixed examples.
+3. **Chat**: the empty chat shows the list ("Needs you (3)") before you type anything, with no
+   model call. A `get_attention` tool returns the same structured items, which the chat renders as
+   cards rather than prose. The model is for the fuzzy parts: "why was mine refused?", "which of
+   these is safest?".
 4. **Page banners**: a decision that is stale or refused says so at the top of its own page.
 5. **Digest by email** (later). Sending is an outward effect, so it goes through the approved-actions
    path to a recipient allow-list, and needs a recipient list and an explicit go-ahead.
@@ -72,10 +90,14 @@ mobile pass) before it is marked ready. "Rec" refers to the 13 recommendations f
 - `apps/web/lib/attention.ts`: pure function from data and permissions to items. Unit tested with
   fixtures for every row of the table above, including "source failed".
 - `GET /api/inbox` (`decision:read`): gathers sources through the existing read routes' loaders,
-  filters by what the caller may act on, returns items and a per-source status.
-- Chat tool `get_attention`. OpenAPI entry with a real schema. Doc.
+  filters by what the caller may act on, returns items (each with its actions and, for approvals,
+  the fingerprint it covers) and a per-source status.
+- Shared `AttentionList` component with the one-click buttons, calling the existing decision
+  routes with the person's credentials.
+- Chat tool `get_attention` returning the same items. OpenAPI entry with a real schema. Doc.
 - Done when: a viewer sees no approval items, an approver sees only decisions they did not
-  request, and a failing source shows as unchecked.
+  request, a failing source shows as unchecked, a stale approve card is refused with 409, and
+  no item offers an action the person's permissions do not allow.
 
 ### B. Front door and basics (medium)  — Rec 1, 2, 3, 4, 5
 
@@ -95,8 +117,12 @@ mobile pass) before it is marked ready. "Rec" refers to the 13 recommendations f
 - Done when: a person with the approver role can find, understand and approve a decision without
   opening the planning page.
 
-### C. Agents only in chat (medium)  — step 3, Rec 6, 7
+### C. One chat, agents only in chat (medium)  — step 3, Rec 6, 7
 
+- **One chat**: remove the Ask, Plan and Work switch. The assistant decides whether to answer, or
+  to offer a card: "Create this plan?" (the objective shown, and editable) or "Ask the Sales
+  specialist". One click on the card runs it through the existing route as the person. A plan is
+  never created without that click, so a misread question costs a click, not a record.
 - Remove "Create plan" from `/planning` and send people to the chat; remove the workflow "Run"
   buttons and offer the same from chat; `/agents` stays a catalog and review screen.
   `/planning` redirects to `/decisions` once nothing is left on it.
@@ -105,8 +131,8 @@ mobile pass) before it is marked ready. "Rec" refers to the 13 recommendations f
 - **Rec 6**: the chat knows the page it is opened from ("Explain this decision"), has a stop
   button and retry, and keeps the conversation when closed.
 - **Rec 7**: the near-miss list gets "Try again with this change", which pre-fills the chat.
-- Done when: no page has a control that calls a model, and the chat can start every agent action
-  that used to live on a page.
+- Done when: no page has a control that calls a model, the chat can start every agent action
+  that used to live on a page, and there is a single input with no mode.
 - Needs your decision before it starts: whether `/planning` is deleted or kept as a redirect.
 
 ### D. Clearer words and progress (small-medium)  — Rec 8, 9
