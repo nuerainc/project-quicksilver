@@ -287,7 +287,7 @@ the security, observability and developer-experience groups below.
 | P-085 | The back-test passes a stable business and fails erratic revenue or too little history. | automated test | `onboard.test.ts` "back-test: a stable seasonal business passes; forecasts only use earlier months", "back-test: erratic revenue fails with reasons; too little history is not a pass" | covered | |
 | P-086 | The shadow-stage agent's proposals keep only citations from the graph. | automated test | `packages/agent/src/shadow-agent.test.ts` "proposals keep only citations that exist in the graph; uncited proposals are dropped"; `shadow-api.test.ts` "the shadow-stage agent proposes; departments it was not asked about are refused" | covered | |
 | P-087 | A department is ready for hand-over only with enough judged recommendations, enough agreement and no bad outcomes. | automated test | `shadow.test.ts` "a department with enough agreement and no bad outcomes is ready for hand-over; others say why not"; `simulation.test.ts` "a bad outcome recorded before the rules are met delays hand-over" | covered | Thresholds: 20 judged, 80% agreement |
-| P-088 | Live connectors (bookkeeping, payments, CRM, email) fill the graph with `OBSERVED` values. | automated test | `packages/aura/src/onboard.test.ts` "payments connector: reads charges, refunds, subscriptions and disputes into observations", "CRM connector: parses pipeline, win rate, deal size and sales cycle", "email connector: parses support volume, resolution time, sentiment and categories", "unified live connector pipeline: ingests multiple connector sources into intent graph" | missing | Tests cover CSV/JSON file parsing into OBSERVED graph variables, not live API sync. No provider OAuth/API-key credentials or vault wiring exist yet; file parsing does not satisfy the requirement's "live connectors" language. Sequenced last among remaining 0.9.0 work (see Shortest path, below); P-028 stays partial until this closes. |
+| P-088 | Live connectors (bookkeeping, payments, CRM, email) fill the graph with `OBSERVED` values. | automated test | `packages/aura/src/onboard.test.ts` "payments connector: reads charges, refunds, subscriptions and disputes into observations", "CRM connector: parses pipeline, win rate, deal size and sales cycle", "email connector: parses support volume, resolution time, sentiment and categories", "unified live connector pipeline: ingests multiple connector sources into intent graph"; `packages/aura/src/live-connectors.test.ts` (Stripe, HubSpot and QuickBooks Online readers against a scripted fake API: GET only, provider-host allow-list, paging and size limits, restricted-key rule, QuickBooks refresh-token rotation); `packages/host/src/live-connect.test.ts` (credential handling and token persistence) | partial | Read-only live connectors exist for payments (Stripe), CRM (HubSpot) and bookkeeping (QuickBooks Online, cash basis), run with `npm run onboard -- connect-live`. They have only been exercised against a fake API: no run against a real Stripe, HubSpot or QuickBooks account is recorded yet, and the provider credentials are supplied through environment variables on the founder's computer, not the vault. The support-inbox connector has no live source: Resend is an outbound/inbound mail channel (P-022), not a ticket system. Closes when a dated run against real accounts is recorded. |
 | P-089 | **Operational:** the Onboard pilot on Nuera meets the hand-over criteria for at least one department. | operational evidence | [Onboard pilot](onboard-pilot.md) | needs operational evidence | Criteria in section 5.2. Planned Jan–Feb 2027 |
 
 ### G. Operate mode
@@ -574,10 +574,13 @@ and end-to-end usability acceptance criteria.
 5. **Build the mode-critical missing pieces** that remain in scope after step
    4: effectful executors behind approval (P-095) and complete WAES
    live-provider calibration and evidence-quality evaluation (P-045).
-6. **Live connectors (P-088), deliberately last.** The product owner has
-   decided this closes after every other P-item above. P-028 (Integrations)
-   depends on it and stays partial until P-088 closes -- do not pull P-028
-   or P-088 forward ahead of this ordering.
+6. **Live connectors (P-088).** Originally sequenced last. On 2026-10-03 the
+   product owner chose Stripe, HubSpot, QuickBooks Online and Resend and
+   directed that live connectors proceed in parallel with the other items, so
+   this ordering no longer holds. Read-only Stripe, HubSpot and QuickBooks
+   connectors are built and tested against a fake API; P-088 closes when a
+   run against real accounts is recorded. P-028 (Integrations) stays partial
+   until then.
 
 ### Shortest path to 1.0.0 (with operational evidence)
 
