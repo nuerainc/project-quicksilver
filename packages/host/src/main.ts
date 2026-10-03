@@ -44,6 +44,7 @@ import { SanityShadowStore } from './shadow-store-sanity.ts'
 import { FileGenesisStore, MemoryGenesisStore, type GenesisApiDeps } from './genesis-api.ts'
 import { FileHostingAdapter, FileHostingStore, MemoryHostingStore } from './hosting.ts'
 import type { HostingApiDeps } from './hosting-api.ts'
+import { FileMediaStore, MediaService, MemoryMediaStore, parseMediaPolicy } from './media.ts'
 import { FileCommerceProposalStore, FilePendingPaymentStore, MemoryCommerceProposalStore, MemoryPendingPaymentStore } from './genesis-store.ts'
 import { SecretsVault, generateMasterKey } from './vault.ts'
 import { taskSetup } from './tasks-setup.ts'
@@ -234,6 +235,37 @@ function buildHosting(config: HostConfig, genesis: GenesisApiDeps | undefined, l
   }
 }
 
+/**
+ * P-025 media: on only when QUICKSILVER_MEDIA_CONFIG names a policy file (budget, per-request caps,
+ * retention, allowed kinds, blocked terms; see deploy/media/media.example.json). No real provider
+ * ships: until an adapter that implements the media contract is registered here, status works and
+ * every request is refused with "no provider". Bytes and provenance sit next to the Genesis data.
+ */
+function buildMedia(config: HostConfig, log: Logger): MediaService | undefined {
+  const file = process.env.QUICKSILVER_MEDIA_CONFIG
+  if (!file) return undefined
+  const path = resolve(baseDir, file)
+  if (!existsSync(path)) {
+    log.error('QUICKSILVER_MEDIA_CONFIG names a file that does not exist; the media routes are off', { path })
+    return undefined
+  }
+  const parsed = parseMediaPolicy(JSON.parse(readFileSync(path, 'utf8')))
+  if (!parsed.ok) {
+    log.error('the media policy is invalid; the media routes are off', { path, errors: parsed.errors })
+    return undefined
+  }
+  const dir = process.env.QUICKSILVER_MEDIA_DIR
+    ? resolve(baseDir, process.env.QUICKSILVER_MEDIA_DIR)
+    : config.store.kind === 'file' ? join(dirname(config.store.path), 'genesis') : undefined
+  if (!dir) log.warn('media bytes and provenance are kept in memory; use a file store or QUICKSILVER_MEDIA_DIR to keep them')
+  log.warn('no media provider is registered; media requests are refused until a provider adapter is added')
+  return new MediaService({
+    store: dir ? new FileMediaStore(dir, config.tenantId) : new MemoryMediaStore(config.tenantId),
+    policy: parsed.policy,
+    providers: [],
+  })
+}
+
 async function buildAgentRunner(log: Logger): Promise<AgentRunner | undefined> {
   if (!process.env.SANITY_CONTEXT_MCP_URL || !process.env.SANITY_CONTEXT_TOKEN) {
     log.warn('Sanity Context MCP is not configured; agent steps will fail closed')
@@ -352,6 +384,7 @@ async function main(): Promise<void> {
   const shadow = await buildShadow(config, log, intent)
   const genesis = await buildGenesis(config, log)
   const hosting = buildHosting(config, genesis, log)
+  const media = buildMedia(config, log)
   const tasks = taskSetup(config, { baseDir })
   for (const note of tasks.notes) log.warn(note)
   const host = new QuicksilverHost(config, {
@@ -365,6 +398,7 @@ async function main(): Promise<void> {
     decisions: await buildDecisions(config, shadow),
     genesis,
     ...(hosting ? { hosting } : {}),
+    ...(media ? { media } : {}),
     tasks: {
       store: tasks.store,
       clients: tasks.clients,

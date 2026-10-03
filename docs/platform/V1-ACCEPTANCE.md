@@ -11,7 +11,7 @@ exists so the acceptance question ("is every in-scope item mapped to
 evidence?") has one direct answer instead of requiring a full read of the
 register.
 
-**As of 2026-10-02:** 85 covered, 9 needing operational evidence, 27 partial, 2 missing (123 total).
+**As of 2026-10-02:** 85 covered, 9 needing operational evidence, 28 partial, 1 missing (123 total).
 
 ## Automated evidence (every P-001–P-123 row)
 
@@ -45,7 +45,7 @@ claimed for that row at this status.
 | P-022 | partial | `packages/operator/src/channels` (`channels.test.ts`, M8 part 4): Telegram, Slack, Discord, SMS and email adapters; pairing, allowlists, one memory per person, approvals in the chat |
 | P-023 | partial | Sandboxed backends: `packages/operator` local and Docker sandboxes, `operator.test.ts` "sandbox: …", "docker sandbox: …" (M8 part 1); hosting templates (P-014) |
 | P-024 | partial | `packages/operator/src/web-search.ts` Brave public web search provider, read-only `web_search` and bounded multi-query `deep_research` evidence tools; `web-search.test.ts` covers citation normalization/deduplication, query coverage, partial failures, key handling, limits, error redaction, timeout and cancellation |
-| P-025 | missing | — |
+| P-025 | partial | `packages/host/src/media.test.ts` (versioned contract, moderation that fails closed, per-request and total cost caps, retention and purge, hash-chained provenance, HTTP routes; no real provider registered) |
 | P-026 | partial | `packages/host/src/hosting.test.ts` (static-only lint, immutable digest-pinned releases, human-only publish behind the WAES review gate, rollback, teardown, automatic teardown when an experiment ends, reconcile) |
 | P-027 | partial | `packages/host/src/genesis-payment-webhook.test.ts` "end to end (default): a Stripe-signed delivery through the running host lands in pending; a human confirms it into the ledger", "end to end (autoRecordPaymentWebhooks: true): the delivery is recorded straight into the ledger, once", "mapStripeEvent: …", "sink: concurrent deliveries of the same payment still record it once"; `triggers.test.ts` "Webhook (stripe scheme): …"; `genesis-commerce.test.ts` (test-mode product/price/payment-link creation behind human approval and the WAES gate) |
 | P-028 | partial | MCP server: `packages/host/src/mcp-tasks.test.ts` "MCP tool calls return the same results as the HTTP API"; MCP client: the Sanity Context MCP path (`contracts.test.ts`); CSV connector: P-083 |
@@ -183,7 +183,6 @@ release gate, per [V1-SCOPE.md](../V1-SCOPE.md#release-evidence-categories):
 
 | ID | Requirement | Note |
 |---|---|---|
-| P-025 | Media: image, video, speech, transcription, diagrams, image understanding. | — |
 | P-088 | Live connectors (bookkeeping, payments, CRM, email) fill the graph with `OBSERVED` values. | Tests cover CSV/JSON file parsing into OBSERVED graph variables, not live API sync. No provider OAuth/API-key credentials or vault wiring exist yet; file parsing does not satisfy the requirement's "live connectors" language. Sequenced last among remaining 0.9.0 work (see Shortest path, below); P-028 stays partial until this closes. |
 
 ## Keeping this map honest

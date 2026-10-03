@@ -27,7 +27,7 @@ import type { Permission } from '@quicksilver/kernel/identity'
  * - `tasks`: task submission keeps its own per-client bucket (`tasks.rateLimit`).
  */
 
-export type HostRouteFeature = 'intent' | 'shadow' | 'genesis' | 'decisions' | 'tasks' | 'vault' | 'hosting'
+export type HostRouteFeature = 'intent' | 'shadow' | 'genesis' | 'decisions' | 'tasks' | 'vault' | 'hosting' | 'media'
 export type HostRateLimitClass = 'write' | 'model' | 'webhook' | 'tasks'
 
 export type HostRouteAccess =
@@ -119,6 +119,16 @@ export const HOST_ROUTES: readonly HostRoute[] = Object.freeze<HostRoute[]>([
   { method: 'POST', path: '/api/hosting/sites/:id/releases/:version/publish', feature: 'hosting', rateLimit: 'write', access: anyOf('intent:provide') },
   { method: 'POST', path: '/api/hosting/sites/:id/teardown', feature: 'hosting', rateLimit: 'write', access: anyOf('intent:provide') },
   { method: 'POST', path: '/api/hosting/reconcile', feature: 'hosting', rateLimit: 'write', access: anyOf('intent:provide') },
+
+  // P-025 media: a request runs within the cost cap and moderation; delete and purge are humans-only in the handler.
+  { method: 'GET', path: '/api/media', feature: 'media', access: anyOf('decision:read') },
+  { method: 'POST', path: '/api/media/requests', feature: 'media', rateLimit: 'write', access: anyOf('intent:provide', 'decision:propose') },
+  { method: 'GET', path: '/api/media/assets', feature: 'media', access: anyOf('decision:read') },
+  { method: 'GET', path: '/api/media/assets/:id', feature: 'media', access: anyOf('decision:read') },
+  { method: 'GET', path: '/api/media/assets/:id/content', feature: 'media', access: anyOf('decision:read') },
+  { method: 'POST', path: '/api/media/assets/:id/delete', feature: 'media', rateLimit: 'write', access: anyOf('intent:provide') },
+  { method: 'POST', path: '/api/media/purge', feature: 'media', rateLimit: 'write', access: anyOf('intent:provide') },
+  { method: 'GET', path: '/api/media/provenance', feature: 'media', access: anyOf('decision:read') },
 
   // ── Runs ──
   { method: 'GET', path: '/api/runs', access: anyOf('run:read') },

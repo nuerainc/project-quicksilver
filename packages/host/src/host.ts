@@ -26,6 +26,8 @@ import { SecretsVault, VaultError } from './vault.ts'
 import { handleIntentRoute, type IntentApiDeps } from './intent-api.ts'
 import { handleShadowRoute, type ShadowApiDeps } from './shadow-api.ts'
 import { handleGenesisRoute, withLock, type GenesisApiDeps } from './genesis-api.ts'
+import { handleMediaRoute } from './media-api.ts'
+import type { MediaService } from './media.ts'
 import { handleHostingRoute, teardownSitesForExperiment, type HostingApiDeps } from './hosting-api.ts'
 import { genesisPaymentWebhookSink } from './genesis-payment-webhook.ts'
 import { COMMERCE_KEY_VAULT_NAME, createStripeCommerceClient, type StripeCommerceClient } from './genesis-commerce.ts'
@@ -72,6 +74,8 @@ export interface HostDependencies {
   genesis?: GenesisApiDeps
   /** P-026 experiment hosting. Needs `genesis` too (its review gate and experiments). Routes return 404 when either is absent. */
   hosting?: HostingApiDeps
+  /** P-025 media: requests within a cost cap, moderation, retention and provenance. Routes return 404 when absent. */
+  media?: MediaService
   /** Aura decision journal: decisions the provider logs, plus judged shadow verdicts. Routes return 404 when absent. */
   decisions?: DecisionApiDeps
   /**
@@ -82,6 +86,8 @@ export interface HostDependencies {
 }
 
 const HOSTING_BODY_BYTES = 8 * 1024 * 1024
+/** A media request can carry up to 10 MiB of audio or image as base64 (about 13.4 MiB). */
+const MEDIA_BODY_BYTES = 16 * 1024 * 1024
 
 const CONSOLE_HEADERS = {
   'content-security-policy': "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; img-src 'self'; form-action 'none'; base-uri 'none'; frame-ancestors 'none'",
@@ -578,6 +584,26 @@ export class QuicksilverHost {
       if (handled) return handled
     }
 
+    // Media (P-025): requests run within the cost cap and moderation
+    if (parts[1] === 'media' && this.deps.media) {
+      const can = (p: Permission) => this.access.authorize(principal, p, { tenantId: this.config.tenantId, kind: 'media', id: 'media' })
+      const needAny = (...ps: Permission[]) => {
+        const ds = ps.map(can)
+        return ds.some((d) => d.allowed) ? undefined : { status: 403, body: { error: ds[0]!.reasons.join(' ') } }
+      }
+      const handled = await handleMediaRoute({
+        method, parts, principal: { id: principal.id, kind: principal.kind }, media: this.deps.media,
+        needRead: () => needAny('decision:read'),
+        needRequest: () => needAny('intent:provide', 'decision:propose'),
+        humanOnly: (what) => needAny('intent:provide') ?? (principal.kind === 'human' ? undefined : { status: 403, body: { error: `Only a human ${what}.` } }),
+        bodyOf: async () => {
+          const body = await readJson(req, Math.max(this.config.http.maxBodyBytes, MEDIA_BODY_BYTES))
+          return body.ok ? { ok: true as const, value: (body.value ?? {}) as Record<string, unknown> } : { ok: false as const, res: { status: body.status, body: { error: body.error } } }
+        },
+      })
+      if (handled) return handled
+    }
+
     // Runs
     if (path === '/api/runs' && method === 'GET') {
       const denied = this.authorize(principal, 'run:read')
@@ -764,6 +790,7 @@ export class QuicksilverHost {
     if (feature === 'vault') return !!this.vault
     if (feature === 'tasks') return !!this.tasks
     if (feature === 'hosting') return !!this.deps.hosting && !!this.deps.genesis
+    if (feature === 'media') return !!this.deps.media
     return !!this.deps[feature]
   }
 
