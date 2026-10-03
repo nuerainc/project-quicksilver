@@ -373,7 +373,7 @@
           }
         },
         "requestBody": {
-          "$ref": "#/components/requestBodies/JsonObject"
+          "$ref": "#/components/requestBodies/DecisionActionRequest"
         },
         "parameters": [
           {
@@ -409,7 +409,7 @@
           }
         },
         "requestBody": {
-          "$ref": "#/components/requestBodies/JsonObject"
+          "$ref": "#/components/requestBodies/ExecuteDecisionRequest"
         },
         "parameters": [
           {
@@ -445,7 +445,7 @@
           }
         },
         "requestBody": {
-          "$ref": "#/components/requestBodies/JsonObject"
+          "$ref": "#/components/requestBodies/EmptyRequest"
         },
         "parameters": [
           {
@@ -481,7 +481,7 @@
           }
         },
         "requestBody": {
-          "$ref": "#/components/requestBodies/JsonObject"
+          "$ref": "#/components/requestBodies/EmptyRequest"
         },
         "parameters": [
           {
@@ -517,7 +517,7 @@
           }
         },
         "requestBody": {
-          "$ref": "#/components/requestBodies/JsonObject"
+          "$ref": "#/components/requestBodies/RollbackDecisionRequest"
         },
         "parameters": [
           {
@@ -669,7 +669,7 @@
           }
         },
         "requestBody": {
-          "$ref": "#/components/requestBodies/JsonObject"
+          "$ref": "#/components/requestBodies/PlanRequest"
         }
       }
     },
@@ -700,7 +700,7 @@
           }
         },
         "requestBody": {
-          "$ref": "#/components/requestBodies/JsonObject"
+          "$ref": "#/components/requestBodies/QueryRequest"
         }
       }
     },
@@ -773,7 +773,7 @@
           "303": { "description": "The server-side session is revoked and the browser cookie is cleared." },
           "503": { "$ref": "#/components/responses/ErrorResponse" }
         },
-        "requestBody": { "$ref": "#/components/requestBodies/JsonObject" }
+        "requestBody": { "$ref": "#/components/requestBodies/EmptyRequest" }
       }
     },
     "/api/whoami": {
@@ -876,7 +876,7 @@
           }
         },
         "requestBody": {
-          "$ref": "#/components/requestBodies/JsonObject"
+          "$ref": "#/components/requestBodies/CreateWorkflowDraftRequest"
         }
       }
     },
@@ -907,7 +907,7 @@
           }
         },
         "requestBody": {
-          "$ref": "#/components/requestBodies/JsonObject"
+          "$ref": "#/components/requestBodies/WorkflowVersionAction"
         }
       }
     },
@@ -1009,7 +1009,7 @@
           }
         },
         "requestBody": {
-          "$ref": "#/components/requestBodies/JsonObject"
+          "$ref": "#/components/requestBodies/WorkflowVersionAction"
         }
       }
     },
@@ -1040,7 +1040,7 @@
           }
         },
         "requestBody": {
-          "$ref": "#/components/requestBodies/JsonObject"
+          "$ref": "#/components/requestBodies/ReviewWorkflowRequest"
         }
       }
     },
@@ -1071,7 +1071,7 @@
           }
         },
         "requestBody": {
-          "$ref": "#/components/requestBodies/JsonObject"
+          "$ref": "#/components/requestBodies/WorkflowVersionAction"
         }
       }
     },
@@ -1236,6 +1236,60 @@
           "sources": { "type": "array", "items": { "type": "object", "required": ["id", "status"], "properties": { "id": { "type": "string", "enum": ["decisions", "workflows", "agents", "traces"] }, "status": { "type": "string", "enum": ["ok", "unavailable", "skipped"] }, "reason": { "type": "string" } } } },
           "counts": { "type": "object", "required": ["actionable", "other", "complete"], "properties": { "actionable": { "type": "integer" }, "other": { "type": "integer" }, "complete": { "type": "boolean", "description": "False when a source could not be checked, so a zero is not a clean bill." } } }
         }
+      },
+      "DecisionActionRequest": {
+        "type": "object",
+        "required": ["action"],
+        "additionalProperties": false,
+        "properties": {
+          "action": { "type": "string", "enum": ["approve", "reject", "request-evidence"] },
+          "comment": { "type": "string", "description": "A written reason. Required, at least 20 characters, when the only operator approves their own request." },
+          "expectedActionFingerprint": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$", "description": "Required for approve. The action and policy version the approver reviewed; a different current value is refused with 409." }
+        }
+      },
+      "ExecuteDecisionRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "inject": { "type": "string", "enum": ["success", "failure", "deviation"], "description": "Fault injection for tests. Refused with 403 unless QUICKSILVER_ALLOW_FAULT_INJECTION is on and the environment is not production." }
+        }
+      },
+      "RollbackDecisionRequest": {
+        "type": "object",
+        "properties": { "summary": { "type": "string", "description": "Why the decision should be rolled back." } }
+      },
+      "PlanRequest": {
+        "type": "object",
+        "required": ["objective"],
+        "properties": { "objective": { "type": "string", "minLength": 3, "maxLength": 2000 } }
+      },
+      "QueryRequest": {
+        "type": "object",
+        "required": ["question"],
+        "properties": { "question": { "type": "string", "minLength": 1 } }
+      },
+      "EmptyRequest": {
+        "type": "object",
+        "maxProperties": 0,
+        "description": "This operation takes no body. Anything sent is ignored."
+      },
+      "CreateWorkflowDraftRequest": {
+        "type": "object",
+        "required": ["graph"],
+        "additionalProperties": false,
+        "properties": { "graph": { "$ref": "#/components/schemas/WorkflowGraph" } }
+      },
+      "WorkflowVersionAction": {
+        "type": "object",
+        "required": ["workflowId", "version"],
+        "additionalProperties": false,
+        "properties": { "workflowId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$" }, "version": { "type": "integer", "minimum": 1 } }
+      },
+      "ReviewWorkflowRequest": {
+        "type": "object",
+        "required": ["workflowId", "version", "note"],
+        "additionalProperties": false,
+        "properties": { "workflowId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$" }, "version": { "type": "integer", "minimum": 1 }, "note": { "type": "string", "minLength": 10, "maxLength": 500 } }
       },
       "ChatRequest": {
         "type": "object",
@@ -2175,6 +2229,15 @@
       }
     },
     "requestBodies": {
+      "DecisionActionRequest": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/DecisionActionRequest" } } } },
+      "ExecuteDecisionRequest": { "required": false, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ExecuteDecisionRequest" } } } },
+      "RollbackDecisionRequest": { "required": false, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/RollbackDecisionRequest" } } } },
+      "PlanRequest": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PlanRequest" } } } },
+      "QueryRequest": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/QueryRequest" } } } },
+      "EmptyRequest": { "required": false, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/EmptyRequest" } } } },
+      "CreateWorkflowDraftRequest": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CreateWorkflowDraftRequest" } } } },
+      "WorkflowVersionAction": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/WorkflowVersionAction" } } } },
+      "ReviewWorkflowRequest": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ReviewWorkflowRequest" } } } },
       "ChatRequest": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ChatRequest" } } } },
       "JsonObject": {
         "content": {

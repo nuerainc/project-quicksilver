@@ -411,3 +411,9 @@ test('cross-site check (A-3): middleware refuses before any route handler, with 
   const page = middleware(new NextRequest('http://localhost:3000/', { method: 'GET' }))
   assert.equal(page.status, 200)
 })
+
+test('no operation uses the generic JSON object as its request body', () => {
+  const contract = JSON.parse(readFileSync(new URL('../../../docs/api/openapi.json', import.meta.url), 'utf8')) as { paths: Record<string, Record<string, { operationId?: string; requestBody?: { $ref?: string } }>> }
+  const generic = Object.entries(contract.paths).flatMap(([path, methods]) => Object.entries(methods).filter(([, op]) => op.requestBody?.$ref === '#/components/requestBodies/JsonObject').map(([method]) => `${method.toUpperCase()} ${path}`))
+  assert.deepEqual(generic, [], 'give each write operation a real request schema')
+})
