@@ -1,0 +1,9 @@
+{
+  "budgetUsd": 50,
+  "autoMaxUsd": 0.5,
+  "maxRequestUsd": 5,
+  "defaultRetentionDays": 30,
+  "maxRetentionDays": 365,
+  "allowedKinds": ["image-generation", "speech", "transcription", "diagram", "image-understanding"],
+  "blockedTerms": []
+}
