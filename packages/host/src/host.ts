@@ -1,5 +1,5 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import type { AddressInfo } from 'node:net'
 import { dirname, join } from 'node:path'
 
@@ -165,9 +165,14 @@ export class QuicksilverHost {
     this.hostPrincipal = { id: HOST_PRINCIPAL_ID, kind: 'service', tenantId: config.tenantId, roles: ['host-runtime'] }
 
     const store = deps.store ?? new InMemoryWorkflowRunStore()
+    // Published workflows are kept per tenant. A file shared by tenants would be overwritten by whichever wrote last,
+    // and a tenant that started after another published would run the other's workflow.
     this.publications = deps.publicationStore ?? (config.store.kind === 'file'
-      ? new FileWorkflowPublicationStore(join(dirname(config.store.path), 'workflow-publications.json'))
+      ? new FileWorkflowPublicationStore(join(dirname(config.store.path), config.tenantId, 'workflow-publications.json'))
       : new InMemoryWorkflowPublicationStore())
+    if (!deps.publicationStore && config.store.kind === 'file' && existsSync(join(dirname(config.store.path), 'workflow-publications.json'))) {
+      this.log.warn('a workflow-publications.json from before publications were kept per tenant sits in the store directory and is ignored, because it does not say which tenant owns it; move it to <tenant>/workflow-publications.json for the tenant that published its workflows', { tenantId: config.tenantId })
+    }
     const authorizationSecret = (deps.env ?? process.env)[config.execution.authorizationKeyEnv]
     const authorizationKey: AuthorizationSigningKey | undefined = authorizationSecret
       ? { keyId: `${config.tenantId}:${config.worker.id}`, secret: authorizationSecret }
