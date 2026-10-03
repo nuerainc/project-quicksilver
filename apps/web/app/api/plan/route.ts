@@ -177,11 +177,13 @@ function buildDecisionDoc(args: {
   evaluation: EvaluationResult
   safetyDecision: 'ALLOW' | 'BLOCK' | 'ESCALATE'
   review: ReviewResult | null
+  /** The kernel's explanation, kept so the decision page can show it later. */
+  why: DecisionWhy | null
   policySnapshotVersion: string
   requestedBy: string
   now: string
 }) {
-  const { id, objective, constraints, reasoning, action, refs, decision, evaluation, safetyDecision, review, policySnapshotVersion: policyVersion, requestedBy, now } = args
+  const { id, objective, constraints, reasoning, action, refs, decision, evaluation, safetyDecision, review, why, policySnapshotVersion: policyVersion, requestedBy, now } = args
 
   // The kernel reports conflicts per shared scope as text; mark every applicable
   // policy in a shared scope as `conflicts` in the per-policy audit rows.
@@ -226,6 +228,7 @@ function buildDecisionDoc(args: {
       }
     }),
     policyResolutions: decision.policyResolutions ?? [],
+    ...(why ? { why } : {}),
     riskLevel: decision.riskLevel,
     requiredApproval: decision.requiresApproval,
     policySnapshotVersion: policyVersion,
@@ -423,6 +426,7 @@ export async function POST(req: Request) {
             evaluation: governed.evaluation,
             safetyDecision: governed.safetyDecision,
             review,
+            why,
             // Snapshot the revisions of the policies the decision's rows name, as
             // the execute and approval routes recompute it from those rows.
             policySnapshotVersion: policySnapshotVersion(
