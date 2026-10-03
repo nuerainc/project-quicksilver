@@ -58,7 +58,7 @@ Set these for the **Production** environment only, then redeploy.
 | `OIDC_CLIENT_ID` | Google: the Client ID. Entra: the Application (client) ID |
 | `OIDC_CLIENT_SECRET` | the client secret (Entra: the secret **Value**); mark it Sensitive. At least 8 characters |
 | `OIDC_REDIRECT_URI` | the exact callback URL from step 1 |
-| `QUICKSILVER_TENANT_ID` | the tenant id the principals belong to, for example `nuera` |
+| `QUICKSILVER_TENANT_ID` | Only if it is already set: leave it as it is. If it is not set the web app uses the tenant `default`; do **not** add it just for sign-in, because data already saved under `default` would no longer be found |
 | `QUICKSILVER_OIDC_USERS` | the allowlist (step 3) |
 
 Never put the client secret in a chat, a ticket or the repository.
@@ -71,7 +71,7 @@ Never put the client secret in a chat, a ticket or the repository.
 [
   { "issuer": "<the same value as OIDC_ISSUER>",
     "subject": "<the person's subject>",
-    "tenantId": "nuera",
+    "tenantId": "<the value of QUICKSILVER_TENANT_ID, or default if it is not set>",
     "principalId": "entity-founder",
     "roles": ["viewer"],
     "displayName": "Founder" }
