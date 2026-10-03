@@ -1,4 +1,4 @@
-import { test } from 'node:test'
+import { mock, test } from 'node:test'
 import assert from 'node:assert/strict'
 import { generateKeyPairSync } from 'node:crypto'
 import { randomUUID } from 'node:crypto'
@@ -168,4 +168,50 @@ test('OIDC start refuses insecure configuration and never accepts an external re
   const completed = await completeOidcLogin(new Request(`https://app.example.test/api/auth/oidc/callback?code=x&state=${state}`, { headers: { cookie: `${OIDC_LOGIN_COOKIE}=${bindingValue}` } }), env, deps)
   assert.equal(new URL(completed.headers.get('location')!).origin, 'https://app.example.test')
   assert.equal(new URL(completed.headers.get('location')!).pathname, '/')
+})
+
+test('a verified login that is not on the allowlist is refused and logged with its issuer and subject, and nothing else', async () => {
+  const warn = mock.method(console, 'warn', () => {})
+  const error = mock.method(console, 'error', () => {})
+  try {
+    const login = async (users: string | undefined) => {
+      const { deps, env, store } = await setup()
+      const withUsers = { ...env, QUICKSILVER_OIDC_USERS: users } as OidcBrowserEnv
+      const started = await startFlow(deps, withUsers)
+      const state = started.authorization.searchParams.get('state')!
+      const response = await completeOidcLogin(new Request(`https://app.example.test/api/auth/oidc/callback?code=the-auth-code&state=${state}`, { headers: { cookie: `${OIDC_LOGIN_COOKIE}=${started.bindingValue}` } }), withUsers, deps)
+      return { response, store }
+    }
+
+    // Someone else is on the allowlist: this person is verified but unmapped.
+    const other = JSON.stringify([{ issuer: ISSUER, subject: 'someone-else', tenantId: TENANT, principalId: 'person-other', roles: ['viewer'] }])
+    const unmapped = await login(other)
+    assert.equal(unmapped.response.headers.get('location'), 'https://app.example.test/?auth=failed')
+    assert.equal(unmapped.store.sessions.size, 0, 'no session is created')
+    assert.ok(!(unmapped.response.headers.get('set-cookie') ?? '').includes(OIDC_SESSION_COOKIE), 'no session cookie is set')
+    const lines = warn.mock.calls.map((c) => c.arguments.map(String).join(' '))
+    assert.equal(lines.length, 1)
+    assert.match(lines[0]!, /^\[oidc\] login refused: identity is not on the allowlist /)
+    const logged = JSON.parse(lines[0]!.slice(lines[0]!.indexOf('{')))
+    assert.deepEqual(logged, { reason: 'unmapped', issuer: ISSUER, subject: 'user-123' })
+    for (const secret of ['the-auth-code', 'client-secret-long-enough', 'eyJ', 'Owner']) {
+      assert.ok(!lines[0]!.includes(secret), `the log line never contains ${secret}`)
+    }
+
+    // An allowlist that fails to parse is reported as misconfigured, not as an unknown person.
+    warn.mock.resetCalls()
+    const broken = await login('not json')
+    assert.equal(broken.response.headers.get('location'), 'https://app.example.test/?auth=failed')
+    assert.equal(JSON.parse(warn.mock.calls[0]!.arguments.join(' ').slice(warn.mock.calls[0]!.arguments.join(' ').indexOf('{'))).reason, 'misconfigured')
+
+    // A person who is on the allowlist logs nothing.
+    warn.mock.resetCalls()
+    const mapped = await login(binding(['viewer']))
+    assert.equal(mapped.response.status, 303)
+    assert.equal(mapped.store.sessions.size, 1)
+    assert.equal(warn.mock.calls.length, 0)
+  } finally {
+    warn.mock.restore()
+    error.mock.restore()
+  }
 })
