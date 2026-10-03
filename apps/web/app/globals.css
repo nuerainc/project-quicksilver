@@ -133,8 +133,8 @@ body:has(.app-topbar) > #main-content { min-height: 100dvh; margin-inline-start:
 }
 
 .app-brand__copy { display: grid; gap: 0.18rem; min-width: 0; }
-.app-brand__name { font-size: 0.96rem; font-weight: 680; letter-spacing: -0.025em; white-space: nowrap; }
-.app-brand__tagline { color: var(--muted); font-size: 0.7rem; white-space: nowrap; }
+.app-brand__name { overflow: hidden; text-overflow: ellipsis; font-size: 0.96rem; font-weight: 680; letter-spacing: -0.025em; white-space: nowrap; }
+.app-brand__tagline { overflow: hidden; text-overflow: ellipsis; color: var(--muted); font-size: 0.7rem; white-space: nowrap; }
 
 .app-primary-nav { min-width: 0; }
 .app-primary-nav--desktop { display: grid; align-content: start; gap: 1.65rem; }
@@ -175,6 +175,9 @@ body:has(.app-topbar) > #main-content { min-height: 100dvh; margin-inline-start:
 .app-nav-link[aria-current='page'] .app-nav-link__indicator { background: var(--brand); box-shadow: 0 0 0 0.2rem rgb(105 201 193 / 0.12); }
 
 .app-mobile-menu { display: none; position: relative; }
+.app-topbar .app-bell--mobile { display: none; }
+.app-topbar .app-bell--sidebar { display: flex; width: 100%; }
+.app-topbar[data-collapsed='true'] .app-bell--sidebar [data-bell-label] { display: none; }
 .app-mobile-menu__summary {
   display: flex;
   min-height: 2.8rem;
@@ -461,6 +464,9 @@ body:has(.app-topbar) > #main-content { min-height: 100dvh; margin-inline-start:
   body:has(.app-topbar) > #main-content { margin-inline-start: 0; }
   .app-primary-nav--desktop { display: none; }
   .app-mobile-menu { display: block; }
+  .app-topbar .app-sidebar-collapse { display: none; }
+  .app-topbar .app-bell--sidebar { display: none; }
+  .app-topbar .app-bell--mobile { display: inline-flex; margin-inline-start: auto; }
   .app-command-trigger:not(.app-command-trigger--mobile) { display: none; }
   .app-command-trigger--mobile { display: flex; margin-top: 0.5rem; }
   /* The sign-in control lives in the menu panel on small screens; the top bar has no room for a second one. */
@@ -469,6 +475,8 @@ body:has(.app-topbar) > #main-content { min-height: 100dvh; margin-inline-start:
 
 @media (max-width: 38rem) {
   .app-topbar__inner, .app-main { width: min(100% - 1.5rem, 88rem); }
+  /* Room for the bell beside the menu button: the mark is enough on a phone. */
+  .app-topbar .app-brand__copy, .app-topbar[data-collapsed='true'] .app-brand__copy { display: none; }
   .app-brand__mark { width: 2.35rem; border-radius: 0.72rem; }
   .app-brand__name { font-size: 0.88rem; }
   .app-mobile-menu__panel { position: fixed; inset-block-start: 4.5rem; inset-inline: 0.75rem; width: auto; max-height: calc(100dvh - 5.25rem); overflow-y: auto; }

@@ -1,0 +1,20 @@
+.wrap { position: relative; display: inline-flex; }
+.bell { position: relative; display: grid; width: 2.2rem; min-height: 2.2rem; flex: 0 0 auto; place-items: center; border: 1px solid transparent; border-radius: 0.55rem; background: transparent; color: #9fb1c4; font: 600 1.05rem/1 var(--font-sans); cursor: pointer; }
+.bell:hover, .bell[aria-expanded='true'] { border-color: #30455b; background: rgb(255 255 255 / 0.05); color: #e7eef7; }
+.bell:focus-visible { outline: 3px solid #a8e4ff; outline-offset: 2px; }
+.row { display: flex; align-items: center; width: 100%; justify-content: flex-start; gap: 0.6rem; padding: 0.25rem 0.75rem; min-height: 2.5rem; color: #c5d2e0; font-size: 0.9rem; }
+.rowLabel { font: 650 0.88rem/1 var(--font-sans); }
+.row .badge { position: static; margin-inline-start: auto; }
+.badge { position: absolute; inset-block-start: -0.2rem; inset-inline-end: -0.25rem; min-width: 1.1rem; border-radius: 999px; background: #e9b44c; padding: 0.05rem 0.28rem; color: #1b1405; font: 800 0.66rem/1.25 var(--font-sans); text-align: center; }
+.badge[data-incomplete='true'] { background: #c9d4e0; }
+.panel { position: fixed; z-index: 80; inset-block-start: 4.25rem; inset-inline-start: 0.75rem; width: min(27rem, calc(100vw - 1.5rem)); max-height: min(36rem, calc(100dvh - 5.5rem)); overflow-y: auto; border: 1px solid #30455b; border-radius: 1rem; background: #101b2c; padding: 0.9rem; box-shadow: 0 24px 70px rgb(0 0 0 / 0.5); color: #e7eef7; font-family: var(--font-sans); }
+.panelHead { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; margin: 0 0 0.6rem; }
+.panelHead h2 { margin: 0; color: #edf4fa; font-size: 1rem; font-weight: 660; }
+.close { min-height: 2.5rem; min-width: 2.5rem; border: 1px solid #354a60; border-radius: 0.6rem; background: #162538; color: #dbe6f1; font: 650 0.8rem/1 var(--font-sans); cursor: pointer; }
+.close:focus-visible { outline: 2px solid #a8e4ff; outline-offset: 2px; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+@media (pointer: coarse) { .bell { width: 2.75rem; min-height: 2.75rem; } }
+
+/* Beside the sidebar on desktop, so the bell row stays clickable; at the top on phones. Declared after .panel so it wins. */
+.panelBeside { inset-block-start: 5rem; inset-inline-start: 17rem; }
+@media (max-width: 58rem) { .panelBeside { inset-block-start: 4.25rem; inset-inline-start: 0.75rem; } }

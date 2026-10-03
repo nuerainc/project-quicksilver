@@ -8,6 +8,8 @@ import { chatRequest, type ChatMode } from '@/lib/chat-request'
 import { businessAgentContext } from '@/lib/business-agent-context'
 import type { BusinessAgentKey } from '@quicksilver/agent'
 import type { BusinessAgentChoice } from '@/lib/business-agent-request'
+import { usePathname } from 'next/navigation'
+import { signInPageHref } from '@/lib/session-control'
 import { AttentionList } from '@/components/attention-list'
 import styles from './agent-chat-widget.module.css'
 
@@ -64,6 +66,7 @@ type PlanChatResponse = {
 }
 
 export function AgentChatWidget() {
+  const pathname = usePathname() ?? '/'
   const [open, setOpen] = useState(false)
   const [expanded, setExpanded] = useState(false)
   const [tokenPresent, setTokenPresent] = useState(false)
@@ -286,7 +289,7 @@ export function AgentChatWidget() {
             ) : (
               <div className={styles.signInPrompt}>
             <p>Sign in to chat with Quicksilver about your business.</p>
-                <Link href="/planning#console-token" onClick={() => setOpen(false)}>Go to sign in</Link>
+                <Link href={signInPageHref(pathname)} onClick={() => setOpen(false)}>Sign in</Link>
               </div>
             )}
             <p className={styles.footerHint}>{mode === 'ask' ? 'Ask · read-only · NQC-evaluated' : mode === 'plan' ? 'Plan · proposals require review and approval' : 'Work · specialist proposals only · external actions stay gated'}</p>

@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { AttentionList } from '@/components/attention-list'
 import { useCallback, useEffect, useState } from 'react'
 import { authFailureMessage, consoleHeaders, resolveConsoleAccess, type ConsoleAccess, type ConsoleRoute } from '@/lib/console-auth'
 import type { BusinessOverview, FinanceOverview } from '@/lib/business-dashboard'
@@ -66,13 +67,11 @@ export function BusinessDashboard() {
   useEffect(() => { void resolveConsoleAccess().then(setAccess) }, [])
   useEffect(() => { if (access?.signedIn) void refresh(access) }, [refresh, access])
 
-  const hasSomeData = Boolean(overview || workflowData)
   const runs = workflowData?.executions ?? []
   const succeeded = runs.filter((run) => run.status === 'succeeded').length
   const successRate = runs.length ? Math.round((succeeded / runs.length) * 100) : null
   const pending = overview?.decisionCounts.awaitingApproval ?? 0
   const activeExperiments = overview?.experiments.filter((experiment) => experiment.status === 'running') ?? []
-  const attentionRuns = runs.filter((run) => run.status !== 'succeeded')
 
   return (
     <main className="app-main qs-business-dashboard">
@@ -91,8 +90,8 @@ export function BusinessDashboard() {
       </header>
 
       {access !== null && !signedIn && <section className="qs-dashboard-signin" aria-labelledby="dashboard-signin-title">
-        <div><p className="qs-eyebrow">Sign in to load your business data</p><h2 id="dashboard-signin-title">Your operating picture is private to your principal.</h2><p>Use the planning workspace to sign in. This overview reads existing decision, workflow, metric, experiment, and ledger records; it does not create activity or estimate missing values.</p></div>
-        <Link className="qs-action-primary" href="/planning#console-token">Open sign-in</Link>
+        <div><p className="qs-eyebrow">Sign in to load your business data</p><h2 id="dashboard-signin-title">Your operating picture is private to your principal.</h2><p>Sign in to load it. This overview reads existing decision, workflow, metric, experiment, and ledger records; it does not create activity or estimate missing values.</p></div>
+        <Link className="qs-action-primary" href="/sign-in">Sign in</Link>
       </section>}
 
       {signedIn && (overviewError || workflowError) && <div className="qs-dashboard-errors">
@@ -110,12 +109,8 @@ export function BusinessDashboard() {
 
       <section className="qs-dashboard-main-grid">
         <article className="qs-panel qs-dashboard-panel" aria-labelledby="needs-attention-title">
-          <div className="qs-dashboard-section-heading"><div><p className="qs-eyebrow">Priority queue</p><h2 id="needs-attention-title">Needs your attention</h2></div><Link href="/decisions">Review decisions <span aria-hidden="true">→</span></Link></div>
-          {!signedIn ? <DashboardEmpty>Sign in to check for approvals and blocked work.</DashboardEmpty>
-            : !hasSomeData && loading ? <DashboardEmpty>Loading current business records…</DashboardEmpty>
-            : pending > 0 ? <div className="qs-dashboard-callout qs-dashboard-callout--attention"><span className="qs-dashboard-indicator" aria-hidden="true"/><div><strong>{pending} decision{pending === 1 ? '' : 's'} waiting for an authorized review</strong><p>High-impact work remains under human oversight. Open the decision log to inspect risk and evidence before choosing.</p></div><Link href="/decisions" aria-label="Review decisions waiting for approval">Review</Link></div>
-            : <DashboardEmpty>{overview ? 'No decisions are currently waiting for approval.' : 'Decision data is not available for this account.'}</DashboardEmpty>}
-          {attentionRuns.length > 0 && <div className="qs-dashboard-callout qs-dashboard-callout--warning"><span className="qs-dashboard-indicator" aria-hidden="true"/><div><strong>{attentionRuns.length} recent workflow run{attentionRuns.length === 1 ? '' : 's'} were blocked or failed</strong><p>The workflow history shows outcomes and metadata only. Inspect each run before retrying.</p></div><Link href="/monitoring">Inspect</Link></div>}
+          <div className="qs-dashboard-section-heading"><div><p className="qs-eyebrow">What needs you</p><h2 id="needs-attention-title">Needs your attention</h2></div><Link href="/decisions">Review decisions <span aria-hidden="true">→</span></Link></div>
+          <AttentionList hideHeading />
         </article>
 
         <article className="qs-panel qs-dashboard-panel" aria-labelledby="quick-actions-title">
@@ -123,6 +118,7 @@ export function BusinessDashboard() {
           <div className="qs-dashboard-actions">
             <Link href="/planning" className="qs-dashboard-action"><span aria-hidden="true">＋</span><span><strong>Plan an initiative</strong><small>Describe a business outcome and review the proposed work.</small></span><b aria-hidden="true">→</b></Link>
             <Link href="/workflows" className="qs-dashboard-action"><span aria-hidden="true">◇</span><span><strong>Automate a process</strong><small>Build, validate, and publish a governed workflow.</small></span><b aria-hidden="true">→</b></Link>
+            <Link href="/monitoring" className="qs-dashboard-action"><span aria-hidden="true">◷</span><span><strong>Check activity and cost</strong><small>See workflow runs, model calls and alerts.</small></span><b aria-hidden="true">→</b></Link>
             <Link href="/agents" className="qs-dashboard-action"><span aria-hidden="true">◎</span><span><strong>Manage your agents</strong><small>Review the published worker catalog and drafts.</small></span><b aria-hidden="true">→</b></Link>
           </div>
         </article>

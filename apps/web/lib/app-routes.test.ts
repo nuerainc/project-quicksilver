@@ -123,6 +123,7 @@ const OIDC_PROTOCOL_ROUTES: Readonly<Record<string, number>> = Object.freeze({
   'GET /api/auth/oidc/start': 303,
   'GET /api/auth/oidc/callback': 303,
   'GET /api/auth/session': 401,
+  'GET /api/auth/status': 200,
   'POST /api/auth/logout': 303,
 })
 

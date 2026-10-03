@@ -72,7 +72,7 @@ export default function EntitiesPage() {
           <label className="qs-field"><span>Search company records</span><input type="search" value={search} onChange={(event) => setSearch(event.currentTarget.value)} placeholder="Name, team, capability…" /></label>
         </div>
 
-        {error && <div className="qs-data-card" role="alert"><p>{error}</p>{needsSignIn && <Link className="qs-action-secondary" href="/planning#console-token">Go to sign in</Link>}</div>}
+        {error && <div className="qs-data-card" role="alert"><p>{error}</p>{needsSignIn && <Link className="qs-action-secondary" href="/sign-in?returnTo=%2Fentities">Sign in</Link>}</div>}
         {!error && loading && <p className="qs-helper" role="status">Loading the authorized company directory…</p>}
         {!error && !loading && visible.length === 0 && <p className="qs-helper">{entities.length ? 'No records match this search.' : 'No entity records were found in the configured company dataset.'}</p>}
         {!error && visible.length > 0 && (

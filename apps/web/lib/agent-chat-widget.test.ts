@@ -22,7 +22,7 @@ test('business chat is available across every app page and separates asking, pla
   assert.match(widget, /Plan mode creates evaluated proposals for review/)
   assert.match(widget, /never approves or executes actions/)
   assert.match(widget, /Review \{proposed\.length\} saved/)
-  assert.match(widget, /\/planning#console-token/)
+  assert.match(widget, /signInPageHref\(pathname\)/)
 })
 
 test('Ask mode reads the whole app through /api/chat and links only to pages of the app', () => {

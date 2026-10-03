@@ -155,7 +155,7 @@ function redirect(location: string, cookies: string[] = []): Response {
 }
 
 function appFailure(request: Request): Response {
-  return redirect(new URL('/?auth=failed', request.url).href, [clearCookie(OIDC_LOGIN_COOKIE)])
+  return redirect(new URL('/sign-in?auth=failed', request.url).href, [clearCookie(OIDC_LOGIN_COOKIE)])
 }
 
 function cookieValue(request: Request, name: string): string | null {
