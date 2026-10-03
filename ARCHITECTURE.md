@@ -128,7 +128,7 @@ This lets the kernel reason about humans and machines using **the same organizat
                 │ approved action
                 ▼
       ┌──────────────────┐
-      │  Simulated exec  │   dry-run for the demo
+      │  Simulated exec  │   decision loop only; see approved-actions.md
       └─────────┬────────┘
                 │ state delta
                 ▼
@@ -178,7 +178,7 @@ export const MODELS: Record<QuicksilverModelRole, string> = {
 }
 ```
 
-These are the direct-provider defaults. The live deployment runs on Azure OpenAI, where each role maps to a deployment (`qs-planner`, `qs-reviewer`, `qs-router`, `qs-executor`). Only the **planner** and **reviewer** are called at runtime today; `router` and `executor` are configured and health-checked by `npm run verify:llm`, and execution is simulated.
+These are the direct-provider defaults. The live deployment runs on Azure OpenAI, where each role maps to a deployment (`qs-planner`, `qs-reviewer`, `qs-router`, `qs-executor`). Only the **planner** and **reviewer** are called at runtime today; `router` and `executor` are configured and health-checked by `npm run verify:llm`, and the decision loop's execution is simulated. Effects on the outside world go through approved actions (`docs/platform/approved-actions.md`): dry run by default, and the live adapters have never been run against a real provider.
 
 ## 7. The MCP integration
 
