@@ -342,6 +342,39 @@
         }
       }
     },
+    "/api/decisions/{id}/audit": {
+      "get": {
+        "operationId": "exportDecisionAudit",
+        "description": "The decision's audit trail as a downloadable JSON file: the decision as recorded (question, action, risk, policy checks, the kernel's explanation, evaluator scores, who did what and when), who exported it and when, and a SHA-256 digest of the canonical decision record. The digest shows the file was not edited after export; it is not a signature. Needs audit:read.",
+        "tags": ["Decisions"],
+        "parameters": [{ "$ref": "#/components/parameters/DecisionId" }],
+        "responses": {
+          "400": { "$ref": "#/components/responses/ErrorResponse" },
+          "401": { "$ref": "#/components/responses/ErrorResponse" },
+          "403": { "$ref": "#/components/responses/ErrorResponse" },
+          "404": { "$ref": "#/components/responses/ErrorResponse" },
+          "503": { "$ref": "#/components/responses/ErrorResponse" },
+          "2XX": {
+            "description": "The audit file, sent as an attachment.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["schema", "exportedAt", "exportedBy", "decision", "integrity"],
+                  "properties": {
+                    "schema": { "const": "quicksilver.decision-audit/1" },
+                    "exportedAt": { "type": "string", "format": "date-time" },
+                    "exportedBy": { "type": "string" },
+                    "decision": { "type": "object", "description": "The decision as recorded, as returned by getDecision without the viewer and approval-readiness fields." },
+                    "integrity": { "type": "object", "required": ["algorithm", "digest", "covers"], "properties": { "algorithm": { "const": "sha256" }, "digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" }, "covers": { "const": "decision" } } }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/decisions/{id}/action": {
       "post": {
         "operationId": "approveDecisionAction",

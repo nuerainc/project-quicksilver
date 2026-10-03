@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react'
 import type { AttentionAction, AttentionItem, SourceStatus } from '@/lib/attention'
 import { useInbox } from '@/components/use-inbox'
 import { authFailureMessage, consoleHeaders, resolveConsoleAccess } from '@/lib/console-auth'
+import { riskLabel } from '@/lib/risk-words'
 import { signInPageHref } from '@/lib/session-control'
 import { usePathname } from 'next/navigation'
 import styles from './attention-list.module.css'
@@ -125,7 +126,7 @@ function ItemList({ items, states, now, onRun, onCancel, onNavigate }: { items: 
             {item.covers && item.actions.some((action) => action.id === 'approve') && (
               <p className={styles.covers}>
                 <span>Action: {item.covers.action ?? 'not recorded'}</span>
-                <span>Risk: {item.covers.riskLevel === null ? 'not recorded' : `${item.covers.riskLevel} of 5`}</span>
+                <span>Risk: {item.covers.riskLevel === null ? 'not recorded' : riskLabel(item.covers.riskLevel)}</span>
                 <span>Policy version: {item.covers.policyVersion ? item.covers.policyVersion.slice(7, 15) : 'not recorded'}</span>
               </p>
             )}

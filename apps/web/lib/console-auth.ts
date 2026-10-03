@@ -147,7 +147,7 @@ export function mayCarryConsoleToken(url: string): boolean {
   if (/^\/api\/workflows\/diff\?workflowId=[a-zA-Z0-9._:%-]{1,256}&from=[0-9]{1,9}&to=[0-9]{1,9}$/.test(url)) return true
   if (/^\/api\/decisions(?:\?(?:status=[a-z-]{1,30}&)?limit=[0-9]{1,2})?$/.test(url)) return true
   if (/^\/api\/decisions\/[A-Za-z0-9._:-]{1,200}$/.test(url)) return true
-  return /^\/api\/decisions\/[^/?#]+\/(action|execute|observe|resume|rollback)$/.test(url) || TOKEN_PATHS.has(url)
+  return /^\/api\/decisions\/[^/?#]+\/(action|execute|observe|resume|rollback|audit)$/.test(url) || TOKEN_PATHS.has(url)
 }
 
 /** The shape `GET /api/whoami` returns on 200 (mirrors `WhoamiBody` in nqc-approval.ts; no secrets). */
@@ -162,7 +162,7 @@ export interface ConsoleWhoami {
 
 export type ConsoleDecisionRoute = 'action' | 'execute' | 'observe' | 'resume' | 'rollback'
 /** Every console call that can be refused for auth: the decision routes plus plan, query and the workflow builder. */
-export type ConsoleRoute = ConsoleDecisionRoute | 'plan' | 'query' | 'chat' | 'inbox' | 'decisions' | 'decisions/detail' | 'agents/run'
+export type ConsoleRoute = ConsoleDecisionRoute | 'plan' | 'query' | 'chat' | 'inbox' | 'decisions' | 'decisions/detail' | 'decisions/audit' | 'agents/run'
   | 'dashboard/overview' | 'dashboard/finance'
   | 'entities'
   | 'monitoring/workflows' | 'monitoring/traces'
@@ -184,6 +184,7 @@ export const CONSOLE_ROUTE_PERMISSION: Readonly<Record<ConsoleRoute, string>> = 
   inbox: 'decision:read',
   decisions: 'decision:read',
   'decisions/detail': 'decision:read',
+  'decisions/audit': 'audit:read',
   'agents/run': 'decision:read',
   'monitoring/workflows': 'workflow:read',
   'monitoring/traces': 'audit:read',

@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useState } from 'react'
 
 import { WhyPanel } from '@/components/why-panel'
+import { Term } from '@/components/term'
+import { riskLabel, riskTone } from '@/lib/risk-words'
 import { inboxStore } from '@/components/use-inbox'
 import { authFailureMessage, consoleHeaders, type ConsoleAccess } from '@/lib/console-auth'
 import { decisionActionOptions, type DecisionActionOption } from '@/lib/decision-actions'
@@ -60,6 +62,7 @@ export function DecisionDetail({ id, access, onChanged }: { id: string; access: 
   const [busy, setBusy] = useState(false)
   const [outcome, setOutcome] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
+  const [exportError, setExportError] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -125,6 +128,28 @@ export function DecisionDetail({ id, access, onChanged }: { id: string; access: 
     requestedBy: detail.requestedBy, proposedBy: detail.proposedBy, actorId: detail.actorId, riskBand: detail.why?.risk.band ?? null, kind: detail.kind,
   }, detail.viewer.id, access.whoami?.permissions ?? [], detail.viewer.soleOperator)
   const stepping = options.find((option) => option.id === step)
+  const canExport = (access.whoami?.permissions ?? []).includes('audit:read')
+
+  /** The file comes from the server with its digest; the button only saves it. */
+  async function downloadAudit() {
+    const path = `/api/decisions/${encodeURIComponent(id)}/audit`
+    setExportError(null)
+    try {
+      const response = await fetch(path, { headers: consoleHeaders(path, access.token), cache: 'no-store' })
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}))
+        setExportError(authFailureMessage(response.status, 'decisions/audit', body.error) ?? body.error ?? 'Could not export this decision.')
+        return
+      }
+      const url = URL.createObjectURL(await response.blob())
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `decision-${id}-audit.json`
+      link.click()
+      URL.revokeObjectURL(url)
+    } catch { setExportError('Could not reach the server.') }
+  }
+
   const reviewNotes = [...(detail.reviewerNotes?.policyConflicts ?? []), ...(detail.reviewerNotes?.missingEvidence ?? []), ...(detail.reviewerNotes?.riskConcerns ?? [])]
   const conflicts = (detail.policyChecks ?? []).filter((check) => check.result === 'conflicts')
 
@@ -133,13 +158,18 @@ export function DecisionDetail({ id, access, onChanged }: { id: string; access: 
       <header>
         <p className="qs-eyebrow">{detail.kind === 'rollback' ? 'Rollback' : 'Decision'}</p>
         <h2 id="decision-title">{detail.question || detail.selectedAction || detail.id}</h2>
+        <p>
+          <button type="button" className={styles.btn} disabled={!canExport} aria-describedby="audit-why" onClick={() => void downloadAudit()}>Download audit trail</button>
+          <span id="audit-why" className={styles.why}>{canExport ? ' A JSON file with the full record and a digest, for a reviewer.' : ' Needs the audit:read permission, which your account does not have.'}</span>
+        </p>
+        {exportError && <p className={styles.error} role="alert">{exportError}</p>}
       </header>
 
-      {detail.policyChanged && <p className={styles.notice} role="status">A policy changed since this was planned, so it cannot be approved as it is. Ask for a fresh plan in the chat.</p>}
+      {detail.policyChanged && <p className={styles.notice} role="status">A <Term term="policy snapshot">policy</Term> changed since this was planned, so it cannot be approved as it is. Ask for a fresh plan in the chat.</p>}
 
       <dl className={styles.facts}>
         <div><dt>Status</dt><dd>{(detail.status ?? 'unknown').replaceAll('-', ' ')}</dd></div>
-        <div><dt>Risk</dt><dd>{detail.riskLevel === null ? 'Not rated' : `${detail.riskLevel} of 5`}</dd></div>
+        <div><dt>Risk</dt><dd><span className="qs-risk" data-tone={riskTone(detail.riskLevel)}>{riskLabel(detail.riskLevel)}</span></dd></div>
         <div><dt>Human approval</dt><dd>{detail.requiredApproval ? 'Required' : 'Not required'}</dd></div>
         <div><dt>Requested by</dt><dd>{detail.requestedBy ?? 'Not recorded'}</dd></div>
         <div><dt>Approved by</dt><dd>{detail.approvedByName ?? '—'}</dd></div>
@@ -153,7 +183,7 @@ export function DecisionDetail({ id, access, onChanged }: { id: string; access: 
         <details className={styles.section}>
           <summary>Approval basis</summary>
           <p>Approving covers exactly this action. If it or the policy changes first, the approval is refused instead of covering something you did not see.</p>
-          <p>Action fingerprint</p>
+          <p><Term term="fingerprint">Action fingerprint</Term></p>
           <code className="break-all">{detail.approvalFingerprint}</code>
         </details>
       )}
