@@ -227,8 +227,54 @@ recorded by hand with that `source.ref` is not recorded again.
 **Known gaps (v1):** the pending queue is file-only
 (`<dir>/<tenant>/<runId>/pending-payments.json`); there is no Sanity-backed
 pending store yet, so in Sanity mode the queue stays in local files. Customer
-refunds, products, prices, payment links and orders are not handled. The
-console has no pending-payments panel yet; use the routes.
+refunds and orders are not handled. The console has no pending-payments panel
+yet; use the routes.
+
+## Commerce actions (P-027, test mode only)
+
+Genesis can ask Stripe to create a **product**, a **price** or a **payment
+link**, only after a human approves. It is off by default and has no live
+mode. Creating these moves no money; the money arrives later as a payment, which
+the webhook above records. The one Stripe write client has exactly those three
+create calls: no charge, refund, payout, transfer or customer call exists.
+
+To turn it on for a run: set `"commerceMode": "test"` in the run config, and
+store a Stripe **test-mode** key as the vault secret `genesis-stripe-api`
+(`printf '%s' "$KEY" | npm run host -- vault put genesis-stripe-api`). Use a
+restricted key (`rk_test_…`) limited to Products, Prices and Payment Links
+write. A live key (`sk_live_`/`rk_live_`) is refused when the client is built.
+The key is read only when an approval needs it.
+
+| Route | Who | What |
+|---|---|---|
+| `GET /api/genesis/commerce` | `decision:read` | Mode, open and decided proposals |
+| `POST /api/genesis/commerce/proposals` | provider or proposer (an agent may) | Records a proposal; sends nothing to Stripe |
+| `POST /api/genesis/commerce/proposals/:id/approve` | a human provider | Checks the gates, then makes the one Stripe call |
+| `POST /api/genesis/commerce/proposals/:id/reject` | a human provider | Closes a pending or failed proposal |
+
+Proposal bodies: `{ "action": "create_product", "name", "description"? }`,
+`{ "action": "create_price", "product", "unitAmountCents", "nickname"? }` (USD,
+50 to 99,999,999 cents) and `{ "action": "create_payment_link", "price",
+"quantity"?, "offerText" }`. `product` and `price` are a Stripe id or
+`proposal:<id>` of an executed earlier proposal, so a product, its price and its
+link can be queued together and approved in order.
+
+Gates, in order, on approval: commerce is on; the customer-facing text (a
+product's name and description, a price's nickname, a link's `offerText`) has a
+passing review of its **exact text** under the run's WAES policy, and the
+reviewer is not the proposer; every referenced proposal has executed; the
+Stripe key is a test key. Each proposal has one idempotency key
+(`qs-<proposal id>`), so approving again after a failure or timeout cannot
+create a duplicate, and two simultaneous approvals call Stripe once. Every
+object carries `quicksilver_proposal` in its metadata, and a payment through a
+link carries it on the PaymentIntent.
+
+**Test mode and the ledger:** payments made through test-mode links are
+Stripe test-mode events, which the payment webhook deliberately ignores (nothing
+is recorded in the run ledger), so test commerce never touches real accounting.
+
+**Known gaps (v1):** no live mode, orders, or customer refunds; proposals are
+file-only like the pending queue; the console has no commerce panel yet.
 
 ## What the run reports
 

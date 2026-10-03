@@ -375,6 +375,83 @@ export class MemoryPendingPaymentStore implements PendingPaymentStore {
   }
 }
 
+// ── Commerce proposals (P-027, commerce actions) ──────────────────────────
+
+export type CommerceAction = 'create_product' | 'create_price' | 'create_payment_link'
+export type CommerceProposalStatus = 'pending' | 'executing' | 'executed' | 'failed' | 'rejected'
+
+export type CommerceProposalInput =
+  | { action: 'create_product'; name: string; description?: string }
+  /** `product` is a Stripe product id, or `proposal:<id>` of an executed create_product proposal. */
+  | { action: 'create_price'; product: string; unitAmountCents: number; nickname?: string }
+  /** `price` is a Stripe price id, or `proposal:<id>` of an executed create_price proposal. `offerText` is the exact text a customer will see. */
+  | { action: 'create_payment_link'; price: string; quantity: number; offerText: string }
+
+export interface CommerceProposal {
+  id: string
+  status: CommerceProposalStatus
+  input: CommerceProposalInput
+  /** The exact customer-facing text the WAES gate reviews; absent when the action shows customers no text. */
+  text?: string
+  contentDigest?: string
+  proposedBy: string
+  proposedByKind: string
+  proposedAt: string
+  /** The commerce mode the proposal was made under (test only in v1). */
+  mode: 'test'
+  claimedAt?: string
+  decidedBy?: string
+  decidedAt?: string
+  note?: string
+  attempts: number
+  result?: { stripeId: string; url?: string; livemode: boolean; executedAt: string }
+  /** Last failure, as a short class and message; never a secret. */
+  error?: string
+}
+
+export interface CommerceProposalStore {
+  list(runId: string): Promise<CommerceProposal[]>
+  get(runId: string, id: string): Promise<CommerceProposal | undefined>
+  /** Insert or replace by id. Callers hold the run lock and have already checked the transition. */
+  put(runId: string, proposal: CommerceProposal): Promise<void>
+}
+
+export const COMMERCE_PROPOSAL_ID = /^cp-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
+
+function applyCommercePut(all: CommerceProposal[], p: CommerceProposal): CommerceProposal[] {
+  if (!COMMERCE_PROPOSAL_ID.test(p.id)) throw new Error('A commerce proposal needs a valid id.')
+  const i = all.findIndex((e) => e.id === p.id)
+  return i < 0 ? [...all, p] : all.map((e, j) => (j === i ? p : e))
+}
+
+/** <dir>/<tenantId>/<runId>/commerce-proposals.json. Callers serialize writes per run (the host's withLock). */
+export class FileCommerceProposalStore implements CommerceProposalStore {
+  private readonly dir: string
+  private readonly tenantId: string
+  constructor(dir: string, tenantId: string = DEFAULT_GENESIS_TENANT) {
+    this.dir = dir
+    this.tenantId = tenantId
+  }
+  private path(runId: string) {
+    checkRunId(runId)
+    return join(this.dir, this.tenantId, runId, 'commerce-proposals.json')
+  }
+  async list(runId: string): Promise<CommerceProposal[]> { return readJson<CommerceProposal[]>(this.path(runId), []) }
+  async get(runId: string, id: string) { return (await this.list(runId)).find((e) => e.id === id) }
+  async put(runId: string, proposal: CommerceProposal) { await writeJsonAtomic(this.path(runId), applyCommercePut(await this.list(runId), proposal)) }
+}
+
+/** In-memory twin for tests and file-less hosts; partitioned by tenant. */
+export class MemoryCommerceProposalStore implements CommerceProposalStore {
+  private readonly tenantId: string
+  private readonly data = new Map<string, CommerceProposal[]>()
+  constructor(tenantId: string = DEFAULT_GENESIS_TENANT) { this.tenantId = tenantId }
+  private key(runId: string) { checkRunId(runId); return `${this.tenantId}\u0000${runId}` }
+  async list(runId: string) { return structuredClone(this.data.get(this.key(runId)) ?? []) }
+  async get(runId: string, id: string) { return (await this.list(runId)).find((e) => e.id === id) }
+  async put(runId: string, proposal: CommerceProposal) { this.data.set(this.key(runId), applyCommercePut(await this.list(runId), structuredClone(proposal))) }
+}
+
 // ── Sanity ────────────────────────────────────────────────────────────────
 
 export interface SanityMoneyEntryDocument {
