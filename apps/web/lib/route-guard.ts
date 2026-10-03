@@ -40,7 +40,7 @@ const RATE_LIMIT_ENV: Readonly<Record<WebRateLimitClass, string>> = Object.freez
 
 /** The routes (other than the decision routes, which have their own checks) and what each needs. */
 export type WebRoute =
-  | 'plan' | 'query' | 'chat' | 'agents/run' | 'dashboard/overview' | 'dashboard/finance'
+  | 'plan' | 'query' | 'chat' | 'inbox' | 'agents/run' | 'dashboard/overview' | 'dashboard/finance'
   | 'decisions' | 'decisions/detail'
   | 'entities'
   | 'monitoring/workflows' | 'monitoring/traces'
@@ -57,6 +57,9 @@ export const WEB_ROUTE_ACCESS: Readonly<Record<WebRoute, { permissions: readonly
   // The chat assistant (a model) reads the app as the person asking: every tool it calls goes
   // through that route's own check, so it can see nothing the person could not.
   chat: { permissions: Object.freeze<Permission[]>(['decision:read']), rateLimit: 'model' },
+  // What needs the signed-in person: computed from records, no model. Each source it reads
+  // applies its own permission, and the list only offers actions the person's permissions allow.
+  inbox: { permissions: Object.freeze<Permission[]>(['decision:read']) },
   // Reading decisions: the list and one decision with its explanation.
   decisions: { permissions: Object.freeze<Permission[]>(['decision:read']) },
   'decisions/detail': { permissions: Object.freeze<Permission[]>(['decision:read']) },

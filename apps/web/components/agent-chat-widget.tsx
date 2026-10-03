@@ -8,11 +8,13 @@ import { chatRequest, type ChatMode } from '@/lib/chat-request'
 import { businessAgentContext } from '@/lib/business-agent-context'
 import type { BusinessAgentKey } from '@quicksilver/agent'
 import type { BusinessAgentChoice } from '@/lib/business-agent-request'
+import { AttentionList } from '@/components/attention-list'
 import styles from './agent-chat-widget.module.css'
 
 type QueryResponse = {
   answer: string
   links: Array<{ label: string; href: string }>
+  showAttention?: boolean
   confidence: number
   toolsUsed?: string[]
   audit?: { persisted: boolean; evaluationRecordIds: string[] }
@@ -203,6 +205,7 @@ export function AgentChatWidget() {
           <div className={styles.thread} ref={threadRef} aria-label="Conversation" aria-live="polite">
             {messages.length === 0 ? (
               <div className={styles.welcome}>
+                {tokenPresent && <AttentionList onNavigate={() => setExpanded(false)} />}
                 <span aria-hidden="true">✦</span>
                 <h3>{mode === 'ask' ? 'What would you like to know?' : mode === 'plan' ? 'What outcome should the business pursue?' : agentKey === 'auto' ? 'Put Quicksilver to work' : `Work with the ${BUSINESS_AGENTS.find((agent) => agent.key === agentKey)?.label ?? 'business'} agent`}</h3>
                 <p>{mode === 'ask'
@@ -224,7 +227,7 @@ export function AgentChatWidget() {
               messages.map((message) => (
                 <article className={styles.exchange} key={message.id}>
                   <p className={styles.userMessage}>{message.question}</p>
-                  {message.response && <QueryAnswer result={message.response} />}
+                  {message.response && <QueryAnswer result={message.response} onNavigate={() => setExpanded(false)} />}
                   {message.plan && <PlanAnswer result={message.plan} />}
                   {message.agent && <BusinessAgentAnswer result={message.agent} />}
                 </article>
@@ -353,13 +356,14 @@ const TOOL_LABELS: Record<string, string> = {
 /** Only pages of this app: the server already filters, and this is the second check. */
 const isLocalLink = (href: string) => href.startsWith('/') && !href.startsWith('//') && !href.startsWith('/api/')
 
-function QueryAnswer({ result }: { result: QueryResponse }) {
+function QueryAnswer({ result, onNavigate }: { result: QueryResponse; onNavigate?: () => void }) {
   const paragraphs = result.answer.split(/\n{2,}/).map((part) => part.trim()).filter(Boolean)
   const links = (result.links ?? []).filter((link) => isLocalLink(link.href))
   const looked = [...new Set((result.toolsUsed ?? []).map((name) => TOOL_LABELS[name] ?? 'company data'))]
   return (
     <div className={styles.answer}>
       {paragraphs.length ? paragraphs.map((part, index) => <p key={`${index}-${part.slice(0, 20)}`}>{part}</p>) : <p>No answer was found for this question.</p>}
+      {result.showAttention && <AttentionList onNavigate={onNavigate} />}
       {links.length > 0 && (
         <p className={styles.chatLinks}>{links.map((link) => <Link key={link.href} className={styles.reviewPlan} href={link.href}>{link.label} <span aria-hidden="true">→</span></Link>)}</p>
       )}

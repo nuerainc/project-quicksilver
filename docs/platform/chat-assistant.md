@@ -10,6 +10,7 @@ It reads as the person asking, through the app's own routes (`apps/web/lib/chat-
 
 | Tool | Reads | Needs |
 |---|---|---|
+| `get_attention` | what needs you, with the actions you may take (see below) | `decision:read` |
 | `get_my_access` | who you are and what you may do | signed in |
 | `list_decisions`, `get_decision` | decisions, and the kernel's explanation of why | `decision:read` |
 | `get_business_overview` | counts, metrics, experiments | `decision:read` |
@@ -43,3 +44,28 @@ Company-model questions go through the Sanity Context tools, as before.
 - It does not stream, and a conversation is kept only in the open panel.
 - Whether the Sanity dataset behind the company-model tools includes decision documents is not
   assumed: decisions come from the app tools.
+
+## What needs you
+
+`GET /api/inbox` computes what needs the signed-in person from records and from what they may do.
+No model is involved, so it is instant and cannot be paraphrased wrongly. The chat's empty state
+shows it, and when you ask "what needs me?" the assistant answers in a sentence and sets
+`showAttention`, which makes the app show the same live list under the answer.
+
+- An item carries the actions the person may take. The server builds every item and every call; the
+  chat component only shows them and makes the call a person clicks, as that person, through the
+  decision routes. The model cannot create a button.
+- Approve is one click only when the card shows everything the click covers (the action, the risk,
+  the one-line why, the policy version) and the risk is not above the review ceiling. The click
+  sends the fingerprint of what is shown, so a stale card is refused with a 409. Otherwise the card
+  offers Review, which opens the decision.
+- Nobody who requested, proposed or would carry out an action is offered its approval. A decision
+  whose policy changed since it was planned is not offered for approval. Reject and execute ask
+  first.
+- Only items you can act on count toward the number. A source that could not be loaded is named, the
+  number gets a "+", and the list says it may be incomplete. A source you may not read is skipped.
+- It checks about once a minute and when the tab regains focus; it is not a live feed.
+
+Not covered yet: executed decisions whose metric is still to be observed, the host's approved
+actions and Genesis items, memory awaiting a supervisor, and the header bell (the same list will
+appear there).

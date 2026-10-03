@@ -50,6 +50,13 @@ interface Spec<S extends z.ZodTypeAny> {
 const spec = <S extends z.ZodTypeAny>(s: Spec<S>) => s
 
 const SPECS = [
+  spec({
+    name: 'get_attention',
+    description: 'What needs the person right now: approvals they can give, things to execute, refused plans with the near-miss, failed runs, reviews and alerts, each with the actions they may take. When you use this to answer "what needs me?", set showAttention so the app shows the live list with its buttons under your answer; do not list the items yourself.',
+    schema: z.object({}),
+    path: () => '/api/inbox',
+    sample: {},
+  }),
   spec({ name: 'get_my_access', description: 'Who the person asking is and which actions they are permitted to take in the app. Use it to explain why something is or is not available to them.', schema: z.object({}), path: () => '/api/whoami', sample: {} }),
   spec({
     name: 'list_decisions',

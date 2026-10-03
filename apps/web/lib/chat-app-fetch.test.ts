@@ -61,3 +61,27 @@ test('anything that is not one of the listed reads is not served: no writes, no 
     assert.equal((await fetchApp(path)).status, 404, path)
   }
 })
+
+test('the inbox never turns a source it could not check into a silent zero', async () => {
+  const fetchApp = await as(`Bearer ${TOKENS.supervisor}`)
+  const result = await fetchApp('/api/inbox')
+  assert.equal(result.status, 200)
+  const body = result.body as { items: unknown[]; sources: Array<{ id: string; status: string }>; counts: { actionable: number; complete: boolean } }
+  assert.deepEqual(body.sources.map((s) => s.id), ['decisions', 'workflows', 'agents', 'traces'])
+  assert.ok(body.sources.every((s) => s.status !== 'ok'), 'no data store is configured here, so nothing could be read')
+  assert.ok(body.sources.some((s) => s.status === 'unavailable'))
+  assert.equal(body.counts.complete, false)
+  assert.deepEqual(body.items, [])
+})
+
+test('the inbox skips the sources a person may not read and says so', async () => {
+  const result = await (await as(`Bearer ${TOKENS.viewer}`))('/api/inbox')
+  const body = result.body as { sources: Array<{ id: string; status: string; reason?: string }> }
+  const traces = body.sources.find((s) => s.id === 'traces')!
+  assert.equal(traces.status, 'skipped')
+  assert.match(traces.reason!, /audit:read/)
+})
+
+test('the inbox needs a signed-in person', async () => {
+  assert.equal((await (await as(null))('/api/inbox')).status, 401)
+})
