@@ -137,7 +137,7 @@ export class ActionService {
     if (unknown.length) throw new Error(`The action policy enables tools this host does not have: ${unknown.join(', ')}.`)
     this.policy = { ...DEFAULT_ACTION_POLICY, ...options.policy, enabledTools }
     // The policy in force is the set of enabled tools and their contracts. A change to either changes the snapshot.
-    this.policySnapshot = sha256({ tools: enabledTools.map((id) => this.executor.manifest(id)), limits: [this.policy.proposalTtlMs, this.policy.approvalTtlMs, this.policy.maxInputBytes] })
+    this.policySnapshot = sha256({ tools: enabledTools.map((id) => ({ manifest: this.executor.manifest(id), live: this.executor.definition(id)?.live === true, config: this.executor.definition(id)?.configDigest ?? null })), limits: [this.policy.proposalTtlMs, this.policy.approvalTtlMs, this.policy.maxInputBytes] })
   }
 
   summary() {
@@ -145,7 +145,7 @@ export class ActionService {
       policySnapshot: this.policySnapshot,
       tools: this.policy.enabledTools.map((id) => {
         const m = this.executor.manifest(id)!
-        return { id, access: m.access, requiresApproval: m.requiresApproval, description: m.description }
+        return { id, access: m.access, requiresApproval: m.requiresApproval, description: m.description, live: this.executor.definition(id)?.live === true }
       }),
       limits: { proposalTtlMs: this.policy.proposalTtlMs, approvalTtlMs: this.policy.approvalTtlMs, maxInputBytes: this.policy.maxInputBytes },
       signingConfigured: Boolean(this.signingKey),
@@ -178,6 +178,8 @@ export class ActionService {
     if (!Array.isArray(evidence) || evidence.length < 1 || evidence.length > 10 || evidence.some((e) => typeof e !== 'string' || !e.trim() || e.length > 200)) {
       return fail(422, 'evidence must be 1 to 10 references (each 1 to 200 characters); an action with no evidence cannot be approved.')
     }
+    const unrunnable = this.executor.definition(toolId)?.validate?.(input)
+    if (unrunnable) return fail(422, unrunnable)
     const now = this.now()
     const proposal: ActionProposal = {
       id: `ap-${randomUUID()}`,
